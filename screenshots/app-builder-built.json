@@ -1,0 +1,38 @@
+{
+  "url": "http://127.0.0.1:8081/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Cuaderno 2676",
+      "hasCanvas": false,
+      "bodyTextLen": 1597,
+      "bodyTextHash": "e2545def66835bf30cf23b5adcab414c674deaebf293dbd8982f920abfd91a74",
+      "bodyTextPrefix": "26 Cuaderno 2676 ANALISTA II · CARTERA, RECAUDO Y DEVOLUCIONES C",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Cuaderno 2676",
+      "hasCanvas": false,
+      "bodyTextLen": 1568,
+      "bodyTextHash": "1301e202fd60206d92e8c8e6042abd5ad4589cec552af3738a8edf8837ddfb74",
+      "bodyTextPrefix": "26 Cuaderno 2676 ANALISTA II · CARTERA, RECAUDO Y DEVOLUCIONES C",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-built.json",
+  "divergesFromBaseline": false,
+  "baselineReasons": []
+}
