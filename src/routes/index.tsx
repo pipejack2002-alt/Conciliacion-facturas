@@ -2,9 +2,18 @@ import { createFileRoute } from "@tanstack/react-router";
 import { UploadPanel } from "@/components/upload-panel";
 import { ResultBoard } from "@/components/result-board";
 import { useConciliacion } from "@/lib/store";
-import { ArrowLeft, Building2, ShieldCheck, Sparkles } from "lucide-react";
+import { TributoAuthGuardian, TributoUserBadge } from "@/components/tributo-auth-guardian";
+import { ShieldCheck } from "lucide-react";
 
-export const Route = createFileRoute("/")({ component: ConciliadorApp });
+export const Route = createFileRoute("/")({ component: ProtectedConciliadorApp });
+
+function ProtectedConciliadorApp() {
+  return (
+    <TributoAuthGuardian>
+      <ConciliadorApp />
+    </TributoAuthGuardian>
+  );
+}
 
 function ConciliadorApp() {
   const result = useConciliacion((s) => s.result);
@@ -34,6 +43,9 @@ function ConciliadorApp() {
           </div>
 
           <div className="flex items-center gap-3 text-xs">
+            {/* Badge de usuario / sesión verificada */}
+            <TributoUserBadge />
+
             <a
               href="https://www.tributoapp.me"
               target="_blank"
