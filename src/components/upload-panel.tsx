@@ -1,5 +1,23 @@
-import { useRef, useState } from "react";
-import { Building2, FileSpreadsheet, Loader2, TableProperties, Upload } from "lucide-react";
+import { useRef, useState, useEffect } from "react";
+import {
+  Building2,
+  FileSpreadsheet,
+  Loader2,
+  TableProperties,
+  Upload,
+  Sparkles,
+  ShieldCheck,
+  CheckCircle2,
+  AlertCircle,
+  HelpCircle,
+  Zap,
+  ArrowRight,
+  RefreshCw,
+  Trash2,
+  Layers,
+  FileCheck,
+  Lock,
+} from "lucide-react";
 import type * as XLSX from "xlsx";
 import {
   findBestDianSheet,
@@ -11,7 +29,9 @@ import {
 } from "@/lib/parse-excel";
 import type { SampleBundle } from "@/lib/types";
 import { useConciliacion } from "@/lib/store";
+import { getHistoryEntries } from "@/lib/history-store";
 import { HistoryModal } from "./history-modal";
+import { GuiaConciliacionModal } from "./guia-conciliacion-modal";
 import { cn } from "@/lib/cn";
 
 export function UploadPanel() {
@@ -25,6 +45,8 @@ export function UploadPanel() {
   const [dianFile, setDianFile] = useState<File | null>(null);
   const [movFile, setMovFile] = useState<File | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [showGuia, setShowGuia] = useState(false);
+  const [historyCount, setHistoryCount] = useState(0);
 
   const [dianWb, setDianWb] = useState<XLSX.WorkBook | null>(null);
   const [movWb, setMovWb] = useState<XLSX.WorkBook | null>(null);
@@ -36,6 +58,17 @@ export function UploadPanel() {
   const [selectedMovSheet, setSelectedMovSheet] = useState<string>("");
 
   const [busy, setBusy] = useState(false);
+  const [isDraggingDian, setIsDraggingDian] = useState(false);
+  const [isDraggingMov, setIsDraggingMov] = useState(false);
+
+  useEffect(() => {
+    try {
+      const entries = getHistoryEntries();
+      setHistoryCount(entries.length);
+    } catch {
+      setHistoryCount(0);
+    }
+  }, [showHistory]);
 
   async function handleDianPick(file: File | null) {
     setDianFile(file);
@@ -52,6 +85,7 @@ export function UploadPanel() {
       setDianSheets(sheets);
       const best = findBestDianSheet(wb);
       setSelectedDianSheet(best || sheets[0] || "");
+      setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al procesar el archivo DIAN.");
     }
@@ -72,6 +106,7 @@ export function UploadPanel() {
       setMovSheets(sheets);
       const best = findBestMovSheet(wb);
       setSelectedMovSheet(best || sheets[0] || "");
+      setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al procesar el archivo contable.");
     }
@@ -86,8 +121,14 @@ export function UploadPanel() {
       const mWb = movWb || (await readWorkbook(movFile));
       const dian = parseDianSheet(dWb, selectedDianSheet);
       const mov = parseMovSheet(mWb, selectedMovSheet);
-      if (!dian.length) throw new Error(`No pude leer documentos en la hoja '${selectedDianSheet || "seleccionada"}' del reporte DIAN.`);
-      if (!mov.length) throw new Error(`No pude leer movimientos en la hoja '${selectedMovSheet || "seleccionada"}' del archivo contable.`);
+      if (!dian.length)
+        throw new Error(
+          `No pude leer documentos en la hoja '${selectedDianSheet || "seleccionada"}' del reporte DIAN.`
+        );
+      if (!mov.length)
+        throw new Error(
+          `No pude leer movimientos en la hoja '${selectedMovSheet || "seleccionada"}' del archivo contable.`
+        );
       setFiles(dian, mov, { dian: dianFile.name, mov: movFile.name });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al leer los archivos.");
@@ -110,7 +151,7 @@ export function UploadPanel() {
           dian: "REPORTE DIAN JUL 2026.xlsx",
           mov: "MOVIMIENTO JUL 2026.xlsx",
         },
-        "Julio 2026",
+        "Julio 2026"
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al cargar el ejemplo.");
@@ -119,35 +160,170 @@ export function UploadPanel() {
     }
   }
 
-  return (
-    <div className="mx-auto max-w-3xl px-4 pb-16 pt-6 sm:pt-10">
-      <p className="mb-8 max-w-xl text-base leading-relaxed text-ink-muted">
-        Plataforma corporativa de conciliación fiscal y auditoría contable. Cargue
-        el reporte oficial de la DIAN y el extracto de movimiento de su software
-        contable para identificar facturas de compra no causadas, registros duplicados,
-        diferencias en importes e impuestos y cruces con notas crédito.
-      </p>
+  const isReadyToReconcile = Boolean(dianFile && movFile && !busy);
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <DropCard
+  return (
+    <div className="mx-auto max-w-4xl px-4 pb-16 pt-2 sm:pt-4">
+      {/* Hero Header Corporativo */}
+      <div className="text-center max-w-2xl mx-auto mb-8 space-y-3">
+        <div className="inline-flex items-center gap-2 rounded-full bg-teal-soft/80 border border-teal/30 px-3.5 py-1 text-xs font-bold text-teal-deep shadow-xs">
+          <Sparkles className="size-3.5 text-teal" />
+          <span>Motor de Auditoría y Cruce Fiscal DIAN 2026</span>
+        </div>
+
+        <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-ink">
+          Conciliador Fiscal DIAN <span className="text-teal">vs. Libros Contables</span>
+        </h1>
+
+        <p className="text-xs sm:text-sm text-ink-muted leading-relaxed">
+          Cruce automático e instantáneo de facturación electrónica. Identifique facturas no causadas, omisiones, duplicados, diferencias en IVA y cruces con notas crédito en segundos.
+        </p>
+
+        {/* Barra de acceso rápido a la guía */}
+        <div className="pt-1 flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowGuia(true)}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal hover:text-teal-deep bg-teal-soft/40 hover:bg-teal-soft/70 px-3 py-1.5 rounded-lg border border-teal/20 transition"
+          >
+            <HelpCircle className="size-3.5" />
+            <span>¿Cómo exportar y conciliar? Ver Guía Rápida</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Stepper interactivo de 3 pasos */}
+      <div className="mb-8 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div
+          className={cn(
+            "p-3 rounded-xl border transition flex items-center gap-3",
+            dianFile
+              ? "bg-ok-bg/50 border-ok/30 text-ok"
+              : "bg-bg-surface border-line text-ink-muted"
+          )}
+        >
+          <div
+            className={cn(
+              "size-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0",
+              dianFile ? "bg-ok text-white" : "bg-teal-soft text-teal-deep"
+            )}
+          >
+            {dianFile ? <CheckCircle2 className="size-4" /> : "1"}
+          </div>
+          <div className="text-xs leading-tight">
+            <span className="font-bold text-ink block">Reporte DIAN</span>
+            <span className="text-ink-subtle">
+              {dianFile ? "Archivo cargado" : "Documentos recibidos (.xlsx)"}
+            </span>
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            "p-3 rounded-xl border transition flex items-center gap-3",
+            movFile
+              ? "bg-ok-bg/50 border-ok/30 text-ok"
+              : "bg-bg-surface border-line text-ink-muted"
+          )}
+        >
+          <div
+            className={cn(
+              "size-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0",
+              movFile ? "bg-ok text-white" : "bg-teal-soft text-teal-deep"
+            )}
+          >
+            {movFile ? <CheckCircle2 className="size-4" /> : "2"}
+          </div>
+          <div className="text-xs leading-tight">
+            <span className="font-bold text-ink block">Movimiento Contable</span>
+            <span className="text-ink-subtle">
+              {movFile ? "Archivo cargado" : "Libro auxiliar (.xlsx)"}
+            </span>
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            "p-3 rounded-xl border transition flex items-center gap-3",
+            isReadyToReconcile
+              ? "bg-teal-soft/60 border-teal/40 text-teal-deep"
+              : "bg-bg-surface border-line text-ink-muted"
+          )}
+        >
+          <div
+            className={cn(
+              "size-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0",
+              isReadyToReconcile
+                ? "bg-teal text-white animate-pulse"
+                : "bg-bg-subtle text-ink-subtle"
+            )}
+          >
+            <Zap className="size-3.5" />
+          </div>
+          <div className="text-xs leading-tight">
+            <span className="font-bold text-ink block">Cruce Instantáneo</span>
+            <span className="text-ink-subtle">
+              {isReadyToReconcile ? "Listo para conciliar" : "Auditoría en 2 seg"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Tarjetas de Carga Interactivas (Drag & Drop) */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {/* DropCard 1: DIAN */}
+        <InteractiveDropCard
+          step="1"
           label="Reporte Oficial DIAN"
-          hint="Documentos electrónicos (.xlsx) · CUFE, Folio, Prefijo"
+          hint="Excel descargado de Facturación Electrónica DIAN"
+          badgeText="Documentos Recibidos (.xlsx)"
           file={dianFile}
           sheets={dianSheets}
           selectedSheet={selectedDianSheet}
           onSelectSheet={setSelectedDianSheet}
           onPick={() => dianRef.current?.click()}
+          onClear={() => handleDianPick(null)}
+          isDragging={isDraggingDian}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDraggingDian(true);
+          }}
+          onDragLeave={() => setIsDraggingDian(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDraggingDian(false);
+            const dropped = e.dataTransfer.files?.[0];
+            if (dropped) void handleDianPick(dropped);
+          }}
         />
-        <DropCard
+
+        {/* DropCard 2: Movimiento Contable */}
+        <InteractiveDropCard
+          step="2"
           label="Movimiento Contable"
-          hint="Software contable (.xlsx) · Comprobantes, NIT, Débitos"
+          hint="Extracto de Siigo, Helisa, World Office, CGUNO o Excel"
+          badgeText="Libro Auxiliar / Comprobantes (.xlsx)"
           file={movFile}
           sheets={movSheets}
           selectedSheet={selectedMovSheet}
           onSelectSheet={setSelectedMovSheet}
           onPick={() => movRef.current?.click()}
+          onClear={() => handleMovPick(null)}
+          isDragging={isDraggingMov}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDraggingMov(true);
+          }}
+          onDragLeave={() => setIsDraggingMov(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDraggingMov(false);
+            const dropped = e.dataTransfer.files?.[0];
+            if (dropped) void handleMovPick(dropped);
+          }}
         />
       </div>
+
       <input
         ref={dianRef}
         type="file"
@@ -163,93 +339,229 @@ export function UploadPanel() {
         onChange={(e) => void handleMovPick(e.target.files?.[0] ?? null)}
       />
 
-      {error ? (
-        <p className="mt-4 rounded-md bg-danger-bg px-3 py-2 text-sm text-danger">{error}</p>
-      ) : null}
+      {/* Alerta de Error */}
+      {error && (
+        <div className="mt-4 rounded-xl bg-danger-bg border border-danger/30 p-3.5 text-sm text-danger flex items-start gap-2.5 animate-in fade-in duration-200">
+          <AlertCircle className="size-4 shrink-0 mt-0.5" />
+          <div className="flex-1 text-xs sm:text-sm font-medium">{error}</div>
+        </div>
+      )}
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+      {/* Barra Principal de Acciones */}
+      <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
         <button
           type="button"
-          disabled={!dianFile || !movFile || busy}
+          disabled={!isReadyToReconcile}
           onClick={run}
           className={cn(
-            "inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-teal px-5 text-sm font-semibold text-bg-elevated transition-opacity",
-            "hover:bg-teal-deep disabled:cursor-not-allowed disabled:opacity-40",
+            "flex-1 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-teal px-6 text-sm font-bold text-white shadow-lg shadow-teal/20 transition-all",
+            "hover:bg-teal-deep hover:shadow-xl hover:shadow-teal/30 active:scale-[0.99]",
+            "disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
           )}
         >
-          {busy ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-          Ejecutar Auditoría
+          {busy ? (
+            <>
+              <Loader2 className="size-5 animate-spin" />
+              <span>Conciliando y Auditando...</span>
+            </>
+          ) : (
+            <>
+              <Zap className="size-5" />
+              <span>Conciliar Facturas DIAN vs Libros</span>
+            </>
+          )}
         </button>
+
         <button
           type="button"
           disabled={busy}
           onClick={loadDemo}
-          className="inline-flex h-11 items-center justify-center rounded-lg border border-line bg-bg-elevated px-5 text-sm font-medium text-ink hover:border-line-strong"
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-line bg-bg-surface px-5 text-xs sm:text-sm font-semibold text-ink hover:border-teal hover:text-teal hover:bg-bg-subtle/50 transition shadow-xs"
+          title="Cargar caso de ejemplo: Empresa CDS S.A.S. - Julio 2026"
         >
-          Cargar datos de demostración
+          <Sparkles className="size-4 text-teal" />
+          <span>Cargar Datos de Demostración</span>
         </button>
+
         <button
           type="button"
           onClick={() => setShowHistory(true)}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-line bg-bg-elevated px-4 text-sm font-medium text-ink hover:border-line-strong hover:text-teal"
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-line bg-bg-surface px-4 text-xs sm:text-sm font-semibold text-ink hover:border-teal hover:text-teal hover:bg-bg-subtle/50 transition shadow-xs"
         >
           <Building2 className="size-4 text-teal" />
-          Historial de Empresas
+          <span>Historial</span>
+          {historyCount > 0 && (
+            <span className="rounded-full bg-teal/10 px-2 py-0.5 text-[11px] font-bold text-teal">
+              {historyCount}
+            </span>
+          )}
         </button>
       </div>
 
+      {/* Barra de Compatibilidad y Seguridad */}
+      <div className="mt-10 border-t border-line/80 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-ink-muted">
+        <div className="flex items-center gap-2 text-ink-subtle">
+          <Lock className="size-4 text-teal" />
+          <span>
+            <strong>Privacidad Total:</strong> Procesamiento 100% en tu navegador (Client-Side). Tus datos nunca salen de tu equipo.
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-ink-subtle bg-bg-subtle px-3 py-1 rounded-lg border border-line/60">
+          <span>Compatible con:</span>
+          <span className="text-ink font-semibold">Siigo · Helisa · World Office · CGUNO · Excel</span>
+        </div>
+      </div>
+
+      {/* Modales de Historial y Guía */}
       <HistoryModal
         open={showHistory}
         onClose={() => setShowHistory(false)}
         onSelectEntry={(entry) => loadHistorySession(entry)}
       />
+
+      <GuiaConciliacionModal
+        open={showGuia}
+        onClose={() => setShowGuia(false)}
+      />
     </div>
   );
 }
 
-function DropCard({
-  label,
-  hint,
-  file,
-  sheets,
-  selectedSheet,
-  onSelectSheet,
-  onPick,
-}: {
+interface InteractiveDropCardProps {
+  step: string;
   label: string;
   hint: string;
+  badgeText: string;
   file: File | null;
   sheets?: string[];
   selectedSheet?: string;
   onSelectSheet?: (s: string) => void;
   onPick: () => void;
-}) {
-  return (
-    <div className="flex min-h-36 flex-col justify-between rounded-xl border border-dashed border-line-strong bg-bg-elevated p-5 transition-colors hover:border-teal hover:bg-teal-soft/20">
-      <button
-        type="button"
-        onClick={onPick}
-        className="flex w-full flex-col items-start text-left"
-      >
-        <FileSpreadsheet className="mb-3 size-5 text-teal" />
-        <span className="font-semibold text-ink">{label}</span>
-        {file ? (
-          <span className="mt-1 truncate text-sm text-teal">{file.name}</span>
-        ) : (
-          <span className="mt-1 text-sm text-ink-subtle">{hint}</span>
-        )}
-      </button>
+  onClear: () => void;
+  isDragging?: boolean;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragLeave?: () => void;
+  onDrop?: (e: React.DragEvent) => void;
+}
 
-      {file && sheets && sheets.length > 1 ? (
-        <div className="mt-3 w-full border-t border-line/60 pt-3" onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center gap-1.5 text-xs text-ink-muted">
-            <TableProperties className="size-3.5 text-teal" />
-            <span>Hoja de cálculo:</span>
+function InteractiveDropCard({
+  step,
+  label,
+  hint,
+  badgeText,
+  file,
+  sheets,
+  selectedSheet,
+  onSelectSheet,
+  onPick,
+  onClear,
+  isDragging,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+}: InteractiveDropCardProps) {
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  return (
+    <div
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className={cn(
+        "relative flex min-h-[170px] flex-col justify-between rounded-2xl border-2 border-dashed p-5 transition-all duration-200",
+        isDragging
+          ? "border-teal bg-teal-soft/40 shadow-lg scale-[1.01]"
+          : file
+            ? "border-teal/40 bg-teal-soft/10 shadow-xs"
+            : "border-line-strong bg-bg-surface hover:border-teal/60 hover:bg-teal-soft/10 hover:shadow-xs"
+      )}
+    >
+      {/* Contenido Principal / Botón de Carga */}
+      <div className="flex w-full flex-col items-start text-left">
+        <div className="flex w-full items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="flex size-6 items-center justify-center rounded-lg bg-teal text-white text-xs font-bold shadow-xs">
+              {step}
+            </span>
+            <span className="font-bold text-ink text-sm sm:text-base">{label}</span>
+          </div>
+
+          <span className="rounded-md bg-bg-subtle border border-line px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-ink-muted">
+            .XLSX
+          </span>
+        </div>
+
+        {file ? (
+          <div className="w-full mt-2 p-3 rounded-xl bg-bg-surface border border-teal/30 shadow-xs flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="size-8 rounded-lg bg-teal/10 text-teal flex items-center justify-center shrink-0">
+                <FileCheck className="size-4.5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-ink truncate">{file.name}</p>
+                <p className="text-[11px] text-ink-subtle">
+                  {formatFileSize(file.size)} · Archivo listo
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={onPick}
+                title="Cambiar archivo"
+                className="p-1.5 rounded-lg text-ink-muted hover:text-teal hover:bg-bg-subtle transition"
+              >
+                <RefreshCw className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={onClear}
+                title="Quitar archivo"
+                className="p-1.5 rounded-lg text-ink-muted hover:text-danger hover:bg-danger-bg transition"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onPick}
+            className="w-full mt-2 flex flex-col items-center justify-center py-4 rounded-xl border border-dashed border-line bg-bg-subtle/40 hover:bg-bg-subtle transition text-center cursor-pointer group"
+          >
+            <div className="size-10 rounded-xl bg-teal-soft/80 text-teal flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+              <Upload className="size-5" />
+            </div>
+            <span className="text-xs font-semibold text-ink group-hover:text-teal transition">
+              Arrastra tu archivo aquí o haz clic para explorar
+            </span>
+            <span className="mt-0.5 text-[11px] text-ink-subtle">{hint}</span>
+          </button>
+        )}
+      </div>
+
+      {/* Selector de Hoja si el archivo tiene múltiples pestañas */}
+      {file && sheets && sheets.length > 1 && (
+        <div className="mt-3 w-full border-t border-teal/20 pt-2.5">
+          <div className="flex items-center justify-between text-xs text-ink-muted mb-1">
+            <div className="flex items-center gap-1.5 font-medium">
+              <TableProperties className="size-3.5 text-teal" />
+              <span>Hoja de cálculo:</span>
+            </div>
+            <span className="text-[10px] text-teal font-semibold">
+              {sheets.length} hojas detectadas
+            </span>
           </div>
           <select
             value={selectedSheet}
             onChange={(e) => onSelectSheet?.(e.target.value)}
-            className="mt-1.5 h-8 w-full rounded-md border border-line bg-bg px-2 text-xs font-medium text-ink outline-none focus:border-teal"
+            className="h-8 w-full rounded-lg border border-teal/30 bg-bg-surface px-2 text-xs font-semibold text-ink outline-none focus:ring-1 focus:ring-teal"
           >
             {sheets.map((s) => (
               <option key={s} value={s}>
@@ -258,8 +570,7 @@ function DropCard({
             ))}
           </select>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
-
