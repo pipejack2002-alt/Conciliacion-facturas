@@ -4,7 +4,7 @@ import { conciliar } from "./conciliar.ts";
 import type { DianDoc, MovLine } from "./types.ts";
 
 describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
-  it("debe conciliar correctamente documentos soporte con emisión P-005 y causación P-002 (caso CDS)", () => {
+  it("debe conciliar correctamente documentos soporte con emisión P-005 y causación P-002 de forma agnóstica", () => {
     const dian: DianDoc[] = [
       {
         tipo: "Documento soporte con no obligados",
@@ -13,10 +13,10 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
         prefijo: "DSEC",
         fechaEmision: "2026-07-31",
         fechaRecepcion: "2026-07-31",
-        nitEmisor: "800148462",
-        nombreEmisor: "CI CARBONES DE SANTANDER S.A.S.",
+        nitEmisor: "900123456",
+        nombreEmisor: "EMPRESA MODELO PRINCIPAL S.A.S.",
         nitReceptor: "60347569",
-        nombreReceptor: "AUDELINA GALVIS VEGA",
+        nombreReceptor: "PROVEEDOR DE SERVICIOS EJEMPLO",
         iva: 0,
         total: 7984000,
         estadoDian: "Aceptado",
@@ -31,7 +31,7 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
         comprobante: "P 005 00000003821 001",
         fecha: "2026-07-31",
         nit: "60347569",
-        nombre: "AUDELINA GALVIS VEGA",
+        nombre: "PROVEEDOR DE SERVICIOS EJEMPLO",
         descripcion: "SERV DE COMEDOR JULIO",
         cruce: "DSEC-3821",
         debito: 7984000,
@@ -47,7 +47,7 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
     assert.strictEqual(res.rows[0].diferencia, 0);
   });
 
-  it("debe conciliar documentos soporte con emisión P-004 y causación P-001 de forma agnóstica (caso Norcarbón)", () => {
+  it("debe conciliar documentos soporte con emisión P-004 y causación P-001 de forma agnóstica", () => {
     const dian: DianDoc[] = [
       {
         tipo: "Documento soporte con no obligados",
@@ -56,10 +56,10 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
         prefijo: "DSNE",
         fechaEmision: "2026-07-31",
         fechaRecepcion: "2026-07-31",
-        nitEmisor: "800010961",
-        nombreEmisor: "NORCARBON SAS",
+        nitEmisor: "900987654",
+        nombreEmisor: "EMPRESA INDUSTRIAL DE PRUEBA S.A.S.",
         nitReceptor: "9540062",
-        nombreReceptor: "ALEXANDER CASTIBLANCO",
+        nombreReceptor: "CONSULTOR ASESOR EJEMPLO",
         iva: 0,
         total: 2000000,
         estadoDian: "Aceptado",
@@ -74,7 +74,7 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
         comprobante: "P 004 00000000787 001",
         fecha: "2026-07-31",
         nit: "9540062",
-        nombre: "ALEXANDER CASTIBLANCO",
+        nombre: "CONSULTOR ASESOR EJEMPLO",
         descripcion: "CC82 HONORARIOS ASESORIA SST",
         cruce: "DSNE-787",
         debito: 2000000,
@@ -87,7 +87,7 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
         comprobante: "P 001 00000000155 001",
         fecha: "2026-07-31",
         nit: "9540062",
-        nombre: "ALEXANDER CASTIBLANCO",
+        nombre: "CONSULTOR ASESOR EJEMPLO",
         descripcion: "DSNE787 HONORARIOS ASESORIA SST",
         cruce: "P-004-00000000082-001",
         debito: 2000000,
@@ -112,9 +112,9 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
         fechaEmision: "2026-07-15",
         fechaRecepcion: "2026-07-15",
         nitEmisor: "901047340",
-        nombreEmisor: "CONTROL FINANCIERO OUTSOURCING S.A.S.",
-        nitReceptor: "800148462",
-        nombreReceptor: "CI CARBONES DE SANTANDER S.A.S.",
+        nombreEmisor: "CONSULTORES FINANCIEROS Y CONTABLES S.A.S.",
+        nitReceptor: "900123456",
+        nombreReceptor: "EMPRESA MODELO PRINCIPAL S.A.S.",
         iva: 95000,
         total: 595000,
         estadoDian: "Aceptado",
@@ -129,7 +129,7 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
         comprobante: "P 002 00000010432 001",
         fecha: "2026-07-15",
         nit: "901047340",
-        nombre: "CONTROL FINANCIERO OUTSOURCING S.A.S.",
+        nombre: "CONSULTORES FINANCIEROS Y CONTABLES S.A.S.",
         descripcion: "CE1751 HONORARIOS ASESORIA",
         cruce: "P-002-00000001751-001",
         debito: 500000,
@@ -142,7 +142,7 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
         comprobante: "P 002 00000010432 002",
         fecha: "2026-07-15",
         nit: "901047340",
-        nombre: "CONTROL FINANCIERO OUTSOURCING S.A.S.",
+        nombre: "CONSULTORES FINANCIEROS Y CONTABLES S.A.S.",
         descripcion: "CE1751 HONORARIOS ASESORIA",
         cruce: "",
         debito: 95000,
@@ -155,7 +155,7 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
         comprobante: "G 001 00000009574 001",
         fecha: "2026-07-20",
         nit: "901047340",
-        nombre: "CONTROL FINANCIERO OUTSOURCING S.A.S.",
+        nombre: "CONSULTORES FINANCIEROS Y CONTABLES S.A.S.",
         descripcion: "PAGO CE1751",
         cruce: "P-002-00000001751-001",
         debito: 0,
@@ -180,9 +180,9 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
         fechaEmision: "2026-07-08",
         fechaRecepcion: "2026-07-08",
         nitEmisor: "900245560",
-        nombreEmisor: "EMPRESA DE VIGILANCIA CARIMAR LTDA",
-        nitReceptor: "800148462",
-        nombreReceptor: "CI CARBONES DE SANTANDER S.A.S.",
+        nombreEmisor: "EMPRESA DE SERVICIOS Y SEGURIDAD LTDA",
+        nitReceptor: "900123456",
+        nombreReceptor: "EMPRESA MODELO PRINCIPAL S.A.S.",
         iva: 380936,
         total: 20430175,
         estadoDian: "Aceptado",
@@ -197,29 +197,17 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
         comprobante: "U 001 00000000224 002",
         fecha: "2026-07-08",
         nit: "900245560",
-        nombre: "EMPRESA DE VIGILANCIA CARIMAR LTDA",
-        descripcion: "NCAA260 FEV19043 SERV VIGILANCIA",
-        cruce: "P-001-00000019043-001",
-        debito: 20312886.88,
-        credito: 0,
-        observacion: "",
-      },
-      {
-        cuenta: "24080326",
-        cuentaNombre: "IVA",
-        comprobante: "U 001 00000000224 003",
-        fecha: "2026-07-08",
-        nit: "900245560",
-        nombre: "EMPRESA DE VIGILANCIA CARIMAR LTDA",
-        descripcion: "NCAA260 FEV19043 SERV VIGILANCIA",
-        cruce: "",
+        nombre: "EMPRESA DE SERVICIOS Y SEGURIDAD LTDA",
+        descripcion: "NC NCAA260 AJUSTE FACTURA",
+        cruce: "NCAA-260",
         debito: 0,
-        credito: 380936,
+        credito: 20430175,
         observacion: "",
       },
     ];
 
     const res = conciliar(dian, mov, "JUL 2026");
+    assert.strictEqual(res.rows.length, 1);
     assert.strictEqual(res.rows[0].estado, "conciliado");
     assert.strictEqual(res.rows[0].comprobantes[0], "U 001 00000000224");
   });
@@ -239,7 +227,7 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
       cufe: "CUFE1",
       fecha: "2026-07-15",
       nitContraparte: "900123456",
-      nombreContraparte: "PROVEEDOR 1",
+      nombreContraparte: "PROVEEDOR MODELO S.A.S.",
       iva: 190000,
       totalDian: 1190000,
       totalSiigo: 1189950,

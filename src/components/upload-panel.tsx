@@ -27,7 +27,6 @@ import {
   parseMovSheet,
   readWorkbook,
 } from "@/lib/parse-excel";
-import type { SampleBundle } from "@/lib/types";
 import { useConciliacion } from "@/lib/store";
 import { getHistoryEntries } from "@/lib/history-store";
 import { HistoryModal } from "./history-modal";
@@ -132,29 +131,6 @@ export function UploadPanel() {
       setFiles(dian, mov, { dian: dianFile.name, mov: movFile.name });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al leer los archivos.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function loadDemo() {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch("/samples/julio-2026.json");
-      if (!res.ok) throw new Error("No se pudo cargar el ejemplo.");
-      const data = (await res.json()) as SampleBundle;
-      setFiles(
-        data.dian,
-        data.mov,
-        {
-          dian: "REPORTE DIAN JUL 2026.xlsx",
-          mov: "MOVIMIENTO JUL 2026.xlsx",
-        },
-        "Julio 2026"
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error al cargar el ejemplo.");
     } finally {
       setBusy(false);
     }
@@ -374,27 +350,25 @@ export function UploadPanel() {
 
         <button
           type="button"
-          disabled={busy}
-          onClick={loadDemo}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-line bg-bg-surface px-5 text-xs sm:text-sm font-semibold text-ink hover:border-teal hover:text-teal hover:bg-bg-subtle/50 transition shadow-xs"
-          title="Cargar caso de ejemplo: Empresa CDS S.A.S. - Julio 2026"
-        >
-          <Sparkles className="size-4 text-teal" />
-          <span>Cargar Datos de Demostración</span>
-        </button>
-
-        <button
-          type="button"
           onClick={() => setShowHistory(true)}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-line bg-bg-surface px-4 text-xs sm:text-sm font-semibold text-ink hover:border-teal hover:text-teal hover:bg-bg-subtle/50 transition shadow-xs"
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-line bg-bg-surface px-5 text-xs sm:text-sm font-semibold text-ink hover:border-teal hover:text-teal hover:bg-bg-subtle/50 transition shadow-xs"
         >
           <Building2 className="size-4 text-teal" />
-          <span>Historial</span>
+          <span>Historial de Empresas</span>
           {historyCount > 0 && (
             <span className="rounded-full bg-teal/10 px-2 py-0.5 text-[11px] font-bold text-teal">
               {historyCount}
             </span>
           )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowGuia(true)}
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-line bg-bg-surface px-4 text-xs sm:text-sm font-semibold text-ink hover:border-teal hover:text-teal hover:bg-bg-subtle/50 transition shadow-xs"
+        >
+          <HelpCircle className="size-4 text-teal" />
+          <span>Guía de Uso</span>
         </button>
       </div>
 

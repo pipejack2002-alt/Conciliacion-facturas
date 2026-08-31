@@ -29,3 +29,10 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+
+# Client Data & Spreadsheets (Confidentiality & Privacy)
+*.xlsx
+*.xls
+*.csv
+attachments/
+public/samples/

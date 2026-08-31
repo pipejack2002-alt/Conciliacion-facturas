@@ -225,9 +225,9 @@ export function GuiaConciliacionModal({ open, onClose }: Props) {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div className="p-3.5 rounded-xl border border-line bg-bg-surface">
-                  <strong className="text-ink block mb-1">1. Cruce Documento Soporte:</strong>
+                  <strong className="text-ink block mb-1">1. Cruce Documento Soporte y Causación:</strong>
                   <span className="text-ink-muted leading-relaxed">
-                    Soporta pares de emisión y causación diferentes (ej. P-005 vs P-002 en CDS, P-004 vs P-001 en Norcarbón).
+                    Soporta comprobantes de emisión y causación con prefijos o consecutivos personalizados (ej. P-005 vs P-002 o P-004 vs P-001 de forma automática y agnóstica).
                   </span>
                 </div>
 
