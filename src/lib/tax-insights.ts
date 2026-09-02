@@ -35,8 +35,8 @@ export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
   ) {
     return {
       tipo: "comision_bancaria",
-      etiqueta: "Comisión Bancaria / Fiduciaria",
-      detalle: `Factura de comisiones bancarias/fiduciarias con IVA (${formatMoney(row.totalDian)}). Frecuentemente se causa en documento L debitando gastos financieros 530515 (mayor valor del gasto) al cierre del extracto o reporte mensual.`,
+      etiqueta: "Comisión bancaria",
+      detalle: `Factura de comisiones bancarias con IVA (${formatMoney(row.totalDian)}). Frecuentemente se causa en documento L debitando gastos financieros 530515 (mayor valor del gasto) al cierre del extracto o reporte mensual.`,
       probabilidad: "alta",
     };
   }

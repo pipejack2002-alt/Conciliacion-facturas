@@ -653,22 +653,22 @@ function DocTable({
                   {insight && (
                     <span
                       className={cn(
-                        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold border",
+                        "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border shadow-2xs whitespace-nowrap",
                         insight.tipo === "redondeo"
-                          ? "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                          ? "bg-slate-100 text-slate-800 border-slate-300"
                           : insight.tipo === "retefuente"
-                          ? "bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                          ? "bg-amber-100 text-amber-950 border-amber-400"
                           : insight.tipo === "iva"
-                          ? "bg-sky-50 text-sky-700 border-sky-300 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
+                          ? "bg-blue-100 text-blue-950 border-blue-400"
                           : insight.tipo === "trm_diferencia"
-                          ? "bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
+                          ? "bg-sky-100 text-sky-950 border-sky-400"
                           : insight.tipo === "comision_bancaria"
-                          ? "bg-purple-50 text-purple-700 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800"
-                          : "bg-teal-50 text-teal-700 border-teal-300 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800",
+                          ? "bg-emerald-100 text-emerald-950 border-emerald-400"
+                          : "bg-teal-100 text-teal-950 border-teal-400",
                       )}
                       title={insight.detalle}
                     >
-                      <Sparkles className="size-2.5" />
+                      <Sparkles className="size-3 shrink-0 text-current" />
                       {insight.etiqueta}
                     </span>
                   )}
@@ -867,19 +867,19 @@ function DetailDrawer({
         {insight && (
           <div
             className={cn(
-              "mb-4 rounded-xl border p-3 text-xs",
+              "mb-4 rounded-xl border p-3.5 text-xs shadow-xs",
               insight.tipo === "trm_diferencia"
-                ? "border-blue-300/60 bg-blue-50/70 dark:bg-blue-950/30 text-blue-900 dark:text-blue-200"
+                ? "border-sky-300 bg-sky-50/90 text-sky-950"
                 : insight.tipo === "comision_bancaria"
-                ? "border-purple-300/60 bg-purple-50/70 dark:bg-purple-950/30 text-purple-900 dark:text-purple-200"
-                : "border-amber-300/60 bg-amber-50/70 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200",
+                ? "border-emerald-300 bg-emerald-50/90 text-emerald-950"
+                : "border-amber-300 bg-amber-50/90 text-amber-950",
             )}
           >
-            <div className="flex items-center gap-1.5 font-bold mb-1">
-              <Sparkles className="size-3.5 shrink-0" />
+            <div className="flex items-center gap-1.5 font-bold mb-1.5 text-sm">
+              <Sparkles className="size-4 shrink-0 text-current" />
               Sugerencia Tributaria: {insight.etiqueta}
             </div>
-            <p className="leading-relaxed opacity-90">{insight.detalle}</p>
+            <p className="leading-relaxed opacity-95 text-xs">{insight.detalle}</p>
           </div>
         )}
 
@@ -900,21 +900,26 @@ function DetailDrawer({
           <p className="mt-4 rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn">{row.alerta}</p>
         ) : null}
         {row.linked.length ? (
-          <div className="mt-4 rounded-xl border border-sky-300/60 bg-sky-50/70 dark:bg-sky-950/30 p-3 text-xs text-sky-900 dark:text-sky-200">
-            <div className="flex items-center gap-1.5 font-bold mb-2">
-              <span className="text-sky-600 dark:text-sky-400 font-extrabold">🔗 Documento Relacionado:</span>
+          <div className="mt-4 rounded-xl border border-teal/20 bg-teal-soft/40 p-3.5 text-xs shadow-xs">
+            <div className="flex items-center gap-1.5 font-bold mb-2.5">
+              <span className="text-teal-deep font-extrabold text-sm">🔗 Documento Relacionado:</span>
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {row.linked.map((l) => (
-                <div key={l.id} className="flex items-center justify-between gap-2 bg-white/70 dark:bg-slate-900/60 p-2.5 rounded-lg border border-sky-200/60 dark:border-sky-800">
+                <div
+                  key={l.id}
+                  className="flex items-center justify-between gap-3 bg-white p-3 rounded-lg border border-line shadow-2xs"
+                >
                   <div>
-                    <span className="font-bold text-sky-950 dark:text-sky-100">{l.numero}</span>
-                    <span className="text-ink-muted text-[11px] block">{l.tipo} · {formatMoneyExact(l.total)}</span>
+                    <span className="font-bold text-ink text-sm block">{l.numero}</span>
+                    <span className="text-ink-muted text-xs block mt-0.5">
+                      {l.tipo} · {formatMoneyExact(l.total)}
+                    </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => useConciliacion.getState().select(l.id)}
-                    className="px-2.5 py-1 rounded bg-sky-600 text-white hover:bg-sky-700 text-xs font-semibold cursor-pointer shrink-0 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal text-white hover:bg-teal-deep text-xs font-bold shadow-xs cursor-pointer shrink-0 transition-all"
                   >
                     Ver Documento →
                   </button>
