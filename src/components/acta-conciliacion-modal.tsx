@@ -240,7 +240,7 @@ export function ActaConciliacionModal({ open, onClose, result, dianName, movName
                     <thead className="bg-bg-subtle border-b border-line text-ink-subtle">
                       <tr>
                         <th className="p-2">Fecha</th>
-                        <th className="p-2">Doc / Folio</th>
+                        <th className="p-2">N° Factura</th>
                         <th className="p-2">Tercero / Proveedor</th>
                         <th className="p-2 text-right">Valor DIAN</th>
                       </tr>

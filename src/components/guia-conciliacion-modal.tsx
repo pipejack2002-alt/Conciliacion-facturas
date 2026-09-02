@@ -150,7 +150,7 @@ export function GuiaConciliacionModal({ open, onClose }: Props) {
                 </h5>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                   <span className="p-2 rounded bg-bg-subtle border border-line/60">✓ CUFE / UUID</span>
-                  <span className="p-2 rounded bg-bg-subtle border border-line/60">✓ Prefijo y Folio</span>
+                  <span className="p-2 rounded bg-bg-subtle border border-line/60">✓ N° Factura (Prefijo y Consecutivo)</span>
                   <span className="p-2 rounded bg-bg-subtle border border-line/60">✓ NIT / Emisor</span>
                   <span className="p-2 rounded bg-bg-subtle border border-line/60">✓ Tipo Documento</span>
                   <span className="p-2 rounded bg-bg-subtle border border-line/60">✓ Valor Total / Bruto</span>

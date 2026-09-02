@@ -184,7 +184,7 @@ export function ExecutiveReportModal({ open, onClose, result, dianName, movName 
                     </td>
                     <td className="py-2 px-3 text-center font-mono font-bold text-rose-800">{totals.duplicados}</td>
                     <td className="py-2 px-3 text-right text-rose-700 font-semibold">{totals.duplicados > 0 ? "Riesgo Alto" : "Cero"}</td>
-                    <td className="py-2 px-3 text-slate-600">Revisar comprobantes con mismo folio causados dos veces.</td>
+                    <td className="py-2 px-3 text-slate-600">Revisar comprobantes con mismo número de factura causados dos veces.</td>
                   </tr>
                   <tr>
                     <td className="py-2 px-3 font-semibold text-blue-800 flex items-center gap-1.5">

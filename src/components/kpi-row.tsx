@@ -30,9 +30,9 @@ export function KpiRow({
     ...(typoCount > 0
       ? [
           {
-            label: "Revisar folio",
+            label: "Revisar factura",
             value: String(typoCount),
-            hint: "Posible error al digitar folio",
+            hint: "Posible error al digitar N°",
             alert: true,
             tab: "posible_typo" as TabId,
           },

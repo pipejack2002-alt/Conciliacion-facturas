@@ -38,7 +38,7 @@ import { KpiRow } from "./kpi-row";
 const TABS: { id: TabId; label: string }[] = [
   { id: "cola", label: "Cola" },
   { id: "pendiente", label: "Por registrar" },
-  { id: "posible_typo", label: "Revisar folio" },
+  { id: "posible_typo", label: "Revisar factura" },
   { id: "totalizado", label: "Totalizados" },
   { id: "duplicado", label: "Dobles" },
   { id: "diferencia", label: "Diferencias" },
@@ -368,7 +368,7 @@ export function ResultBoard() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar NIT, proveedor, folio…"
+                placeholder="Buscar NIT, proveedor, N° factura…"
                 className="h-9 w-full rounded-lg border border-line bg-bg-elevated pl-9 pr-3 text-xs outline-none focus:border-teal"
               />
             </label>

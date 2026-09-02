@@ -55,7 +55,7 @@ export function DeltaBanner({ delta }: { delta: AuditDelta }) {
             {delta.stillMarked.length ? (
               <p className="mt-1">
                 Marcadas como validadas que aún no cruzan en libros:{" "}
-                {delta.stillMarked.map((c) => c.numero).join(", ")}. Revisa el folio o el comprobante.
+                {delta.stillMarked.map((c) => c.numero).join(", ")}. Revisa el número de factura o el comprobante.
               </p>
             ) : null}
           </div>

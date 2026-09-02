@@ -578,7 +578,7 @@ export function conciliar(
     } else if (found.score === 40) {
       estado = "posible_typo";
       const token = found.via.replace("posible digitación ", "");
-      alerta = `En el movimiento aparece ${token} (mismo NIT y valor). Posible error al digitar el folio.`;
+      alerta = `En el movimiento aparece ${token} (mismo NIT y valor). Posible error al digitar el número de factura.`;
     } else if (isDocumentoSoporte(doc) && comps.length > 1 && estado === "conciliado") {
       const f = stripZeros(doc.folio);
       const emisionComp = comps.find((c) => compFolio(c) === f) || comps[0];
@@ -688,7 +688,7 @@ export function conciliar(
             r.totalSiigo = l.amt;
             r.diferencia = round2(r.totalDian - l.amt);
             r.matchVia = `posible digitación ${l.cruce || l.base}`;
-            r.alerta = `En libros aparece comprobante ${l.base} (${l.cruce || "sin cruce"}) por el mismo valor ($${r.totalDian.toLocaleString("es-CO")}), pero con folio/prefijo diferente. Revisar registro.`;
+            r.alerta = `En libros aparece comprobante ${l.base} (${l.cruce || "sin cruce"}) por el mismo valor ($${r.totalDian.toLocaleString("es-CO")}), pero con número de factura diferente. Revisar registro.`;
           }
           usedBases.add(l.base);
           break;
@@ -854,5 +854,5 @@ export const ESTADO_LABEL: Record<EstadoConciliacion, string> = {
   solo_siigo: "Solo contabilidad",
   duplicado: "Doble registro",
   cruce_nc: "Cruce factura / NC",
-  posible_typo: "Revisar folio",
+  posible_typo: "Revisar factura",
 };
