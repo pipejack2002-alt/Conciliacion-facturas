@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
-import type { DianDoc, MovLine } from "./types";
+import type { ColumnMapping, DetectedProfile, DianDoc, MovLine, SoftwareProfileId } from "./types.ts";
+import { detectSoftwareProfile } from "./software-profiles.ts";
 
 function cellStr(v: unknown): string {
   if (v == null) return "";
@@ -9,9 +10,54 @@ function cellStr(v: unknown): string {
 
 function cellNum(v: unknown): number {
   if (v == null || v === "") return 0;
-  if (typeof v === "number") return v;
-  const n = Number(String(v).replace(/\s/g, "").replace(",", "."));
-  return Number.isFinite(n) ? n : 0;
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  let s = String(v).trim().replace(/\s/g, "");
+  if (!s) return 0;
+
+  // Manejar negativos con paréntesis: (1234.56) -> -1234.56
+  let isNegative = false;
+  if (s.startsWith("(") && s.endsWith(")")) {
+    isNegative = true;
+    s = s.slice(1, -1).trim();
+  } else if (s.startsWith("-")) {
+    isNegative = true;
+    s = s.slice(1).trim();
+  }
+
+  // Quitar símbolos de moneda
+  s = s.replace(/[$€COPcop]/g, "").trim();
+
+  // Detección inteligente de separador de miles vs decimal
+  const hasDot = s.includes(".");
+  const hasComma = s.includes(",");
+
+  if (hasDot && hasComma) {
+    if (s.lastIndexOf(",") > s.lastIndexOf(".")) {
+      // Formato latino/europeo: 1.234.567,89
+      s = s.replace(/\./g, "").replace(",", ".");
+    } else {
+      // Formato anglosajón: 1,234,567.89
+      s = s.replace(/,/g, "");
+    }
+  } else if (hasComma && !hasDot) {
+    // Solo comas: si tiene exactamente 3 dígitos al final (ej. 1,000 o 25,000) podría ser miles, pero comúnmente 12,50
+    // Si tiene más de una coma o coma seguida de 2 decimales
+    const parts = s.split(",");
+    if (parts.length > 2) {
+      s = s.replace(/,/g, "");
+    } else if (parts[1] && parts[1].length <= 2) {
+      s = s.replace(",", ".");
+    } else if (parts[1] && parts[1].length === 3 && parts[0].length <= 3) {
+      // Probablemente separador de miles sin decimales: "25,000"
+      s = s.replace(",", "");
+    } else {
+      s = s.replace(",", ".");
+    }
+  }
+
+  const n = Number(s);
+  if (!Number.isFinite(n)) return 0;
+  return isNegative ? -n : n;
 }
 
 function cellDate(v: unknown): string {
@@ -23,9 +69,23 @@ function cellDate(v: unknown): string {
     return `${y}-${m}-${d}`;
   }
   if (typeof v === "number") {
-    const parsed = XLSX.SSF.parse_date_code(v);
-    if (parsed) {
-      return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
+    try {
+      const SSF = (XLSX as any).SSF;
+      if (SSF && typeof SSF.parse_date_code === "function") {
+        const parsed = SSF.parse_date_code(v);
+        if (parsed) {
+          return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    // Fallback matemático exacto para números seriales de fecha de Excel
+    if (v > 20000 && v < 70000) {
+      const date = new Date(Math.round((v - 25569) * 86400 * 1000));
+      if (!Number.isNaN(date.getTime())) {
+        return date.toISOString().slice(0, 10);
+      }
     }
   }
   const s = cellStr(v);
@@ -105,6 +165,8 @@ export function findBestMovSheet(wb: XLSX.WorkBook): string {
     const text = rows.slice(0, 20).map((r) => r.map((c) => cellStr(c).toUpperCase()).join(" ")).join(" ");
     if (text.includes("COMPROBANTE") && text.includes("DEBITO")) return name;
     if (text.includes("CUENTA") && (text.includes("DEBITO") || text.includes("CREDITO"))) return name;
+    if (text.includes("DOCUMENTO DE REFERENCIA") || text.includes("DOC. FUENTE") || text.includes("CHEQUE / REFERENCIA")) return name;
+    if (text.includes("NIT") && (text.includes("DEBITO") || text.includes("CREDITO"))) return name;
   }
   return names[0];
 }
@@ -164,7 +226,63 @@ export function parseDianSheet(wb: XLSX.WorkBook, sheetName?: string): DianDoc[]
   return out;
 }
 
-export function parseMovSheet(wb: XLSX.WorkBook, sheetName?: string): MovLine[] {
+export type ParseMovOptions = {
+  mapping?: ColumnMapping;
+  profileId?: SoftwareProfileId;
+  headerRow?: number;
+};
+
+/**
+ * Inspecciona la hoja de movimientos contables y extrae la detección de perfil y muestra de filas.
+ */
+export function inspectMovSheet(
+  wb: XLSX.WorkBook,
+  sheetName?: string,
+): {
+  detectedProfile: DetectedProfile;
+  rowsSample: string[][];
+  totalRows: number;
+} {
+  const chosenSheet = sheetName && wb.Sheets[sheetName] ? sheetName : findBestMovSheet(wb);
+  const sheet = wb.Sheets[chosenSheet];
+  if (!sheet) {
+    return {
+      detectedProfile: {
+        id: "custom",
+        label: "Sin hoja",
+        confidence: 0,
+        headerRow: 0,
+        mapping: {},
+        detectedHeaders: [],
+      },
+      rowsSample: [],
+      totalRows: 0,
+    };
+  }
+
+  const rows = XLSX.utils.sheet_to_json<(string | number | Date | null)[]>(sheet, {
+    header: 1,
+    defval: "",
+    raw: true,
+  });
+
+  const detectedProfile = detectSoftwareProfile(rows);
+
+  const start = detectedProfile.headerRow;
+  const sample = rows.slice(start, start + 6).map((r) => r.map((c) => cellStr(c)));
+
+  return {
+    detectedProfile,
+    rowsSample: sample,
+    totalRows: rows.length,
+  };
+}
+
+export function parseMovSheet(
+  wb: XLSX.WorkBook,
+  sheetName?: string,
+  options?: ParseMovOptions,
+): MovLine[] {
   const chosenSheet = sheetName && wb.Sheets[sheetName] ? sheetName : findBestMovSheet(wb);
   const sheet = wb.Sheets[chosenSheet];
   if (!sheet) return [];
@@ -173,52 +291,58 @@ export function parseMovSheet(wb: XLSX.WorkBook, sheetName?: string): MovLine[] 
     defval: "",
     raw: true,
   });
-  let headerIdx = -1;
-  for (let i = 0; i < Math.min(rows.length, 20); i++) {
-    const joined = rows[i].map((c) => cellStr(c).toUpperCase()).join(" ");
-    if (joined.includes("COMPROBANTE") && (joined.includes("DEBITO") || joined.includes("DEBITOS"))) {
-      headerIdx = i;
-      break;
-    }
-  }
-  if (headerIdx < 0) headerIdx = 0;
-  const headerRow = rows[headerIdx].map((c) => cellStr(c));
-  const map = new Map<string, number>();
-  headerRow.forEach((h, i) => map.set(normHeader(h), i));
+  if (!rows.length) return [];
 
-  const iCta = col(map, ["cuenta"]) ?? 1;
-  const iCtaNom = 2;
-  const iComp = col(map, ["comprobante"]) ?? 4;
-  const iFecha = col(map, ["fecha"]) ?? 5;
-  const iNit = col(map, ["nit"]) ?? 6;
-  const iNom = col(map, ["nombre"]) ?? 7;
-  const iDesc = col(map, ["descripcion"]) ?? 8;
-  const iCruce = col(map, ["inventario-cruce-cheque", "cruce"]) ?? 9;
-  const iDeb = col(map, ["debitos", "debito"]) ?? 12;
-  const iCred = col(map, ["creditos", "credito"]) ?? 13;
-  const iObs = col(map, ["observacion"]) ?? 15;
+  const detected = detectSoftwareProfile(rows);
+  const headerIdx = options?.headerRow ?? detected.headerRow;
+  const mapping = options?.mapping ?? detected.mapping;
+
+  const iCta = mapping.cuenta;
+  const iCtaNom = mapping.cuentaNombre;
+  const iComp = mapping.comprobante;
+  const iFecha = mapping.fecha;
+  const iNit = mapping.nit;
+  const iNom = mapping.nombre;
+  const iDesc = mapping.descripcion;
+  const iCruce = mapping.cruce;
+  const iRef = mapping.referencia;
+  const iDeb = mapping.debito;
+  const iCred = mapping.credito;
+  const iObs = mapping.observacion;
 
   const out: MovLine[] = [];
   for (let r = headerIdx + 1; r < rows.length; r++) {
     const row = rows[r];
-    if (!row) continue;
+    if (!row || !row.length) continue;
+
+    // Omitir filas de totales o vacías
     const first = cellStr(row[0]);
-    if (first.toLowerCase().startsWith("total")) continue;
-    const cuenta = cellStr(row[iCta]);
-    if (!cuenta) continue;
-    const nitRaw = cellStr(row[iNit]);
+    if (first.toLowerCase().startsWith("total") || first.toLowerCase().startsWith("resumen")) continue;
+
+    const cuenta = iCta != null ? cellStr(row[iCta]) : "";
+    const debito = iDeb != null ? cellNum(row[iDeb]) : 0;
+    const credito = iCred != null ? cellNum(row[iCred]) : 0;
+
+    // Si no tiene cuenta y no tiene valores contables, es una fila vacía o de adorno
+    if (!cuenta && debito === 0 && credito === 0) continue;
+
+    const nitRaw = iNit != null ? cellStr(row[iNit]) : "";
+    const cleanNit = nitRaw === "0" ? "" : nitRaw.replace(/\s+/g, "").trim();
+
     out.push({
-      cuenta,
-      cuentaNombre: cellStr(row[iCtaNom]),
-      comprobante: cellStr(row[iComp]),
-      fecha: cellDate(row[iFecha]),
-      nit: nitRaw === "0" ? "" : nitRaw,
-      nombre: cellStr(row[iNom]),
-      descripcion: cellStr(row[iDesc]),
-      cruce: cellStr(row[iCruce]),
-      debito: cellNum(row[iDeb]),
-      credito: cellNum(row[iCred]),
-      observacion: cellStr(row[iObs]).slice(0, 400),
+      cuenta: cuenta || "CUENTA",
+      cuentaNombre: iCtaNom != null ? cellStr(row[iCtaNom]) : "",
+      comprobante: iComp != null ? cellStr(row[iComp]) : "",
+      fecha: iFecha != null ? cellDate(row[iFecha]) : "",
+      nit: cleanNit,
+      nombre: iNom != null ? cellStr(row[iNom]) : "",
+      descripcion: iDesc != null ? cellStr(row[iDesc]) : "",
+      cruce: iCruce != null ? cellStr(row[iCruce]) : "",
+      referencia: iRef != null ? cellStr(row[iRef]) : "",
+      debito,
+      credito,
+      observacion: iObs != null ? cellStr(row[iObs]).slice(0, 400) : "",
+      origenSoftware: detected.id,
     });
   }
   return out;

@@ -29,6 +29,44 @@ export type MovLine = {
   debito: number;
   credito: number;
   observacion: string;
+  referencia?: string;
+  origenSoftware?: string;
+};
+
+export type SoftwareProfileId =
+  | "auto"
+  | "siigo_pyme"
+  | "siigo_nube"
+  | "world_office"
+  | "helisa"
+  | "alegra"
+  | "loggro"
+  | "sap"
+  | "custom";
+
+export type ColumnKey =
+  | "cuenta"
+  | "cuentaNombre"
+  | "comprobante"
+  | "fecha"
+  | "nit"
+  | "nombre"
+  | "descripcion"
+  | "cruce"
+  | "referencia"
+  | "debito"
+  | "credito"
+  | "observacion";
+
+export type ColumnMapping = Partial<Record<ColumnKey, number>>;
+
+export type DetectedProfile = {
+  id: SoftwareProfileId;
+  label: string;
+  confidence: number;
+  headerRow: number;
+  mapping: ColumnMapping;
+  detectedHeaders: string[];
 };
 
 export type SampleBundle = {

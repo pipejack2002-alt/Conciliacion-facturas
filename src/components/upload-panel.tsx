@@ -17,20 +17,24 @@ import {
   Layers,
   FileCheck,
   Lock,
+  SlidersHorizontal,
 } from "lucide-react";
 import type * as XLSX from "xlsx";
 import {
   findBestDianSheet,
   findBestMovSheet,
   getWorkbookSheets,
+  inspectMovSheet,
   parseDianSheet,
   parseMovSheet,
   readWorkbook,
 } from "@/lib/parse-excel";
+import type { ColumnMapping, DetectedProfile, SoftwareProfileId } from "@/lib/types";
 import { useConciliacion } from "@/lib/store";
 import { getHistoryEntries } from "@/lib/history-store";
 import { HistoryModal } from "./history-modal";
 import { GuiaConciliacionModal } from "./guia-conciliacion-modal";
+import { ColumnMapperModal } from "./column-mapper-modal";
 import { cn } from "@/lib/cn";
 
 export function UploadPanel() {
@@ -55,6 +59,14 @@ export function UploadPanel() {
 
   const [selectedDianSheet, setSelectedDianSheet] = useState<string>("");
   const [selectedMovSheet, setSelectedMovSheet] = useState<string>("");
+
+  // Estado del Motor Universal de Software Contable
+  const [detectedMovProfile, setDetectedMovProfile] = useState<DetectedProfile | null>(null);
+  const [movRowsSample, setMovRowsSample] = useState<string[][]>([]);
+  const [customMapping, setCustomMapping] = useState<ColumnMapping | null>(null);
+  const [customProfileId, setCustomProfileId] = useState<SoftwareProfileId | null>(null);
+  const [customHeaderRow, setCustomHeaderRow] = useState<number | null>(null);
+  const [showMapperModal, setShowMapperModal] = useState(false);
 
   const [busy, setBusy] = useState(false);
   const [isDraggingDian, setIsDraggingDian] = useState(false);
@@ -96,6 +108,11 @@ export function UploadPanel() {
       setMovWb(null);
       setMovSheets([]);
       setSelectedMovSheet("");
+      setDetectedMovProfile(null);
+      setMovRowsSample([]);
+      setCustomMapping(null);
+      setCustomProfileId(null);
+      setCustomHeaderRow(null);
       return;
     }
     try {
@@ -104,10 +121,32 @@ export function UploadPanel() {
       const sheets = getWorkbookSheets(wb);
       setMovSheets(sheets);
       const best = findBestMovSheet(wb);
-      setSelectedMovSheet(best || sheets[0] || "");
+      const chosen = best || sheets[0] || "";
+      setSelectedMovSheet(chosen);
+
+      // Inspección inteligente de perfil de software contable
+      const inspection = inspectMovSheet(wb, chosen);
+      setDetectedMovProfile(inspection.detectedProfile);
+      setMovRowsSample(inspection.rowsSample);
+      setCustomMapping(null);
+      setCustomProfileId(null);
+      setCustomHeaderRow(null);
+
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al procesar el archivo contable.");
+    }
+  }
+
+  function handleSelectMovSheet(sheet: string) {
+    setSelectedMovSheet(sheet);
+    if (movWb) {
+      const inspection = inspectMovSheet(movWb, sheet);
+      setDetectedMovProfile(inspection.detectedProfile);
+      setMovRowsSample(inspection.rowsSample);
+      setCustomMapping(null);
+      setCustomProfileId(null);
+      setCustomHeaderRow(null);
     }
   }
 
@@ -119,7 +158,11 @@ export function UploadPanel() {
       const dWb = dianWb || (await readWorkbook(dianFile));
       const mWb = movWb || (await readWorkbook(movFile));
       const dian = parseDianSheet(dWb, selectedDianSheet);
-      const mov = parseMovSheet(mWb, selectedMovSheet);
+      const mov = parseMovSheet(mWb, selectedMovSheet, {
+        mapping: customMapping ?? detectedMovProfile?.mapping,
+        profileId: customProfileId ?? detectedMovProfile?.id,
+        headerRow: customHeaderRow ?? detectedMovProfile?.headerRow,
+      });
       if (!dian.length)
         throw new Error(
           `No pude leer documentos en la hoja '${selectedDianSheet || "seleccionada"}' del reporte DIAN.`
@@ -277,12 +320,12 @@ export function UploadPanel() {
         <InteractiveDropCard
           step="2"
           label="Movimiento Contable"
-          hint="Extracto de Siigo, Helisa, World Office, CGUNO o Excel"
+          hint="Extracto de Siigo, World Office, Helisa, Alegra, Loggro o Excel"
           badgeText="Libro Auxiliar / Comprobantes (.xlsx)"
           file={movFile}
           sheets={movSheets}
           selectedSheet={selectedMovSheet}
-          onSelectSheet={setSelectedMovSheet}
+          onSelectSheet={handleSelectMovSheet}
           onPick={() => movRef.current?.click()}
           onClear={() => handleMovPick(null)}
           isDragging={isDraggingMov}
@@ -297,6 +340,35 @@ export function UploadPanel() {
             const dropped = e.dataTransfer.files?.[0];
             if (dropped) void handleMovPick(dropped);
           }}
+          footerContent={
+            detectedMovProfile && (
+              <div className="mt-3 w-full flex items-center justify-between gap-2 p-2.5 rounded-xl bg-teal-500/10 border border-teal-500/20 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Sparkles className="size-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                  <div className="truncate">
+                    <span className="text-slate-500 dark:text-slate-400">Software: </span>
+                    <strong className="text-slate-800 dark:text-slate-100 font-bold">
+                      {customProfileId ? customProfileId.toUpperCase() : detectedMovProfile.label}
+                    </strong>
+                    <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-sm bg-teal-200/60 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200">
+                      {detectedMovProfile.confidence}%
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowMapperModal(true);
+                  }}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 dark:text-teal-300 hover:text-teal-800 dark:hover:text-teal-200 bg-white/80 dark:bg-slate-800/80 px-2.5 py-1 rounded-lg border border-teal-500/30 hover:shadow-2xs transition-all cursor-pointer shrink-0"
+                >
+                  <SlidersHorizontal className="size-3 text-teal-600" />
+                  <span>Ajustar Mapeo</span>
+                </button>
+              </div>
+            )
+          }
         />
       </div>
 
@@ -387,7 +459,7 @@ export function UploadPanel() {
         </div>
       </div>
 
-      {/* Modales de Historial y Guía */}
+      {/* Modales de Historial, Guía y Mapeador Universal */}
       <HistoryModal
         open={showHistory}
         onClose={() => setShowHistory(false)}
@@ -398,6 +470,21 @@ export function UploadPanel() {
         open={showGuia}
         onClose={() => setShowGuia(false)}
       />
+
+      {detectedMovProfile && (
+        <ColumnMapperModal
+          open={showMapperModal}
+          onClose={() => setShowMapperModal(false)}
+          detectedProfile={detectedMovProfile}
+          headers={detectedMovProfile.detectedHeaders}
+          rowsSample={movRowsSample}
+          onApplyMapping={(mapping, profileId, hRow) => {
+            setCustomMapping(mapping);
+            setCustomProfileId(profileId);
+            setCustomHeaderRow(hRow);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -417,6 +504,7 @@ interface InteractiveDropCardProps {
   onDragOver?: (e: React.DragEvent) => void;
   onDragLeave?: () => void;
   onDrop?: (e: React.DragEvent) => void;
+  footerContent?: React.ReactNode;
 }
 
 function InteractiveDropCard({
@@ -434,6 +522,7 @@ function InteractiveDropCard({
   onDragOver,
   onDragLeave,
   onDrop,
+  footerContent,
 }: InteractiveDropCardProps) {
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -545,6 +634,9 @@ function InteractiveDropCard({
           </select>
         </div>
       )}
+
+      {/* Contenido Extra / Badge de Software */}
+      {footerContent}
     </div>
   );
 }

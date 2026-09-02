@@ -121,9 +121,10 @@ function counterpart(doc: DianDoc, companyNit: string) {
 }
 
 function comprobanteBase(comp: string): string {
-  const m = (comp || "").match(/^([A-Z])\s+(\d+)\s+(\d+)/);
+  const c = (comp || "").trim();
+  const m = c.match(/^([A-Z])\s+(\d+)\s+(\d+)/);
   if (m) return `${m[1]} ${m[2]} ${m[3]}`;
-  return (comp || "").trim();
+  return c;
 }
 
 function compLetter(base: string): string {
@@ -131,8 +132,11 @@ function compLetter(base: string): string {
 }
 
 function compFolio(base: string): string {
-  const m = (base || "").match(/^[A-Z]\s+\d+\s+(\d+)/);
-  return m ? stripZeros(m[1]) : "";
+  const c = (base || "").trim();
+  const m = c.match(/^[A-Z]\s+\d+\s+(\d+)/);
+  if (m) return stripZeros(m[1]);
+  const m2 = c.match(/(\d{1,12})\s*$/);
+  return m2 ? stripZeros(m2[1]) : "";
 }
 
 function isSoporte(tipo: string): boolean {
@@ -167,20 +171,49 @@ function hasDocToken(blob: string, prefijo: string, folio: string): boolean {
       if (up.includes(f) || up.includes("FE" + f)) return true;
     }
   }
+
+  // Búsqueda de folio aislado con longitud >= 4 delimitado
+  if (f.length >= 4 && (up.includes(`FAC${f}`) || up.includes(`FC${f}`) || up.includes(`FV${f}`))) {
+    return true;
+  }
+
   return false;
 }
 
 type LineKind = "venta" | "compra" | "pago" | "recaudo" | "ajuste";
 
 function lineKind(l: { comprobante: string; cuenta: string }): LineKind {
-  const letter = (l.comprobante || "").trim()[0];
+  const comp = (l.comprobante || "").trim().toUpperCase();
+  const cta = (l.cuenta || "").trim();
+
+  // 1. Reglas por código de cuenta PUC (La norma contable estándar en Colombia)
+  if (/^4/.test(cta)) return "venta";
+  if (/^13/.test(cta)) return "venta";
+  if (/^(5|6|7|14|17|22|23)/.test(cta)) return "compra";
+  if (/^11/.test(cta)) {
+    // Cuentas de disponible / tesorería (Bancos, Caja)
+    if (/^(G|CE|EGR|PAG)/i.test(comp)) return "pago";
+    if (/^(R|RC|REC)/i.test(comp)) return "recaudo";
+    return "pago";
+  }
+
+  // 2. Reglas por comprobantes comunes en Colombia (World Office, Siigo Nube, Helisa, Alegra)
+  if (/^(FV|VTA|FAC\b)/i.test(comp)) return "venta";
+  if (/^(FC|COM|CP\b|CAU)/i.test(comp)) return "compra";
+  if (/^(NC|U\b|NOT|DEV)/i.test(comp)) return "ajuste";
+  if (/^(CE|G\b|EGR|PAG)/i.test(comp)) return "pago";
+  if (/^(RC|R\b|REC)/i.test(comp)) return "recaudo";
+
+  // 3. Fallback de comprobantes Siigo tradicionales por primera letra
+  const letter = comp[0];
   if (letter === "F") return "venta";
   if (letter === "R") return "recaudo";
   if (letter === "G") return "pago";
   if (letter === "U") return "ajuste";
-  const cta = (l.cuenta || "").trim();
-  if (/^(5|6|7|14|17|24|22|23|13)/.test(cta)) return "compra";
-  return "pago";
+  if (letter === "P") return "compra";
+
+  if (/^(24)/.test(cta)) return "compra";
+  return "compra";
 }
 
 type IndexedLine = MovLine & {
@@ -194,7 +227,8 @@ type IndexedLine = MovLine & {
 };
 
 function extractKeys(line: MovLine): Set<string> {
-  const text = `${line.descripcion} ${line.cruce} ${line.observacion} ${line.comprobante}`.toUpperCase();
+  const refText = line.referencia ? ` ${line.referencia}` : "";
+  const text = `${line.descripcion} ${line.cruce}${refText} ${line.observacion} ${line.comprobante}`.toUpperCase();
   const keys = new Set<string>();
   for (const m of text.matchAll(/[FPUNCA]{1,4}-([A-Z0-9]{1,10})-0*(\d{1,12})/g)) {
     keys.add(compact(m[1]) + stripZeros(m[2]));
@@ -211,9 +245,10 @@ function extractKeys(line: MovLine): Set<string> {
 function indexMov(mov: MovLine[]): IndexedLine[] {
   return mov.map((l) => {
     const base = comprobanteBase(l.comprobante);
+    const refText = l.referencia ? ` ${l.referencia}` : "";
     return {
       ...l,
-      blob: `${l.descripcion} ${l.cruce} ${l.observacion} ${l.comprobante} ${l.nombre}`.toUpperCase(),
+      blob: `${l.descripcion} ${l.cruce}${refText} ${l.observacion} ${l.comprobante} ${l.nombre}`.toUpperCase(),
       keys: extractKeys(l),
       base,
       nitK: nitKey(l.nit),
