@@ -40,28 +40,28 @@ const FIELD_DEFINITIONS: {
     label: "NIT / Cédula Tercero",
     desc: "Identificación de la contraparte sin dígito de verificación.",
     required: true,
-    tag: "Crítico",
+    tag: "Principal",
   },
   {
     key: "cuenta",
     label: "Cuenta Contable (PUC)",
     desc: "Código contable (clase 1, 2, 4, 5, 6, 7).",
     required: true,
-    tag: "Crítico",
+    tag: "Principal",
   },
   {
     key: "debito",
     label: "Valor Débito",
     desc: "Importe débito del movimiento contable.",
     required: true,
-    tag: "Crítico",
+    tag: "Principal",
   },
   {
     key: "credito",
     label: "Valor Crédito",
     desc: "Importe crédito del movimiento contable.",
     required: true,
-    tag: "Crítico",
+    tag: "Principal",
   },
   {
     key: "referencia",
@@ -320,14 +320,13 @@ export function ColumnMapperModal({
             </div>
           )}
 
-          {/* Alerta si faltan columnas críticas */}
+          {/* Alerta amigable si faltan columnas principales */}
           {missingRequired.length > 0 && (
             <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-xs flex items-start gap-2.5">
               <AlertTriangle className="size-4 text-amber-500 shrink-0 mt-0.5" />
               <div>
-                <strong className="font-bold">Columnas esenciales sin asignar: </strong>
-                {missingRequired.map((m) => m.label).join(", ")}. Por favor asigna estas columnas
-                para garantizar que la conciliación fiscal se ejecute con precisión.
+                <strong className="font-bold">Columnas principales pendientes por asignar: </strong>
+                {missingRequired.map((m) => m.label).join(", ")}. Por favor selecciona la columna correspondiente en los desplegables de abajo.
               </div>
             </div>
           )}
@@ -362,7 +361,11 @@ export function ColumnMapperModal({
                       <div>
                         <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white">
                           <span>{def.label}</span>
-                          {def.required && <span className="text-rose-500 font-extrabold">*</span>}
+                          {def.required && (
+                            <span className="text-[10px] font-semibold text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 px-1.5 py-0.2 rounded-sm border border-teal-500/20">
+                              Requerido
+                            </span>
+                          )}
                         </div>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
                           {def.desc}
@@ -370,15 +373,15 @@ export function ColumnMapperModal({
                       </div>
                       <span
                         className={cn(
-                          "text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm shrink-0",
-                          def.tag === "Crítico"
-                            ? "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300"
-                            : def.tag === "Recomendado"
-                              ? "bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300"
-                              : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+                          "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 border",
+                          isAssigned
+                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-500/30"
+                            : def.required
+                              ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-500/30"
+                              : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700",
                         )}
                       >
-                        {def.tag}
+                        {isAssigned ? "✓ Conectado" : def.tag}
                       </span>
                     </div>
 
