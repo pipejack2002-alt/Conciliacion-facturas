@@ -36,7 +36,7 @@ export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
     return {
       tipo: "comision_bancaria",
       etiqueta: "Comisión bancaria",
-      detalle: `Factura de comisiones bancarias con IVA (${formatMoney(row.totalDian)}). Frecuentemente se causa en documento L debitando gastos financieros 530515 (mayor valor del gasto) al cierre del extracto o reporte mensual.`,
+      detalle: `Factura de comisiones bancarias con IVA (${formatMoney(row.totalDian)}). Se causa habitualmente mediante nota contable / ajuste de extracto debitando gastos financieros (PUC 530515), ya sea registrando el total con IVA como mayor valor del gasto o discriminando el IVA descontable (PUC 2408).`,
       probabilidad: "alta",
     };
   }

@@ -360,6 +360,64 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
     assert.strictEqual(row.diferencia, 0);
   });
 
+  it("debe conciliar comisiones bancarias con IVA discriminado en comprobantes multilínea (ej. World Office N 001)", () => {
+    const dianDocs: DianDoc[] = [
+      {
+        tipo: "Factura electrónica",
+        cufe: "cufe-comision-wo",
+        folio: "30340",
+        prefijo: "FCBO",
+        fechaEmision: "2026-07-15",
+        fechaRecepcion: "2026-07-15",
+        nitEmisor: "860068182",
+        nombreEmisor: "CREDICORP CAPITAL COLOMBIA S.A.",
+        nitReceptor: "800148462",
+        nombreReceptor: "CI CARBONES DE SANTANDER S.A.S.",
+        iva: 11915.28,
+        total: 74627.28,
+        estadoDian: "Aprobado",
+        grupo: "Recibido",
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      {
+        cuenta: "53051501",
+        cuentaNombre: "COMISIONES",
+        comprobante: "N 001 00000000045 001",
+        fecha: "2026-07-15",
+        nit: "860068182",
+        nombre: "CREDICORP CAPITAL COLOMBIA S.A",
+        descripcion: "COMISION BANCARIA TRASLADOS",
+        cruce: "",
+        debito: 62712,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "24080315",
+        cuentaNombre: "IVA DESCONTABLE SERVICIOS",
+        comprobante: "N 001 00000000045 002",
+        fecha: "2026-07-15",
+        nit: "860068182",
+        nombre: "CREDICORP CAPITAL COLOMBIA S.A",
+        descripcion: "IVA COMISION BANCARIA",
+        cruce: "",
+        debito: 11915.28,
+        credito: 0,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "JUL 2026");
+    const row = res.rows[0];
+
+    assert.strictEqual(row.estado, "conciliado");
+    assert.strictEqual(row.totalSiigo, 74627.28);
+    assert.strictEqual(row.diferencia, 0);
+    assert.ok(row.matchVia.includes("IVA discriminado"));
+  });
+
   it("debe detectar ajuste por TRM entre Nota Crédito que anula causación previa y Factura re-emitida", () => {
     const dianDocs: DianDoc[] = [
       {

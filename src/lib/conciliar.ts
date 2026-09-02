@@ -670,13 +670,49 @@ export function conciliar(
     .forEach((r) => {
       const k = nitKey(r.nitContraparte);
       if (!k) return;
-      // Solo líneas de causación real de compras/gastos (excluyendo ajustes contables, rendimientos, pagos o recaudos)
+      // A. Búsqueda de causación por comprobante multilínea (soporta IVA discriminado: e.g. Base 530515 + IVA 240803 en World Office, Siigo, Helisa, Alegra)
+      const unassignedByBase = new Map<string, IndexedLine[]>();
+      for (const l of indexed) {
+        if (l.nitK === k && !usedBases.has(l.base) && !/rendimiento/i.test(l.descripcion) && l.kind !== "recaudo") {
+          const list = unassignedByBase.get(l.base) || [];
+          list.push(l);
+          unassignedByBase.set(l.base, list);
+        }
+      }
+
+      for (const [base, lines] of unassignedByBase.entries()) {
+        const isFinancialOrComm =
+          /credicorp|banco|fiduciaria|fidu|bancolombia|davivienda|bbva|occidente|popular|bogota/i.test(r.nombreContraparte) ||
+          /comisi[oó]n|tarifa|bancari/i.test(r.tipo) ||
+          lines.some((x) => /^53/.test(x.cuenta) || /comisi[oó]n|banc/i.test(x.descripcion));
+
+        if (!isFinancialOrComm) continue;
+
+        const debTotal = lines.filter((x) => x.debito > 0).reduce((s, x) => s + x.debito, 0);
+        const has53 = lines.some((x) => /^53/.test(x.cuenta));
+        const has2408 = lines.some((x) => /^2408/.test(x.cuenta));
+
+        if (has53 && Math.abs(debTotal - r.totalDian) <= 50) {
+          const ivaNote = has2408 ? " (IVA discriminado)" : "";
+          r.estado = "conciliado";
+          r.hits = toHits(lines);
+          r.comprobantes = [base];
+          r.totalSiigo = r.totalDian;
+          r.diferencia = 0;
+          r.matchVia = `Comisión bancaria en ${base}${ivaNote}`;
+          r.alerta = `Comisión registrada en comprobante ${base} a gastos financieros (${[...new Set(lines.map((x) => x.cuenta).filter(Boolean))].join(", ")})${ivaNote}.`;
+          usedBases.add(base);
+          return;
+        }
+      }
+
+      // B. Búsqueda por línea individual de causación
       const avail = indexed.filter(
         (l) => l.nitK === k && !usedBases.has(l.base) && l.kind === "compra" && !/rendimiento/i.test(l.descripcion),
       );
       for (const l of avail) {
         // En este paso NO hubo coincidencia de número de factura.
-        // Por lo tanto, SOLO podemos considerar 'Revisar factura' si el valor es idéntico (diferencia <= 50 pesos por centavos)
+        // Por lo tanto, SOLO podemos considerar coincidencia si el valor es idéntico (diferencia <= 50 pesos por centavos)
         // NUNCA si los valores son notablemente distintos.
         const diffAbs = Math.abs(l.amt - r.totalDian);
         const isSameValue = diffAbs <= 50;
@@ -749,15 +785,20 @@ export function conciliar(
               r.alerta = `Anula la causación previa en libros ${l.base} (${oldDocRef}, $${r.totalDian.toLocaleString("es-CO")})${paymentText}. Pendiente registrar nota contable de ajuste.`;
             }
             if (paymentG) usedBases.add(paymentG.base);
-          } else if (/^L\s/i.test(l.comprobante) && /^53/.test(l.cuenta)) {
-            // Comisión bancaria / fiduciaria registrada en Nota L como gasto financiero (PUC 530515)
+          } else if (
+            (/^53/.test(l.cuenta) || /comisi[oó]n|tarifa|banc/i.test(l.descripcion)) &&
+            (/credicorp|banco|fiduciaria|fidu|bancolombia|davivienda|bbva|occidente|popular|bogota/i.test(r.nombreContraparte) ||
+              /comisi[oó]n|tarifa|bancari/i.test(r.tipo) ||
+              /^53/.test(l.cuenta))
+          ) {
+            // Comisión bancaria en cualquier software registrada como mayor valor del gasto
             r.estado = "conciliado";
             r.hits = toHits([l]);
             r.comprobantes = [l.base];
             r.totalSiigo = r.totalDian;
             r.diferencia = 0;
-            r.matchVia = `Comisión bancaria/fiduciaria en Nota L (${l.base})`;
-            r.alerta = `Comisión con IVA registrada en comprobante L ${l.base} como gasto financiero (${l.cuenta}).`;
+            r.matchVia = `Comisión bancaria en ${l.base}`;
+            r.alerta = `Comisión con IVA registrada en comprobante ${l.base} como gasto financiero (${l.cuenta}).`;
           } else {
             r.estado = "posible_typo";
             r.hits = toHits([l]);
