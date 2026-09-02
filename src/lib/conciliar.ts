@@ -683,6 +683,8 @@ export function conciliar(
 
         if (isSameValue) {
           const isCamara = /camara\s+de\s+comercio/i.test(r.nombreContraparte);
+          const isNC = isCreditNote(r.tipo);
+
           if (isCamara) {
             r.estado = "conciliado";
             r.hits = toHits([l]);
@@ -691,6 +693,71 @@ export function conciliar(
             r.diferencia = 0;
             r.matchVia = `certificado/factura CCB en ${l.base}`;
             r.alerta = `Registrado en libros en comprobante ${l.base} ($${r.totalDian.toLocaleString("es-CO")}).`;
+          } else if (isNC) {
+            // Nota Crédito que anula una causación previa en libros (e.g. Seguros en USD / Ajuste TRM)
+            r.estado = "cruce_nc";
+            r.hits = toHits([l]);
+            r.comprobantes = [l.base];
+            r.totalSiigo = l.amt;
+            r.diferencia = round2(r.totalDian - l.amt);
+
+            // Buscar si en libros hay un comprobante de pago G asociado
+            const paymentG = indexed.find(
+              (p) =>
+                p.nitK === k &&
+                p.kind === "pago" &&
+                (Math.abs(p.amt - r.totalDian) <= 50 || (p.cruce && l.cruce && p.cruce === l.cruce)),
+            );
+            const paymentText = paymentG ? ` pagada con egreso ${paymentG.base}` : "";
+            const oldDocRef = l.cruce || l.descripcion.match(/\b(POL-?\d+|\d{6,})\b/i)?.[0] || l.base;
+
+            // Buscar si hay una nueva factura de re-emisión por TRM del mismo emisor
+            const newerInvoice = rows.find(
+              (f) =>
+                f.id !== r.id &&
+                isInvoiceLike(f.tipo) &&
+                !isCreditNote(f.tipo) &&
+                nitKey(f.nitContraparte) === k &&
+                f.estado === "pendiente",
+            );
+
+            if (newerInvoice) {
+              const diffTrm = round2(Math.abs(r.totalDian - newerInvoice.totalDian));
+              r.matchVia = `Nota Crédito anula causación previa (${l.base})`;
+              r.alerta = `Anula la causación previa en libros ${l.base} (${oldDocRef}, $${r.totalDian.toLocaleString("es-CO")})${paymentText}. Enlazada con la nueva factura ${newerInvoice.numero} por ajuste de TRM.`;
+
+              newerInvoice.alerta = `Póliza/Factura re-emitida por ajuste de TRM ($${newerInvoice.totalDian.toLocaleString("es-CO")}). La Nota Crédito ${r.numero} anuló la causación previa ${l.base}${paymentText}. Diferencia por TRM: $${diffTrm.toLocaleString("es-CO")}.`;
+
+              if (!r.linked.some((item) => item.id === newerInvoice.id)) {
+                r.linked.push({
+                  id: newerInvoice.id,
+                  numero: newerInvoice.numero,
+                  tipo: newerInvoice.tipo,
+                  total: newerInvoice.totalDian,
+                });
+              }
+              if (!newerInvoice.linked.some((item) => item.id === r.id)) {
+                newerInvoice.linked.push({
+                  id: r.id,
+                  numero: r.numero,
+                  tipo: r.tipo,
+                  total: r.totalDian,
+                });
+              }
+            } else {
+              r.matchVia = `Nota Crédito anula causación previa (${l.base})`;
+              r.alerta = `Anula la causación previa en libros ${l.base} (${oldDocRef}, $${r.totalDian.toLocaleString("es-CO")})${paymentText}. Pendiente registrar nota contable de ajuste.`;
+            }
+            if (paymentG) usedBases.add(paymentG.base);
+          } else if (/^L\s/i.test(l.comprobante) && /^53/.test(l.cuenta)) {
+            // Comisión bancaria / fiduciaria registrada en Nota L como gasto financiero (PUC 530515)
+            r.estado = "conciliado";
+            r.hits = toHits([l]);
+            r.comprobantes = [l.base];
+            r.totalSiigo = r.totalDian;
+            r.diferencia = 0;
+            r.matchVia = `Comisión bancaria/fiduciaria en Nota L (${l.base})`;
+            r.alerta = `Comisión con IVA registrada en comprobante L ${l.base} como gasto financiero (${l.cuenta}).`;
           } else {
             r.estado = "posible_typo";
             r.hits = toHits([l]);

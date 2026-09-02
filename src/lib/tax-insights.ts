@@ -2,7 +2,7 @@ import type { ConciliacionRow } from "./types.ts";
 import { formatMoney } from "./format.ts";
 
 export interface TaxInsight {
-  tipo: "redondeo" | "retefuente" | "iva" | "reteiva" | "reteica" | "posible_duplicado";
+  tipo: "redondeo" | "retefuente" | "iva" | "reteiva" | "reteica" | "posible_duplicado" | "trm_diferencia" | "comision_bancaria";
   etiqueta: string;
   detalle: string;
   tarifa?: string;
@@ -10,10 +10,37 @@ export interface TaxInsight {
 }
 
 /**
- * Analiza una fila con discrepancia monetaria para identificar si la diferencia
- * coincide con tarifas tributarias colombianas estándar (Retefuente, IVA, ReteICA) o redondeo.
+ * Analiza una fila para identificar si corresponde a deducciones tributarias (Retefuente, IVA, ReteICA),
+ * redondeo, ajuste por TRM de moneda extranjera o comisiones bancarias pendientes de causar en L.
  */
 export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
+  // A. Detección de ajuste por TRM / Moneda extranjera (e.g. Seguros Bolívar)
+  if (row.alerta && /trm/i.test(row.alerta)) {
+    const linkedItem = row.linked?.[0];
+    const diffTrm = linkedItem ? Math.abs(row.totalDian - linkedItem.total) : 0;
+    return {
+      tipo: "trm_diferencia",
+      etiqueta: diffTrm > 0 ? `Ajuste TRM (${formatMoney(diffTrm)})` : "Ajuste TRM",
+      detalle: `${row.alerta} ${diffTrm > 0 ? `Diferencia de ${formatMoney(diffTrm)} a registrar en cuenta de diferencia en cambio (PUC 530525 / 421020).` : ""}`.trim(),
+      probabilidad: "alta",
+    };
+  }
+
+  // B. Detección de comisiones bancarias / fiduciarias pendientes de causar en Nota L
+  if (
+    row.estado === "pendiente" &&
+    (/credicorp|banco|fiduciaria|fidu|bancolombia|davivienda|bbva|occidente|popular|bogota/i.test(row.nombreContraparte) ||
+      /comisi[oó]n|tarifa|transferencia/i.test(row.tipo) ||
+      /comisi[oó]n/i.test(row.alerta))
+  ) {
+    return {
+      tipo: "comision_bancaria",
+      etiqueta: "Comisión Bancaria / Fiduciaria",
+      detalle: `Factura de comisiones bancarias/fiduciarias con IVA (${formatMoney(row.totalDian)}). Frecuentemente se causa en documento L debitando gastos financieros 530515 (mayor valor del gasto) al cierre del extracto o reporte mensual.`,
+      probabilidad: "alta",
+    };
+  }
+
   if (row.estado !== "diferencia" && row.estado !== "totalizado") {
     return null;
   }

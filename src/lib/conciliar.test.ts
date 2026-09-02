@@ -315,4 +315,125 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
     assert.strictEqual(row.totalSiigo, 0);
     assert.strictEqual(row.diferencia, 74627.28);
   });
+
+  it("debe conciliar comisiones bancarias registradas en comprobante L con cuenta 530515 por el total con IVA", () => {
+    const dianDocs: DianDoc[] = [
+      {
+        tipo: "Factura electrónica",
+        cufe: "cufe-comision-banco",
+        folio: "30340",
+        prefijo: "FCBO",
+        fechaEmision: "2026-07-15",
+        fechaRecepcion: "2026-07-15",
+        nitEmisor: "860068182",
+        nombreEmisor: "CREDICORP CAPITAL COLOMBIA S.A.",
+        nitReceptor: "800148462",
+        nombreReceptor: "CI CARBONES DE SANTANDER S.A.S.",
+        iva: 11915.28,
+        total: 74627.28,
+        estadoDian: "Aprobado",
+        grupo: "Recibido",
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      {
+        cuenta: "53051501",
+        cuentaNombre: "COMISIONES BANCARIAS",
+        comprobante: "L 001 00000000120 001",
+        fecha: "2026-07-15",
+        nit: "860068182",
+        nombre: "CREDICORP CAPITAL COLOMBIA S.A",
+        descripcion: "COMISION BANCARIA CON IVA TRANSFERENCIAS",
+        cruce: "",
+        debito: 74627.28,
+        credito: 0,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "JUL 2026");
+    const row = res.rows[0];
+
+    assert.strictEqual(row.estado, "conciliado");
+    assert.strictEqual(row.totalSiigo, 74627.28);
+    assert.strictEqual(row.diferencia, 0);
+  });
+
+  it("debe detectar ajuste por TRM entre Nota Crédito que anula causación previa y Factura re-emitida", () => {
+    const dianDocs: DianDoc[] = [
+      {
+        tipo: "Nota de crédito electrónica",
+        cufe: "cufe-nc-bolivar",
+        folio: "17098534",
+        prefijo: "NCPO",
+        fechaEmision: "2026-07-25",
+        fechaRecepcion: "2026-07-25",
+        nitEmisor: "860002503",
+        nombreEmisor: "COMPANIA DE SEGUROS BOLIVAR S.A.",
+        nitReceptor: "800148462",
+        nombreReceptor: "CI CARBONES DE SANTANDER S.A.S.",
+        iva: 1797276,
+        total: 37742786,
+        estadoDian: "Aprobado",
+        grupo: "Recibido",
+      },
+      {
+        tipo: "Factura electrónica",
+        cufe: "cufe-pol-bolivar",
+        folio: "16729397",
+        prefijo: "POL",
+        fechaEmision: "2026-07-29",
+        fechaRecepcion: "2026-07-29",
+        nitEmisor: "860002503",
+        nombreEmisor: "COMPANIA DE SEGUROS BOLIVAR S.A.",
+        nitReceptor: "800148462",
+        nombreReceptor: "CI CARBONES DE SANTANDER S.A.S.",
+        iva: 1692762,
+        total: 35548000,
+        estadoDian: "Aprobado",
+        grupo: "Recibido",
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      {
+        cuenta: "22050101",
+        cuentaNombre: "NACIONALES",
+        comprobante: "P 002 00000010406 003",
+        fecha: "2026-07-01",
+        nit: "860002503",
+        nombre: "COMPAÑIA DE SEGUROS BOLIVAR S.A.",
+        descripcion: "COMPAÑIA DE SEGUROS BOLIVAR S.A.",
+        cruce: "P-002-00016555166-001",
+        debito: 0,
+        credito: 37742785.5,
+        observacion: "",
+      },
+      {
+        cuenta: "22050101",
+        cuentaNombre: "NACIONALES",
+        comprobante: "G 001 00000009577 001",
+        fecha: "2026-07-24",
+        nit: "860002503",
+        nombre: "COMPAÑIA DE SEGUROS BOLIVAR S.A.",
+        descripcion: "PAG POL-16555166 USD 10.376",
+        cruce: "P-002-00016555166-001",
+        debito: 37742785.5,
+        credito: 0,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "JUL 2026");
+    const ncRow = res.rows.find((r) => r.numero.includes("17098534"))!;
+    const polRow = res.rows.find((r) => r.numero.includes("16729397"))!;
+
+    assert.strictEqual(ncRow.estado, "cruce_nc");
+    assert.strictEqual(polRow.estado, "pendiente");
+    assert.strictEqual(ncRow.linked.length, 1);
+    assert.strictEqual(ncRow.linked[0].numero, "POL-16729397");
+    assert.strictEqual(polRow.linked.length, 1);
+    assert.strictEqual(polRow.linked[0].numero, "NCPO-17098534");
+  });
 });

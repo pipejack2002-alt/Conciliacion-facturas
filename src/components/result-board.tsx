@@ -660,6 +660,10 @@ function DocTable({
                           ? "bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
                           : insight.tipo === "iva"
                           ? "bg-sky-50 text-sky-700 border-sky-300 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
+                          : insight.tipo === "trm_diferencia"
+                          ? "bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
+                          : insight.tipo === "comision_bancaria"
+                          ? "bg-purple-50 text-purple-700 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800"
                           : "bg-teal-50 text-teal-700 border-teal-300 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800",
                       )}
                       title={insight.detalle}
@@ -861,12 +865,21 @@ function DetailDrawer({
 
         {/* Card de Insight Tributario / Redondeo si existe */}
         {insight && (
-          <div className="mb-4 rounded-xl border border-amber-300/60 bg-amber-50/70 dark:bg-amber-950/30 p-3 text-xs text-amber-900 dark:text-amber-200">
+          <div
+            className={cn(
+              "mb-4 rounded-xl border p-3 text-xs",
+              insight.tipo === "trm_diferencia"
+                ? "border-blue-300/60 bg-blue-50/70 dark:bg-blue-950/30 text-blue-900 dark:text-blue-200"
+                : insight.tipo === "comision_bancaria"
+                ? "border-purple-300/60 bg-purple-50/70 dark:bg-purple-950/30 text-purple-900 dark:text-purple-200"
+                : "border-amber-300/60 bg-amber-50/70 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200",
+            )}
+          >
             <div className="flex items-center gap-1.5 font-bold mb-1">
-              <Sparkles className="size-3.5 text-amber-600" />
+              <Sparkles className="size-3.5 shrink-0" />
               Sugerencia Tributaria: {insight.etiqueta}
             </div>
-            <p className="leading-relaxed text-ink-muted dark:text-amber-300/80">{insight.detalle}</p>
+            <p className="leading-relaxed opacity-90">{insight.detalle}</p>
           </div>
         )}
 
@@ -887,9 +900,28 @@ function DetailDrawer({
           <p className="mt-4 rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn">{row.alerta}</p>
         ) : null}
         {row.linked.length ? (
-          <p className="mt-4 rounded-lg bg-info-bg px-3 py-2 text-sm text-info">
-            Relacionado con {row.linked.map((l) => `${l.numero} (${formatMoneyExact(l.total)})`).join(" · ")}
-          </p>
+          <div className="mt-4 rounded-xl border border-sky-300/60 bg-sky-50/70 dark:bg-sky-950/30 p-3 text-xs text-sky-900 dark:text-sky-200">
+            <div className="flex items-center gap-1.5 font-bold mb-2">
+              <span className="text-sky-600 dark:text-sky-400 font-extrabold">🔗 Documento Relacionado:</span>
+            </div>
+            <div className="space-y-1.5">
+              {row.linked.map((l) => (
+                <div key={l.id} className="flex items-center justify-between gap-2 bg-white/70 dark:bg-slate-900/60 p-2.5 rounded-lg border border-sky-200/60 dark:border-sky-800">
+                  <div>
+                    <span className="font-bold text-sky-950 dark:text-sky-100">{l.numero}</span>
+                    <span className="text-ink-muted text-[11px] block">{l.tipo} · {formatMoneyExact(l.total)}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => useConciliacion.getState().select(l.id)}
+                    className="px-2.5 py-1 rounded bg-sky-600 text-white hover:bg-sky-700 text-xs font-semibold cursor-pointer shrink-0 transition-colors"
+                  >
+                    Ver Documento →
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         ) : null}
         {row.cufe ? (
           <button
