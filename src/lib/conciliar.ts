@@ -182,13 +182,15 @@ function hasDocToken(blob: string, prefijo: string, folio: string): boolean {
 
 type LineKind = "venta" | "compra" | "pago" | "recaudo" | "ajuste";
 
-function lineKind(l: { comprobante: string; cuenta: string }): LineKind {
+function lineKind(l: { comprobante: string; cuenta: string; descripcion?: string }): LineKind {
   const comp = (l.comprobante || "").trim().toUpperCase();
   const cta = (l.cuenta || "").trim();
+  const desc = (l.descripcion || "").trim().toLowerCase();
 
   // 1. Reglas por código de cuenta PUC (La norma contable estándar en Colombia)
   if (/^4/.test(cta)) return "venta";
   if (/^13/.test(cta)) return "venta";
+  if (/^12/.test(cta) || /rendimiento/i.test(desc)) return "ajuste"; // Rendimientos financieros / Inversiones (e.g. Serfinco, Fondos)
   if (/^(5|6|7|14|17|22|23)/.test(cta)) return "compra";
   if (/^11/.test(cta)) {
     // Cuentas de disponible / tesorería (Bancos, Caja)
@@ -211,6 +213,7 @@ function lineKind(l: { comprobante: string; cuenta: string }): LineKind {
   if (letter === "G") return "pago";
   if (letter === "U") return "ajuste";
   if (letter === "P") return "compra";
+  if (letter === "L") return "ajuste"; // Notas de contabilidad / asientos de ajuste en Siigo
 
   if (/^(24)/.test(cta)) return "compra";
   return "compra";
@@ -253,7 +256,7 @@ function indexMov(mov: MovLine[]): IndexedLine[] {
       base,
       nitK: nitKey(l.nit),
       amt: Math.max(l.debito, l.credito),
-      kind: lineKind({ comprobante: l.comprobante, cuenta: l.cuenta }),
+      kind: lineKind({ comprobante: l.comprobante, cuenta: l.cuenta, descripcion: l.descripcion }),
       folioN: compFolio(base),
     };
   });
@@ -667,11 +670,18 @@ export function conciliar(
     .forEach((r) => {
       const k = nitKey(r.nitContraparte);
       if (!k) return;
+      // Solo líneas de causación real de compras/gastos (excluyendo ajustes contables, rendimientos, pagos o recaudos)
       const avail = indexed.filter(
-        (l) => l.nitK === k && !usedBases.has(l.base) && l.kind !== "pago" && l.kind !== "recaudo",
+        (l) => l.nitK === k && !usedBases.has(l.base) && l.kind === "compra" && !/rendimiento/i.test(l.descripcion),
       );
       for (const l of avail) {
-        if (closeAmount(l.amt, r.totalDian) || amountsMatch(r.totalDian, r.iva || 0, l.amt)) {
+        // En este paso NO hubo coincidencia de número de factura.
+        // Por lo tanto, SOLO podemos considerar 'Revisar factura' si el valor es idéntico (diferencia <= 50 pesos por centavos)
+        // NUNCA si los valores son notablemente distintos.
+        const diffAbs = Math.abs(l.amt - r.totalDian);
+        const isSameValue = diffAbs <= 50;
+
+        if (isSameValue) {
           const isCamara = /camara\s+de\s+comercio/i.test(r.nombreContraparte);
           if (isCamara) {
             r.estado = "conciliado";
@@ -688,7 +698,7 @@ export function conciliar(
             r.totalSiigo = l.amt;
             r.diferencia = round2(r.totalDian - l.amt);
             r.matchVia = `posible digitación ${l.cruce || l.base}`;
-            r.alerta = `En libros aparece comprobante ${l.base} (${l.cruce || "sin cruce"}) por el mismo valor ($${r.totalDian.toLocaleString("es-CO")}), pero con número de factura diferente. Revisar registro.`;
+            r.alerta = `En libros aparece comprobante ${l.base} (${l.cruce || "sin cruce"}) por el mismo valor ($${l.amt.toLocaleString("es-CO")}), pero con número de factura diferente. Revisar registro.`;
           }
           usedBases.add(l.base);
           break;

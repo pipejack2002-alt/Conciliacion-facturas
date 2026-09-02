@@ -269,4 +269,50 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
     assert.strictEqual(insightSinIva.tipo, "iva");
     assert.strictEqual(insightSinIva.tarifa, "19%");
   });
+
+  it("debe dejar como pendiente (por registrar) facturas cuando en libros solo hay ajustes de rendimientos (PUC 12)", () => {
+    const dianDocs: DianDoc[] = [
+      {
+        tipo: "Factura electrónica",
+        cufe: "cufe-credicorp-12345",
+        folio: "30340",
+        prefijo: "FCBO",
+        fechaEmision: "2026-07-15",
+        fechaRecepcion: "2026-07-15",
+        nitEmisor: "860068182",
+        nombreEmisor: "CREDICORP CAPITAL COLOMBIA S.A.",
+        nitReceptor: "800148462",
+        nombreReceptor: "CI CARBONES DE SANTANDER S.A.S.",
+        iva: 11915.28,
+        total: 74627.28,
+        estadoDian: "Aprobado",
+        grupo: "Recibido",
+      },
+    ];
+
+    // En libros solo hay un ajuste L 001 de rendimientos de junio con cuenta 12 y valor 59.895
+    const movLines: MovLine[] = [
+      {
+        cuenta: "12450541",
+        cuentaNombre: "SERFINCO CARTERA COLECTIVA",
+        comprobante: "L 001 00000000118 006",
+        fecha: "2026-07-01",
+        nit: "860068182",
+        nombre: "CREDICORP CAPITAL COLOMBIA S.A",
+        descripcion: "RENDIMIENTOS JUNIO",
+        cruce: "",
+        debito: 59895.42,
+        credito: 0,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "JUL 2026");
+    const row = res.rows[0];
+
+    // La factura de julio de Credicorp NO está registrada, debe ser 'pendiente'
+    assert.strictEqual(row.estado, "pendiente");
+    assert.strictEqual(row.totalSiigo, 0);
+    assert.strictEqual(row.diferencia, 74627.28);
+  });
 });
