@@ -43,7 +43,10 @@ export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
 
   // C. Detección de naturaleza contable para movimientos de 'Solo libros'
   if (row.estado === "solo_siigo") {
-    if (/n[oó]mina|laboral/i.test(row.tipo) || /n[oó]mina|sueldo|salario/i.test(row.alerta)) {
+    const textBlob = `${row.tipo} ${row.alerta} ${row.nombreContraparte} ${row.comprobantes.join(" ")}`.toLowerCase();
+
+    // 1. Nómina y pagos laborales
+    if (/n[oó]mina|laboral|sueldo|salario|cesant|prima|vacaci/i.test(textBlob)) {
       return {
         tipo: "redondeo",
         etiqueta: "Pasivo laboral / Nómina",
@@ -51,14 +54,58 @@ export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
         probabilidad: "alta",
       };
     }
-    if (/tasa|p[uú]blica|anla|dian/i.test(row.tipo) || /entidad p[uú]blica|anla|tasa/i.test(row.alerta)) {
+
+    // 2. Documentos Soporte (P 004 / P 005) pendientes de transmisión o validación en DIAN
+    if (/^P\s*004|^P-004|^P\s*005|^P-005/i.test(row.numero) || row.tipo.toLowerCase().includes("soporte")) {
       return {
         tipo: "redondeo",
-        etiqueta: "Tasa / Entidad Pública",
-        detalle: "Pago oficial a entidad gubernamental. Las tasas o licencias públicas no se soportan con factura comercial electrónica estándar.",
+        etiqueta: "Doc. Soporte pendiente DIAN",
+        detalle: `Comprobante de compra a persona no obligada (${row.numero}). Se encuentra contabilizado en libros pero aún no figura en el reporte DIAN del mes. Verifica si está pendiente de transmisión electrónica.`,
         probabilidad: "alta",
       };
     }
+
+    // 3. Servicios Públicos Domiciliarios
+    if (/caribemar|afinia|aire|enel|epm|gases|acueducto|energia|energ[ií]a|electr|telecomunic|claro|tigo/i.test(textBlob)) {
+      return {
+        tipo: "redondeo",
+        etiqueta: "Servicio Público",
+        detalle: "Gasto de servicios públicos domiciliarios o telecomunicaciones. Fiscalmente se respalda con la factura/recibo de servicios públicos como documento equivalente.",
+        probabilidad: "alta",
+      };
+    }
+
+    // 4. Seguridad Social y Parafiscales (PILA)
+    if (/sura|sanitas|nueva eps|salud total|compensar|colsubsidio|cafam|comfama|porvenir|proteccion|colfondos|positiva|pila|parafiscal|seguridad social/i.test(textBlob)) {
+      return {
+        tipo: "redondeo",
+        etiqueta: "Seguridad Social / PILA",
+        detalle: "Aportes parafiscales y seguridad social (salud, pensión, ARL, caja de compensación). Su soporte oficial es la planilla PILA integrada, no factura comercial.",
+        probabilidad: "alta",
+      };
+    }
+
+    // 5. Tasas y Entidades Públicas Oficiales
+    if (/tasa|p[uú]blica|anla|dian|alcald|gobernac|secretar[ií]a de hacienda|superintend/i.test(textBlob)) {
+      return {
+        tipo: "redondeo",
+        etiqueta: "Tasa / Entidad Pública",
+        detalle: "Pago oficial a entidad gubernamental o autoridad ambiental. Las tasas o licencias públicas no se soportan con factura comercial electrónica estándar.",
+        probabilidad: "alta",
+      };
+    }
+
+    // 6. Reembolsos de Caja Menor
+    if (/caja menor|reembolso|legalizaci[oó]n|fondo fijo/i.test(textBlob)) {
+      return {
+        tipo: "redondeo",
+        etiqueta: "Reembolso / Caja Menor",
+        detalle: "Comprobante de legalización o reembolso de gastos menores. Ampara consumos menores autorizados internamente.",
+        probabilidad: "media",
+      };
+    }
+
+    // 7. Tercero con otras facturas en DIAN en el periodo
     if (row.linked && row.linked.length > 0) {
       return {
         tipo: "trm_diferencia",
@@ -67,6 +114,7 @@ export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
         probabilidad: "media",
       };
     }
+
     return {
       tipo: "redondeo",
       etiqueta: "Solo en Libros",
