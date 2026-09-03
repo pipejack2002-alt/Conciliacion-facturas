@@ -29,7 +29,9 @@ export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
   // B. Detección de comisiones bancarias / fiduciarias pendientes de causar en Nota L
   if (
     row.estado === "pendiente" &&
-    (/credicorp|banco|fiduciaria|fidu|bancolombia|davivienda|bbva|occidente|popular|bogota/i.test(row.nombreContraparte) ||
+    !/camara\s+de\s+comercio|c\.?\s*de\s*comercio/i.test(row.nombreContraparte) &&
+    (/credicorp|banco|fiduciaria|fidu|bancolombia|davivienda|bbva|occidente|popular/i.test(row.nombreContraparte) ||
+      /banco.*bogot[aá]|bco.*bogot[aá]/i.test(row.nombreContraparte) ||
       /comisi[oó]n|tarifa|transferencia/i.test(row.tipo) ||
       /comisi[oó]n/i.test(row.alerta))
   ) {
@@ -65,8 +67,18 @@ export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
       };
     }
 
-    // 3. Servicios Públicos Domiciliarios
-    if (/caribemar|afinia|aire|enel|epm|gases|acueducto|energia|energ[ií]a|electr|telecomunic|claro|tigo/i.test(textBlob)) {
+    // 3. Cámara de Comercio / Trámites Registrales Mercantiles
+    if (/camara\s+de\s+comercio|c\.?\s*de\s*comercio/i.test(textBlob)) {
+      return {
+        tipo: "redondeo",
+        etiqueta: "Cámara de Comercio / Registro",
+        detalle: "Gasto legal por compra de certificados, trámites o registros mercantiles ante Cámara de Comercio. En libros se causa habitualmente en cuenta 5140 (Gastos legales).",
+        probabilidad: "alta",
+      };
+    }
+
+    // 4. Servicios Públicos Domiciliarios
+    if (/caribemar|afinia|aire|enel|epm|gases|acueducto|energia|energ[ií]a|\belectrificadora\b|\belectrificaci[oó]n\b|servicio\s+el[eé]ctrico|telecomunic|claro|tigo/i.test(textBlob)) {
       return {
         tipo: "redondeo",
         etiqueta: "Servicio Público",

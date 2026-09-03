@@ -466,21 +466,52 @@ function isDocumentoSoporte(doc: DianDoc): boolean {
   return isSoporte(doc.tipo) || (doc.prefijo || "").toUpperCase().startsWith("DS");
 }
 
-function countDuplicateComps(comps: string[], doc: DianDoc): number {
+function countDuplicateComps(comps: string[], doc: DianDoc, registro: IndexedLine[] = []): number {
   if (!comps || comps.length <= 1) return comps.length;
 
+  // 1. Si es Documento Soporte electrónico (emisión P 004/005 + causación P 001/002)
   if (isDocumentoSoporte(doc)) {
-    // Para Documentos Soporte (DSEC, DSNE, DSET, DSEF, etc. en cualquier empresa):
-    // En Siigo / ERPs se genera un comprobante de emisión (cuyo folio coincide con el folio del DSE, e.g. P 003, P 004, P 005...)
-    // y un comprobante de causación contable con retenciones (P 001, P 002, etc.).
     const f = stripZeros(doc.folio);
     const emisionComps = comps.filter((c) => compFolio(c) === f);
     const causacionComps = comps.filter((c) => !emisionComps.includes(c));
-
-    // Si tiene máximo 1 emisión y máximo 1 causación (o máximo 2 comprobantes en total), es el ciclo normal de 2 pasos del documento soporte
     if ((emisionComps.length <= 1 && causacionComps.length <= 1) || comps.length <= 2) {
       return 1;
     }
+  }
+
+  // 2. Si es Nota Crédito cruzada con la causación original o nota de devolución (ej. U 001 + P 001)
+  if (isCreditNote(doc.tipo) || comps.some((c) => c.startsWith("U"))) {
+    const notasU = comps.filter((c) => c.startsWith("U"));
+    const facturasP = comps.filter((c) => !c.startsWith("U"));
+    if (notasU.length <= 1 && facturasP.length <= 1) {
+      return 1;
+    }
+  }
+
+  // 3. Cruces con Anticipos (ej. Factura P 002 que cruza contra Anticipo previo P 002 con cuenta 1330 / ANT)
+  const hasAnticipo = registro.some(
+    (l) => /^(1330|2805)/.test(l.cuenta) || /\b(ant\d+|anticipo|amortiz)\b/i.test(l.descripcion),
+  );
+  const crucesSet = new Set(registro.map((l) => l.cruce).filter(Boolean));
+  if (hasAnticipo || crucesSet.size > 0) {
+    const anticipoBases = new Set(
+      registro
+        .filter((l) => /^(1330|2805)/.test(l.cuenta) || /\b(ant\d+|anticipo|amortiz)\b/i.test(l.descripcion))
+        .map((l) => comprobanteBase(l.comprobante)),
+    );
+    const nonAnticipoComps = comps.filter((c) => !anticipoBases.has(c));
+    if (nonAnticipoComps.length <= 1) {
+      return 1;
+    }
+  }
+
+  // 4. Si uno de los comprobantes es egreso/pago (G / E / cuenta 11)
+  const egresoBases = new Set(
+    registro.filter((l) => /^(G|E)/i.test(l.comprobante) || /^11/i.test(l.cuenta)).map((l) => comprobanteBase(l.comprobante)),
+  );
+  const nonEgresoComps = comps.filter((c) => !egresoBases.has(c));
+  if (nonEgresoComps.length <= 1) {
+    return 1;
   }
 
   return comps.length;
@@ -494,7 +525,7 @@ function classifyRow(
   if (isNoise(doc) && !(doc.total > 0)) return "no_aplica";
   if (!registro.length) return isNoise(doc) ? "no_aplica" : "pendiente";
   const comps = uniqueRegistros(registro, isCreditNote(doc.tipo));
-  if (countDuplicateComps(comps, doc) >= 2) return "duplicado";
+  if (countDuplicateComps(comps, doc, registro) >= 2) return "duplicado";
   const dianTotal = doc.total || 0;
   if (dianTotal > 0 && amount > 0 && !amountsMatch(dianTotal, doc.iva || 0, amount)) {
     const diff = Math.abs(dianTotal - amount);
@@ -639,21 +670,48 @@ export function conciliar(
     });
   });
 
-  // 2nd Pass: Batch / Totalized Invoices (e.g. Camara de Comercio, Peajes)
+  // 2nd Pass: Batch / Totalized Invoices (e.g. Camara de Comercio, Peajes, compras en bloque del mismo día)
   const unmatched = rows.filter((r) => r.estado === "pendiente" && r.totalDian > 0 && r.grupo === "Recibido");
-  const byNit = new Map<string, typeof unmatched>();
+
+  // Agrupamos primero por NIT + FECHA (compras del mismo día registradas en bloque en libros)
+  // y luego por NIT completo en el mes
+  const groupsToTry: { key: string; nitK: string; docs: typeof unmatched }[] = [];
+
+  // A. Agrupación por NIT + FECHA (mismo día de compra)
+  const byNitDate = new Map<string, typeof unmatched>();
   unmatched.forEach((r) => {
-    const k = nitKey(r.nitContraparte);
-    const arr = byNit.get(k) || [];
+    const k = `${nitKey(r.nitContraparte)}|${r.fecha}`;
+    const arr = byNitDate.get(k) || [];
     arr.push(r);
-    byNit.set(k, arr);
+    byNitDate.set(k, arr);
+  });
+  byNitDate.forEach((docs, key) => {
+    if (docs.length >= 2) {
+      groupsToTry.push({ key, nitK: key.split("|")[0], docs });
+    }
   });
 
-  for (const [k, docs] of byNit) {
-    if (docs.length < 2) continue;
-    const sumDocs = docs.reduce((s, d) => s + d.totalDian, 0);
+  // B. Agrupación por solo NIT (mes completo)
+  const byNitOnly = new Map<string, typeof unmatched>();
+  unmatched.forEach((r) => {
+    const k = nitKey(r.nitContraparte);
+    const arr = byNitOnly.get(k) || [];
+    arr.push(r);
+    byNitOnly.set(k, arr);
+  });
+  byNitOnly.forEach((docs, key) => {
+    if (docs.length >= 2) {
+      groupsToTry.push({ key, nitK: key, docs });
+    }
+  });
+
+  for (const { nitK, docs } of groupsToTry) {
+    const activeDocs = docs.filter((d) => d.estado === "pendiente");
+    if (activeDocs.length < 2) continue;
+
+    const sumDocs = activeDocs.reduce((s, d) => s + d.totalDian, 0);
     const availMov = indexed.filter(
-      (l) => l.nitK === k && !usedBases.has(l.base) && l.kind !== "pago" && l.kind !== "recaudo",
+      (l) => l.nitK === nitK && !usedBases.has(l.base) && l.kind !== "recaudo",
     );
     const compGroups = new Map<string, IndexedLine[]>();
     availMov.forEach((l) => {
@@ -662,17 +720,36 @@ export function conciliar(
       compGroups.set(l.base, arr);
     });
 
-    for (const [base, lines] of compGroups) {
+    // Ordenar comprobantes para dar prioridad a causaciones (P) sobre egresos (G)
+    const sortedCompEntries = [...compGroups.entries()].sort(([baseA], [baseB]) => {
+      const isAP = baseA.startsWith("P") ? 1 : 0;
+      const isBP = baseB.startsWith("P") ? 1 : 0;
+      return isBP - isAP;
+    });
+
+    for (const [base, lines] of sortedCompEntries) {
       const compTotal = Math.max(...lines.map((l) => Math.max(l.debito, l.credito, l.amt)));
       if (closeAmount(compTotal, sumDocs)) {
-        docs.forEach((d) => {
+        // Absorber líneas vinculadas por el mismo cruce contable (ej. causación P 002 y egreso G 002)
+        const cruces = new Set(lines.map((l) => l.cruce).filter(Boolean));
+        let allMatchedLines = [...lines];
+        if (cruces.size > 0) {
+          const linkedCruces = indexed.filter(
+            (l) => l.cruce && cruces.has(l.cruce) && (l.nitK === nitK || !l.nitK) && !usedBases.has(l.base),
+          );
+          linkedCruces.forEach((l) => usedBases.add(l.base));
+          allMatchedLines = allMatchedLines.concat(linkedCruces);
+        }
+
+        const allComps = [...new Set(allMatchedLines.map((l) => l.base))];
+        activeDocs.forEach((d) => {
           d.estado = "totalizado";
-          d.hits = toHits(lines);
-          d.comprobantes = [base];
+          d.hits = toHits(allMatchedLines);
+          d.comprobantes = allComps;
           d.totalSiigo = d.totalDian;
           d.diferencia = 0;
-          d.matchVia = `totalizado en ${base} ($${compTotal.toLocaleString("es-CO")})`;
-          d.alerta = `Totalizado en comprobante ${base} junto con ${docs.length} facturas del mismo proveedor.`;
+          d.matchVia = `totalizado en bloque (${base})`;
+          d.alerta = `Totalizado en libros en comprobante ${base} ($${compTotal.toLocaleString("es-CO")}) junto con ${activeDocs.length} facturas del mismo proveedor.`;
         });
         usedBases.add(base);
         break;
@@ -698,9 +775,11 @@ export function conciliar(
 
       for (const [base, lines] of unassignedByBase.entries()) {
         const isFinancialOrComm =
-          /credicorp|banco|fiduciaria|fidu|bancolombia|davivienda|bbva|occidente|popular|bogota/i.test(r.nombreContraparte) ||
-          /comisi[oó]n|tarifa|bancari/i.test(r.tipo) ||
-          lines.some((x) => /^53/.test(x.cuenta) || /comisi[oó]n|banc/i.test(x.descripcion));
+          !/camara\s+de\s+comercio|c\.?\s*de\s*comercio/i.test(r.nombreContraparte) &&
+          (/credicorp|banco|fiduciaria|fidu|bancolombia|davivienda|bbva|occidente|popular/i.test(r.nombreContraparte) ||
+            /banco.*bogot[aá]|bco.*bogot[aá]/i.test(r.nombreContraparte) ||
+            /comisi[oó]n|tarifa|bancari/i.test(r.tipo) ||
+            lines.some((x) => /^53/.test(x.cuenta) || /comisi[oó]n|banc/i.test(x.descripcion)));
 
         if (!isFinancialOrComm) continue;
 
@@ -724,8 +803,15 @@ export function conciliar(
 
       // B. Búsqueda por línea individual de causación
       const avail = indexed.filter(
-        (l) => l.nitK === k && !usedBases.has(l.base) && l.kind === "compra" && !/rendimiento/i.test(l.descripcion),
+        (l) => l.nitK === k && !usedBases.has(l.base) && (l.kind === "compra" || l.kind === "pago") && !/rendimiento/i.test(l.descripcion),
       );
+      // Priorizar causaciones (P) sobre pagos (G)
+      avail.sort((a, b) => {
+        const isAP = a.base.startsWith("P") ? 1 : 0;
+        const isBP = b.base.startsWith("P") ? 1 : 0;
+        return isBP - isAP;
+      });
+
       for (const l of avail) {
         // En este paso NO hubo coincidencia de número de factura.
         // Por lo tanto, SOLO podemos considerar coincidencia si el valor es idéntico (diferencia <= 50 pesos por centavos)
@@ -737,14 +823,26 @@ export function conciliar(
           const isCamara = /camara\s+de\s+comercio/i.test(r.nombreContraparte);
           const isNC = isCreditNote(r.tipo);
 
+          // Absorber líneas vinculadas por el mismo cruce contable (ej. causación P y egreso G)
+          let matchedLines = [l];
+          if (l.cruce) {
+            const linkedCruces = indexed.filter(
+              (x) => x.cruce === l.cruce && (x.nitK === k || !x.nitK) && !usedBases.has(x.base),
+            );
+            linkedCruces.forEach((x) => usedBases.add(x.base));
+            matchedLines = matchedLines.concat(linkedCruces);
+          }
+          usedBases.add(l.base);
+
           if (isCamara) {
             r.estado = "conciliado";
-            r.hits = toHits([l]);
-            r.comprobantes = [l.base];
+            r.hits = toHits(matchedLines);
+            r.comprobantes = [...new Set(matchedLines.map((x) => x.base))];
             r.totalSiigo = r.totalDian;
             r.diferencia = 0;
             r.matchVia = `certificado/factura CCB en ${l.base}`;
             r.alerta = `Registrado en libros en comprobante ${l.base} ($${r.totalDian.toLocaleString("es-CO")}).`;
+            return;
           } else if (isNC) {
             // Nota Crédito que anula una causación previa en libros (e.g. Seguros en USD / Ajuste TRM)
             r.estado = "cruce_nc";

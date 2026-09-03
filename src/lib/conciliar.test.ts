@@ -494,4 +494,207 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
     assert.strictEqual(polRow.linked.length, 1);
     assert.strictEqual(polRow.linked[0].numero, "NCPO-17098534");
   });
+
+  it("debe conciliar facturas que cruzan con anticipos sin marcarlas como duplicadas", () => {
+    const dianDocs: DianDoc[] = [
+      {
+        grupo: "Recibido",
+        tipo: "Factura electrónica",
+        prefijo: "FV",
+        folio: "1118",
+        cufe: "CUFE1118",
+        fechaEmision: "2026-07-28",
+        fechaRecepcion: "2026-07-28",
+        nitEmisor: "901234567",
+        nombreEmisor: "PROVEEDOR MANTENIMIENTO SAS",
+        nitReceptor: "900562357",
+        nombreReceptor: "EMPRESA RECEPTORA SAS",
+        estadoDian: "Aceptado",
+        iva: 335294,
+        total: 2100000,
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      // Comprobante 1: Causación de la factura cruzada contra anticipo previo
+      {
+        cuenta: "73454001",
+        cuentaNombre: "MANTENIMIENTO",
+        comprobante: "P 002 00000010469 001",
+        fecha: "2026-07-28",
+        nit: "901234567",
+        nombre: "PROVEEDOR MANTENIMIENTO SAS",
+        descripcion: "FV1118 REPARACION AC",
+        cruce: "",
+        debito: 1764706,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "24080326",
+        cuentaNombre: "IVA DESCONTABLE",
+        comprobante: "P 002 00000010469 002",
+        fecha: "2026-07-28",
+        nit: "901234567",
+        nombre: "PROVEEDOR MANTENIMIENTO SAS",
+        descripcion: "FV1118 REPARACION AC",
+        cruce: "",
+        debito: 335294,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "13300508",
+        cuentaNombre: "ANTICIPOS A PROVEEDORES",
+        comprobante: "P 002 00000010469 006",
+        fecha: "2026-07-28",
+        nit: "901234567",
+        nombre: "PROVEEDOR MANTENIMIENTO SAS",
+        descripcion: "FV1118 REPARACION AC",
+        cruce: "P-002-00000010429-001",
+        debito: 0,
+        credito: 1957059,
+        observacion: "",
+      },
+      // Comprobante 2: El anticipo previo
+      {
+        cuenta: "13300508",
+        cuentaNombre: "ANTICIPOS A PROVEEDORES",
+        comprobante: "P 002 00000010429 001",
+        fecha: "2026-07-15",
+        nit: "901234567",
+        nombre: "PROVEEDOR MANTENIMIENTO SAS",
+        descripcion: "ANT4413 REPARACION AC",
+        cruce: "P-002-00000010429-001",
+        debito: 1957059,
+        credito: 0,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "JUL 2026");
+    assert.strictEqual(res.rows.length, 1);
+    assert.strictEqual(res.rows[0].estado, "conciliado");
+    assert.notStrictEqual(res.rows[0].estado, "duplicado");
+  });
+
+  it("debe totalizar compras en bloque del mismo día cuando se registran acumuladas en libros", () => {
+    const dianDocs: DianDoc[] = [
+      {
+        grupo: "Recibido",
+        tipo: "Factura electrónica",
+        prefijo: "VRT",
+        folio: "101",
+        cufe: "CUFE101",
+        fechaEmision: "2026-07-22",
+        fechaRecepcion: "2026-07-22",
+        nitEmisor: "890102010",
+        nombreEmisor: "CAMARA DE COMERCIO DE BARRANQUILLA",
+        nitReceptor: "900562357",
+        nombreReceptor: "EMPRESA RECEPTORA SAS",
+        estadoDian: "Aceptado",
+        iva: 0,
+        total: 12100,
+      },
+      {
+        grupo: "Recibido",
+        tipo: "Factura electrónica",
+        prefijo: "VRT",
+        folio: "102",
+        cufe: "CUFE102",
+        fechaEmision: "2026-07-22",
+        fechaRecepcion: "2026-07-22",
+        nitEmisor: "890102010",
+        nombreEmisor: "CAMARA DE COMERCIO DE BARRANQUILLA",
+        nitReceptor: "900562357",
+        nombreReceptor: "EMPRESA RECEPTORA SAS",
+        estadoDian: "Aceptado",
+        iva: 0,
+        total: 12100,
+      },
+      {
+        grupo: "Recibido",
+        tipo: "Factura electrónica",
+        prefijo: "VRT",
+        folio: "103",
+        cufe: "CUFE103",
+        fechaEmision: "2026-07-22",
+        fechaRecepcion: "2026-07-22",
+        nitEmisor: "890102010",
+        nombreEmisor: "CAMARA DE COMERCIO DE BARRANQUILLA",
+        nitReceptor: "900562357",
+        nombreReceptor: "EMPRESA RECEPTORA SAS",
+        estadoDian: "Aceptado",
+        iva: 0,
+        total: 12100,
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      // Comprobante que registra el total acumulado de las 3 compras del día ($36.300)
+      {
+        cuenta: "51409501",
+        cuentaNombre: "GASTOS LEGALES",
+        comprobante: "P 002 00000010438 001",
+        fecha: "2026-07-22",
+        nit: "890102010",
+        nombre: "CAMARA DE COMERCIO DE BARRANQUILLA",
+        descripcion: "COMPRA DE CERTIFICADOS JULIO 2026",
+        cruce: "",
+        debito: 36300,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "22050101",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "P 002 00000010438 002",
+        fecha: "2026-07-22",
+        nit: "890102010",
+        nombre: "CAMARA DE COMERCIO DE BARRANQUILLA",
+        descripcion: "CAMARA DE COMERCIO DE BARRANQUILLA",
+        cruce: "P-002-00000202607-001",
+        debito: 0,
+        credito: 36300,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "JUL 2026");
+    assert.strictEqual(res.rows.length, 3);
+    assert.strictEqual(res.rows[0].estado, "totalizado");
+    assert.strictEqual(res.rows[1].estado, "totalizado");
+    assert.strictEqual(res.rows[2].estado, "totalizado");
+    assert.strictEqual(res.totals.soloSiigo, 0);
+  });
+
+  it("no debe sugerir comisión bancaria a la Cámara de Comercio de Bogotá", async () => {
+    const { getTaxInsight } = await import("./tax-insights.ts");
+    const rowCCB = {
+      id: "ccb-1",
+      estado: "pendiente" as const,
+      grupo: "Recibido",
+      tipo: "Factura electrónica",
+      prefijo: "TV43",
+      folio: "10894267",
+      numero: "TV43-10894267",
+      cufe: "CUFECCB",
+      fecha: "2026-07-22",
+      nitContraparte: "860007322",
+      nombreContraparte: "CAMARA DE COMERCIO DE BOGOTA",
+      iva: 0,
+      totalDian: 72600,
+      totalSiigo: 0,
+      diferencia: 72600,
+      hits: [],
+      comprobantes: [],
+      matchVia: "",
+      prioridad: "audit" as const,
+      linked: [],
+      alerta: "",
+    };
+
+    const insight = getTaxInsight(rowCCB);
+    assert.strictEqual(insight?.tipo !== "comision_bancaria", true);
+  });
 });
