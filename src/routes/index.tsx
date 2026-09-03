@@ -3,6 +3,7 @@ import { UploadPanel } from "@/components/upload-panel";
 import { ResultBoard } from "@/components/result-board";
 import { useConciliacion } from "@/lib/store";
 import { TributoAuthGuardian, TributoUserBadge } from "@/components/tributo-auth-guardian";
+import { ToastHost } from "@/components/audit-chrome";
 import { ShieldCheck } from "lucide-react";
 
 export const Route = createFileRoute("/")({ component: ProtectedConciliadorApp });
@@ -74,6 +75,9 @@ function ConciliadorApp() {
           </span>
         </div>
       </footer>
+
+      {/* Notificaciones Flotantes Globales */}
+      <ToastHost />
     </div>
   );
 }

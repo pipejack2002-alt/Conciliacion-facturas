@@ -11,16 +11,27 @@ export function ToastHost() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = window.setTimeout(() => flash(null), 3200);
+    const t = window.setTimeout(() => flash(null), 3000);
     return () => window.clearTimeout(t);
   }, [toast, flash]);
 
   if (!toast) return null;
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
-      <p className="pointer-events-auto max-w-md rounded-lg bg-teal px-4 py-3 text-sm font-medium text-bg-elevated shadow-lg">
-        {toast}
-      </p>
+    <div className="fixed bottom-6 right-6 z-50 flex items-center justify-end px-4 pointer-events-none animate-in fade-in-0 slide-in-from-bottom-5 duration-200">
+      <div className="pointer-events-auto flex items-center gap-3 rounded-xl bg-slate-900/95 border border-teal-500/40 px-4 py-3 text-sm font-medium text-white shadow-2xl shadow-black/50 backdrop-blur-md">
+        <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-teal-400 text-slate-950 font-bold shadow-xs">
+          <CheckCircle2 className="size-4 text-slate-950" />
+        </div>
+        <p className="max-w-xs sm:max-w-md leading-tight text-slate-100 font-semibold">{toast}</p>
+        <button
+          type="button"
+          onClick={() => flash(null)}
+          className="rounded p-1 text-slate-400 hover:text-white transition cursor-pointer"
+          title="Cerrar notificación"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
     </div>
   );
 }
