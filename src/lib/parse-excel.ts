@@ -88,12 +88,23 @@ function cellDate(v: unknown): string {
       }
     }
   }
-  const s = cellStr(v);
+  const s = cellStr(v).trim();
+  if (!s || s.startsWith("0000") || s === "0") return "";
   const m1 = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
-  if (m1) return `${m1[3]}-${m1[2].padStart(2, "0")}-${m1[1].padStart(2, "0")}`;
+  if (m1) {
+    const y = m1[3];
+    if (y !== "0000" && Number(y) >= 1900) {
+      return `${y}-${m1[2].padStart(2, "0")}-${m1[1].padStart(2, "0")}`;
+    }
+  }
   const m2 = s.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
-  if (m2) return `${m2[1]}-${m2[2].padStart(2, "0")}-${m2[3].padStart(2, "0")}`;
-  return s.slice(0, 10);
+  if (m2) {
+    const y = m2[1];
+    if (y !== "0000" && Number(y) >= 1900) {
+      return `${y}-${m2[2].padStart(2, "0")}-${m2[3].padStart(2, "0")}`;
+    }
+  }
+  return "";
 }
 
 function normHeader(h: string): string {
@@ -323,8 +334,16 @@ export function parseMovSheet(
     const debito = iDeb != null ? cellNum(row[iDeb]) : 0;
     const credito = iCred != null ? cellNum(row[iCred]) : 0;
 
+    const comprobante = iComp != null ? cellStr(row[iComp]).trim() : "";
+    const fecha = iFecha != null ? cellDate(row[iFecha]) : "";
+
     // Si no tiene cuenta y no tiene valores contables, es una fila vacía o de adorno
     if (!cuenta && debito === 0 && credito === 0) continue;
+
+    // Omitir filas de saldos iniciales (sin débito ni crédito y sin comprobante real o fecha válida)
+    if (debito === 0 && credito === 0 && (!comprobante || /^0\s+000/.test(comprobante) || !fecha)) {
+      continue;
+    }
 
     const nitRaw = iNit != null ? cellStr(row[iNit]) : "";
     const cleanNit = nitRaw === "0" ? "" : nitRaw.replace(/\s+/g, "").trim();
@@ -332,8 +351,8 @@ export function parseMovSheet(
     out.push({
       cuenta: cuenta || "CUENTA",
       cuentaNombre: iCtaNom != null ? cellStr(row[iCtaNom]) : "",
-      comprobante: iComp != null ? cellStr(row[iComp]) : "",
-      fecha: iFecha != null ? cellDate(row[iFecha]) : "",
+      comprobante,
+      fecha,
       nit: cleanNit,
       nombre: iNom != null ? cellStr(row[iNom]) : "",
       descripcion: iDesc != null ? cellStr(row[iDesc]) : "",

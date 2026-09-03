@@ -923,7 +923,7 @@ export function checkPeriodMatch(dian: DianDoc[], mov: MovLine[]): string | unde
   const dianCounts = new Map<string, number>();
   for (const d of dian) {
     const f = (d.fechaEmision || d.fechaRecepcion || "").slice(0, 7);
-    if (/^\d{4}-\d{2}$/.test(f)) {
+    if (/^[12]\d{3}-(0[1-9]|1[0-2])$/.test(f)) {
       dianCounts.set(f, (dianCounts.get(f) || 0) + 1);
     }
   }
@@ -931,7 +931,7 @@ export function checkPeriodMatch(dian: DianDoc[], mov: MovLine[]): string | unde
   const movCounts = new Map<string, number>();
   for (const m of mov) {
     const f = (m.fecha || "").slice(0, 7);
-    if (/^\d{4}-\d{2}$/.test(f)) {
+    if (/^[12]\d{3}-(0[1-9]|1[0-2])$/.test(f)) {
       movCounts.set(f, (movCounts.get(f) || 0) + 1);
     }
   }
