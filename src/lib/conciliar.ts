@@ -337,7 +337,23 @@ function collectHits(
     lines = lines.concat(extra);
     via = via ? `${via}+prefijo` : (isNC && lines.some((l) => l.base.startsWith("U")) ? "nota devolución (U)" : "prefijo+folio");
   }
-  if (lines.length) return { lines, via: via || "prefijo+folio", score: 90 };
+  if (lines.length) {
+    // Buscar líneas vinculadas por el mismo cruce contable y mismo tercero
+    // (ej. Documento soporte emitido P 004 cruzado con causación P 002 / P 001)
+    const crucesSet = new Set(lines.map((l) => l.cruce).filter(Boolean));
+    if (crucesSet.size > 0) {
+      const cruceMatches = indexed.filter((l) => {
+        if (!l.cruce || !crucesSet.has(l.cruce)) return false;
+        if (cpNitK && l.nitK && l.nitK !== cpNitK) return false;
+        return !lines.some((x) => x.base === l.base && x.cuenta === l.cuenta && x.debito === l.debito && x.credito === l.credito);
+      });
+      if (cruceMatches.length > 0) {
+        lines = lines.concat(cruceMatches);
+        via = via ? `${via}+cruce` : "cruce";
+      }
+    }
+    return { lines, via: via || "prefijo+folio", score: 90 };
+  }
 
   const nitK = nitKey(cpNit);
   if (!nitK || f.length < 3) return { lines: [], via: "", score: 0 };

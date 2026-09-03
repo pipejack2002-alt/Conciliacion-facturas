@@ -692,7 +692,8 @@ function DocTable({
                 <div className="font-mono text-xs text-ink-subtle">{r.nitContraparte}</div>
                 {r.linked.length ? (
                   <div className="mt-0.5 text-xs text-info font-medium">
-                    Cruza con {r.linked.map((l) => l.numero).join(", ")}
+                    {r.estado === "solo_siigo" ? "Documentos DIAN del emisor: " : "Cruza con "}
+                    {r.linked.map((l) => l.numero).join(", ")}
                   </div>
                 ) : null}
                 {r.alerta ? <div className="mt-0.5 max-w-56 text-xs text-warn font-medium">{r.alerta}</div> : null}
@@ -869,7 +870,9 @@ function DetailDrawer({
         {row.linked.length ? (
           <div className="mt-4 rounded-xl border border-teal/20 bg-teal-soft/40 p-3.5 text-xs shadow-xs">
             <div className="flex items-center gap-1.5 font-bold mb-2.5">
-              <span className="text-teal-deep font-extrabold text-sm">🔗 Documento Relacionado:</span>
+              <span className="text-teal-deep font-extrabold text-sm">
+                {row.estado === "solo_siigo" ? "📄 Facturas del Tercero en DIAN:" : "🔗 Documento Relacionado:"}
+              </span>
             </div>
             <div className="space-y-2">
               {row.linked.map((l) => (
