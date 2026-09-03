@@ -217,7 +217,7 @@ export function TributoAuthGuardian({ children }: TributoAuthGuardianProps) {
                   TributoApp
                 </span>
                 <span className="ml-2 rounded-md bg-teal-500/10 border border-teal-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-teal-400">
-                  Conciliador Fiscal DIAN
+                  Conciliador de Facturas DIAN
                 </span>
               </div>
             </div>
@@ -254,7 +254,7 @@ export function TributoAuthGuardian({ children }: TributoAuthGuardianProps) {
                 </h1>
 
                 <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
-                  El <strong className="text-white">Conciliador Fiscal DIAN vs Libros Contables</strong> está protegido y requiere una sesión activa con plan <span className="text-teal-300 font-semibold">Profesional</span> o <span className="text-teal-300 font-semibold">Empresarial</span> en TributoApp.
+                  El <strong className="text-white">Conciliador de Facturas DIAN vs Libros Contables</strong> está protegido y requiere una sesión activa con plan <span className="text-teal-300 font-semibold">Profesional</span> o <span className="text-teal-300 font-semibold">Empresarial</span> en TributoApp.
                 </p>
               </div>
             </div>

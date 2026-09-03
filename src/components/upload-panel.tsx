@@ -187,11 +187,11 @@ export function UploadPanel() {
       <div className="text-center max-w-2xl mx-auto mb-8 space-y-3">
         <div className="inline-flex items-center gap-2 rounded-full bg-teal-soft/80 border border-teal/30 px-3.5 py-1 text-xs font-bold text-teal-deep shadow-xs">
           <Sparkles className="size-3.5 text-teal" />
-          <span>Motor de Auditoría y Cruce Fiscal DIAN 2026</span>
+          <span>Motor de Auditoría y Cruce de Facturas DIAN 2026</span>
         </div>
 
         <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-ink">
-          Conciliador Fiscal DIAN <span className="text-teal">vs. Libros Contables</span>
+          Conciliador de Facturas DIAN <span className="text-teal">vs. Libros Contables</span>
         </h1>
 
         <p className="text-xs sm:text-sm text-ink-muted leading-relaxed">

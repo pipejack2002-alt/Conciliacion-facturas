@@ -30,14 +30,14 @@ function ConciliadorApp() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-sm sm:text-base tracking-tight text-ink">
-                  Conciliador DIAN
+                  Conciliador de Facturas DIAN
                 </span>
                 <span className="rounded-md bg-teal-soft/80 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-teal">
                   TributoApp
                 </span>
               </div>
               <p className="text-[11px] text-ink-muted hidden sm:block">
-                Auditoría tributaria y cruce automático vs. Libros Contables
+                Cruce automático de facturas electrónicas vs. Libros Contables
               </p>
             </div>
           </div>

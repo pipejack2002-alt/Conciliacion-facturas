@@ -3,7 +3,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "Conciliador DIAN vs Libros Contables | TributoApp";
+const APP_NAME = "Conciliador de Facturas DIAN vs Libros Contables | TributoApp";
 
 export const Route = createRootRoute({
   head: () => ({
