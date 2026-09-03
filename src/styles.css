@@ -61,7 +61,12 @@
   }
 
   ::selection {
-    background: color-mix(in oklab, var(--color-teal) 22%, transparent);
+    background: #99f6e4;
+    color: #0f172a;
+  }
+  ::-moz-selection {
+    background: #99f6e4;
+    color: #0f172a;
   }
 
   /* Scrollbar suave corporativo */

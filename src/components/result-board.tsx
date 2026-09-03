@@ -700,9 +700,14 @@ function DocTable({
           return (
             <tr
               key={r.id}
-              onClick={() => onSelect(r.id)}
+              onClick={() => {
+                // Si el usuario seleccionó texto con el mouse para copiarlo, no abrir el cajón
+                const sel = window.getSelection()?.toString();
+                if (sel && sel.trim().length > 0) return;
+                onSelect(r.id);
+              }}
               className={cn(
-                "cursor-pointer border-b border-line/70 last:border-0 hover:bg-teal-soft/30 transition-all duration-150",
+                "cursor-pointer border-b border-line/70 last:border-0 hover:bg-teal-soft/30 transition-all duration-150 select-text",
                 selectedId === r.id && "bg-teal-soft/70 ring-1 ring-inset ring-teal/30",
                 done && "opacity-55",
               )}
@@ -740,7 +745,23 @@ function DocTable({
                 </div>
               </td>
               <td className="px-3 py-2.5">
-                <div className="font-medium tabular-nums">{r.numero || "—"}</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-medium tabular-nums select-text">{r.numero || "—"}</span>
+                  {r.numero && (
+                    <button
+                      type="button"
+                      title="Copiar N° de documento"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void navigator.clipboard.writeText(r.numero);
+                        useConciliacion.getState().flash(`N° ${r.numero} copiado`);
+                      }}
+                      className="rounded p-0.5 text-ink-subtle hover:bg-teal-soft hover:text-teal transition cursor-pointer"
+                    >
+                      <Copy className="size-3" />
+                    </button>
+                  )}
+                </div>
                 <div className="text-xs text-ink-subtle">
                   {r.grupo} · {shortTipo(r.tipo)}
                   {r.matchVia ? ` · ${r.matchVia}` : ""}
@@ -752,10 +773,43 @@ function DocTable({
                     {getInitials(r.nombreContraparte)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="max-w-56 truncate font-medium text-ink" title={r.nombreContraparte}>
-                      {r.nombreContraparte || "—"}
+                    <div className="flex items-center gap-1.5">
+                      <div className="max-w-56 truncate font-medium text-ink select-text" title={r.nombreContraparte}>
+                        {r.nombreContraparte || "—"}
+                      </div>
+                      {r.nombreContraparte && (
+                        <button
+                          type="button"
+                          title="Copiar nombre del tercero"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void navigator.clipboard.writeText(r.nombreContraparte);
+                            useConciliacion.getState().flash("Nombre copiado");
+                          }}
+                          className="rounded p-0.5 text-ink-subtle hover:bg-teal-soft hover:text-teal transition cursor-pointer"
+                        >
+                          <Copy className="size-2.5" />
+                        </button>
+                      )}
                     </div>
-                    <div className="font-mono text-xs text-ink-subtle">{r.nitContraparte}</div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="font-mono text-xs text-ink-subtle font-semibold select-text">{r.nitContraparte}</span>
+                      {r.nitContraparte && (
+                        <button
+                          type="button"
+                          title="Copiar NIT al portapapeles"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void navigator.clipboard.writeText(r.nitContraparte);
+                            useConciliacion.getState().flash(`NIT ${r.nitContraparte} copiado`);
+                          }}
+                          className="inline-flex items-center gap-1 rounded bg-bg-subtle/80 px-1 py-0.5 text-[10px] font-mono text-ink-muted hover:bg-teal-soft hover:text-teal transition cursor-pointer font-semibold border border-line"
+                        >
+                          <Copy className="size-2.5" />
+                          <span>Copiar NIT</span>
+                        </button>
+                      )}
+                    </div>
                     {r.linked.length ? (
                       <div className="mt-0.5 text-xs text-info font-medium">
                         {r.estado === "solo_siigo" ? "Documentos DIAN del emisor: " : "Cruza con "}
@@ -911,7 +965,22 @@ function DetailDrawer({
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <BadgeEstado estado={row.estado} />
-            <h2 className="mt-2 font-display text-2xl font-semibold">{row.numero || "Sin número"}</h2>
+            <div className="flex items-center gap-2 mt-2">
+              <h2 className="font-display text-2xl font-semibold select-text">{row.numero || "Sin número"}</h2>
+              {row.numero && (
+                <button
+                  type="button"
+                  title="Copiar N° de documento"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(row.numero);
+                    flash(`N° ${row.numero} copiado`);
+                  }}
+                  className="rounded p-1 text-ink-subtle hover:bg-teal-soft hover:text-teal transition cursor-pointer"
+                >
+                  <Copy className="size-4" />
+                </button>
+              )}
+            </div>
             <p className="text-sm text-ink-muted">{row.tipo}</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-md p-2 hover:bg-bg-subtle" aria-label="Cerrar">
@@ -945,12 +1014,12 @@ function DetailDrawer({
             label="Fecha"
             value={`${formatDate(row.fecha)}${dias != null ? ` · ${dias} días` : ""}`}
           />
-          <Field label="NIT" value={row.nitContraparte} mono />
-          <Field label="Contraparte" value={row.nombreContraparte} />
-          <Field label="Total DIAN" value={formatMoneyExact(row.totalDian)} />
-          <Field label="Valor en libros" value={row.hits.length ? formatMoneyExact(row.totalSiigo) : "—"} />
+          <Field label="NIT" value={row.nitContraparte} mono copyable />
+          <Field label="Contraparte" value={row.nombreContraparte} copyable />
+          <Field label="Total DIAN" value={formatMoneyExact(row.totalDian)} copyable />
+          <Field label="Valor en libros" value={row.hits.length ? formatMoneyExact(row.totalSiigo) : "—"} copyable />
           <Field label="Diferencia" value={formatMoneyExact(row.diferencia)} />
-          <Field label="Cruce" value={row.matchVia || "sin match"} />
+          <Field label="Cruce" value={row.matchVia || "sin match"} copyable={Boolean(row.matchVia)} />
         </dl>
         {row.alerta ? (
           <p className="mt-4 rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn">{row.alerta}</p>
@@ -1099,11 +1168,37 @@ function DetailDrawer({
   );
 }
 
-function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Field({
+  label,
+  value,
+  mono,
+  copyable = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  copyable?: boolean;
+}) {
   return (
     <div>
       <dt className="text-xs text-ink-subtle">{label}</dt>
-      <dd className={cn("mt-0.5", mono && "font-mono text-xs")}>{value || "—"}</dd>
+      <dd className={cn("mt-0.5 flex items-center gap-1.5 select-text", mono && "font-mono text-xs")}>
+        <span className="select-text break-words">{value || "—"}</span>
+        {copyable && value && value !== "—" && (
+          <button
+            type="button"
+            title={`Copiar ${label}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              void navigator.clipboard.writeText(value);
+              useConciliacion.getState().flash(`${label} copiado`);
+            }}
+            className="rounded p-0.5 text-ink-subtle hover:bg-teal-soft hover:text-teal transition cursor-pointer shrink-0"
+          >
+            <Copy className="size-3" />
+          </button>
+        )}
+      </dd>
     </div>
   );
 }
