@@ -1,8 +1,28 @@
-import * as XLSX from "xlsx";
-import { ESTADO_LABEL } from "./conciliar";
-import { getTaxInsight } from "./tax-insights";
-import type { Review } from "./reviews";
-import type { ConciliacionResult, ConciliacionRow, EstadoConciliacion } from "./types";
+import XLSX from "xlsx-js-style";
+import { ESTADO_LABEL } from "./conciliar.ts";
+import { getTaxInsight } from "./tax-insights.ts";
+import type { Review } from "./reviews.ts";
+import type { ConciliacionResult, ConciliacionRow, EstadoConciliacion } from "./types.ts";
+
+// Estilos corporativos prémium
+const HEADER_STYLE = {
+  fill: { fgColor: { rgb: "0F766E" } }, // Teal corporativo
+  font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+  alignment: { vertical: "center", horizontal: "center", wrapText: true },
+  border: {
+    top: { style: "thin", color: { rgb: "0D655E" } },
+    bottom: { style: "medium", color: { rgb: "0A4F49" } },
+    left: { style: "thin", color: { rgb: "0D655E" } },
+    right: { style: "thin", color: { rgb: "0D655E" } },
+  },
+};
+
+const BORDER_THIN = {
+  top: { style: "thin", color: { rgb: "E2E8F0" } },
+  bottom: { style: "thin", color: { rgb: "E2E8F0" } },
+  left: { style: "thin", color: { rgb: "E2E8F0" } },
+  right: { style: "thin", color: { rgb: "E2E8F0" } },
+};
 
 export function exportAuditoriaXlsx(
   rows: ConciliacionRow[],
@@ -43,6 +63,7 @@ export function exportAuditoriaXlsx(
   const dataRows = (rows && rows.length > 0)
     ? rows
     : result.rows.filter((r) => r.estado !== "no_aplica");
+
   for (const r of dataRows) {
     const rev = reviews ? reviews[r.id] : undefined;
     const revNota = rev?.note || "";
@@ -82,61 +103,178 @@ export function exportAuditoriaXlsx(
   }
 
   const wsAudit = XLSX.utils.aoa_to_sheet(auditData);
+
+  // Estilizado celda por celda de la Hoja 1
+  const rangeAudit = XLSX.utils.decode_range(wsAudit["!ref"] || "A1:T1");
+
+  // A. Estilo de Encabezados (Fila 0)
+  for (let C = rangeAudit.s.c; C <= rangeAudit.e.c; ++C) {
+    const addr = XLSX.utils.encode_cell({ r: 0, c: C });
+    if (wsAudit[addr]) {
+      wsAudit[addr].s = HEADER_STYLE;
+    }
+  }
+
+  // B. Estilo de Filas de Datos (Fila 1 en adelante)
+  for (let R = 1; R <= rangeAudit.e.r; ++R) {
+    const isEven = R % 2 === 0;
+    const bgRow = isEven ? "F8FAFC" : "FFFFFF";
+
+    for (let C = rangeAudit.s.c; C <= rangeAudit.e.c; ++C) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      const cell = wsAudit[addr];
+      if (!cell) continue;
+
+      // Base style
+      cell.s = {
+        fill: { fgColor: { rgb: bgRow } },
+        font: { name: "Calibri", sz: 10, color: { rgb: "1E293B" } },
+        alignment: { vertical: "center", horizontal: "left" },
+        border: BORDER_THIN,
+      };
+
+      // Columna A: Estado Conciliación (Centrado con negrita sutil)
+      if (C === 0) {
+        cell.s.alignment = { vertical: "center", horizontal: "center" };
+        cell.s.font = { name: "Calibri", sz: 10, bold: true, color: { rgb: "0F172A" } };
+      }
+
+      // Columnas D, E, G: Prefijo, Folio, Fecha (Centrado mono)
+      if (C === 3 || C === 4 || C === 6) {
+        cell.s.alignment = { vertical: "center", horizontal: "center" };
+      }
+
+      // Columnas J, K, L (index 9, 10, 11): Moneda (Alineado a derecha con formato contable)
+      if (C === 9 || C === 10 || C === 11) {
+        cell.z = '"$"#,##0.00';
+        cell.s.alignment = { vertical: "center", horizontal: "right" };
+        cell.s.font = { name: "Calibri", sz: 10, bold: C === 9 || C === 10, color: { rgb: "0F172A" } };
+      }
+
+      // Columna T (index 19): Revisión Auditor (Badges visuales de color)
+      if (C === 19) {
+        const val = String(cell.v || "");
+        if (val.includes("Conciliado OK") || val.includes("Validado")) {
+          cell.s = {
+            fill: { fgColor: { rgb: "DCFCE7" } }, // Verde suave
+            font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "166534" } },
+            alignment: { vertical: "center", horizontal: "center" },
+            border: BORDER_THIN,
+          };
+        } else if (val.includes("Pendiente")) {
+          cell.s = {
+            fill: { fgColor: { rgb: "FEF3C7" } }, // Ámbar suave
+            font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "92400E" } },
+            alignment: { vertical: "center", horizontal: "center" },
+            border: BORDER_THIN,
+          };
+        } else {
+          cell.s = {
+            fill: { fgColor: { rgb: "F1F5F9" } },
+            font: { name: "Calibri", sz: 10, color: { rgb: "475569" } },
+            alignment: { vertical: "center", horizontal: "center" },
+            border: BORDER_THIN,
+          };
+        }
+      }
+    }
+  }
+
+  // Anchos de columna optimizados
   wsAudit["!cols"] = [
     { wch: 18 }, // Estado
     { wch: 12 }, // Grupo
     { wch: 22 }, // Tipo
     { wch: 10 }, // Prefijo
     { wch: 12 }, // Folio
-    { wch: 18 }, // Número
-    { wch: 12 }, // Fecha
-    { wch: 15 }, // NIT
-    { wch: 34 }, // Razón Social
-    { wch: 16 }, // Total DIAN
-    { wch: 16 }, // Valor Libros
-    { wch: 16 }, // Diferencia
-    { wch: 32 }, // Causa Tributaria
-    { wch: 20 }, // Match
-    { wch: 22 }, // Comprobantes
-    { wch: 18 }, // Cruce NC
-    { wch: 30 }, // CUFE
-    { wch: 35 }, // Alerta
+    { wch: 20 }, // Número
+    { wch: 14 }, // Fecha
+    { wch: 16 }, // NIT
+    { wch: 36 }, // Razón Social
+    { wch: 18 }, // Total DIAN
+    { wch: 18 }, // Valor Libros
+    { wch: 18 }, // Diferencia
+    { wch: 35 }, // Causa Tributaria
+    { wch: 24 }, // Match
+    { wch: 26 }, // Comprobantes
+    { wch: 22 }, // Cruce NC
+    { wch: 32 }, // CUFE
+    { wch: 36 }, // Alerta
     { wch: 35 }, // Justificación
-    { wch: 22 }, // Revisión
+    { wch: 26 }, // Revisión
   ];
+
+  // Alturas de fila (Header 28pt, Filas 22pt)
+  wsAudit["!rows"] = [{ hpt: 28 }, ...dataRows.map(() => ({ hpt: 22 }))];
+
+  // Filtros automáticos nativos de Excel y Panel Congelado
+  wsAudit["!autofilter"] = { ref: `A1:T${dataRows.length + 1}` };
+  wsAudit["!views"] = [{ state: "frozen", ySplit: 1, activeCell: "A2" }];
+
   XLSX.utils.book_append_sheet(wb, wsAudit, "Auditoría DIAN");
 
-  // 2. Hoja de Resumen Ejecutivo
+  // 2. Hoja de Resumen Ejecutivo (Con diseño de certificación gerencial)
   const t = result.totals;
   const summaryData: (string | number)[][] = [
-    ["INFORME DE AUDITORÍA Y CONCILIACIÓN DIAN VS LIBROS CONTABLES"],
-    [],
+    ["INFORME OFICIAL DE AUDITORÍA FISCAL Y CONCILIACIÓN CONTABLE", ""],
+    ["", ""],
     ["DATOS DE LA EMPRESA", ""],
-    ["Empresa / Razón Social:", result.company.nombre],
-    ["NIT:", result.company.nit],
-    ["Período Evaluado:", result.periodLabel || "Mes actual"],
-    ["Fecha de Generación:", new Date().toLocaleString("es-CO")],
-    [],
-    ["MÉTRICAS Y RESULTADOS", "CANTIDAD", "VALOR TOTAL (COP)"],
-    ["Documentos Operativos Totales", t.documentos, ""],
-    ["Facturas Recibidas (Compras / Gastos)", t.recibidos, t.valorDian],
+    ["Razón Social:", result.company.nombre],
+    ["NIT / Identificación:", result.company.nit],
+    ["Período Fiscal Evaluado:", result.periodLabel || "Mes actual"],
+    ["Fecha y Hora de Emisión:", new Date().toLocaleString("es-CO")],
+    ["", ""],
+    ["RESUMEN DE EFECTIVIDAD Y COBERTURA", "CANTIDAD", "VALOR TOTAL (COP)"],
+    ["Documentos Operativos Evaluados", t.documentos, ""],
+    ["Facturas Recibidas (Compras y Gastos)", t.recibidos, t.valorDian],
     ["Conciliados / Registrados OK", t.conciliados, ""],
-    ["Totalizados / Compras en Bloque", t.totalizados, t.valorTotalizado],
-    ["Por Registrar (Pendientes en cola)", t.pendientesRecibidos, t.valorPendienteRecibido],
-    ["Doble Registro en Libros", t.duplicados, ""],
-    ["Diferencias de Valor / Impuestos", t.diferencias, t.valorDiferencia],
+    ["Totalizados / Compras Agrupadas", t.totalizados, t.valorTotalizado],
+    ["Pendientes de Registro en Libros", t.pendientesRecibidos, t.valorPendienteRecibido],
+    ["Doble Registro en Contabilidad", t.duplicados, ""],
+    ["Diferencias de Valor / Retenciones", t.diferencias, t.valorDiferencia],
     ["Cruces con Nota Crédito", t.crucesNc, ""],
-    ["Movimientos Solo en Libros (Huérfanos)", t.soloSiigo, ""],
-    [],
-    ["Efectividad de Conciliación Recibidas", `${(t.pctRecibidos * 100).toFixed(1)}%`, ""],
-    ["Total en Riesgo / Cola de Auditoría", t.cola, t.valorCola],
+    ["Movimientos Solo en Libros (Sin soporte DIAN)", t.soloSiigo, ""],
+    ["", "", ""],
+    ["EFECTIVIDAD DE CONCILIACIÓN DE COMPRAS", `${(t.pctRecibidos * 100).toFixed(1)}%`, ""],
+    ["VALOR TOTAL EN RIESGO / COLA AUDITORÍA", t.cola, t.valorCola],
   ];
 
   const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-  wsSummary["!cols"] = [{ wch: 42 }, { wch: 18 }, { wch: 22 }];
+
+  // Estilizado de la hoja Resumen
+  const rangeSum = XLSX.utils.decode_range(wsSummary["!ref"] || "A1:C22");
+  if (wsSummary["A1"]) {
+    wsSummary["A1"].s = {
+      fill: { fgColor: { rgb: "0F766E" } },
+      font: { name: "Calibri", sz: 13, bold: true, color: { rgb: "FFFFFF" } },
+      alignment: { vertical: "center", horizontal: "left" },
+    };
+  }
+
+  // Secciones en Resumen
+  ["A3", "A9"].forEach((cellRef) => {
+    if (wsSummary[cellRef]) {
+      wsSummary[cellRef].s = {
+        fill: { fgColor: { rgb: "F1F5F9" } },
+        font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "0F172A" } },
+        border: BORDER_THIN,
+      };
+    }
+  });
+
+  // Formatear valores numéricos de moneda en resumen
+  for (let R = 8; R <= rangeSum.e.r; ++R) {
+    const addrVal = XLSX.utils.encode_cell({ r: R, c: 2 });
+    if (wsSummary[addrVal] && typeof wsSummary[addrVal].v === "number") {
+      wsSummary[addrVal].z = '"$"#,##0.00';
+    }
+  }
+
+  wsSummary["!cols"] = [{ wch: 44 }, { wch: 18 }, { wch: 24 }];
+  wsSummary["!rows"] = [{ hpt: 30 }, { hpt: 15 }, { hpt: 24 }];
   XLSX.utils.book_append_sheet(wb, wsSummary, "Resumen Ejecutivo");
 
-  // 3. Hoja de Solo Libros (Huérfanos)
+  // 3. Hoja de Solo Libros (Huérfanos) con formato profesional
   if (result.orphans && result.orphans.length > 0) {
     const orphanHeaders = [
       "Comprobante",
@@ -144,7 +282,7 @@ export function exportAuditoriaXlsx(
       "NIT Tercero",
       "Nombre Tercero",
       "Descripción",
-      "Cuenta",
+      "Cuenta Contable",
       "Débito (COP)",
       "Crédito (COP)",
     ];
@@ -162,16 +300,46 @@ export function exportAuditoriaXlsx(
       ]),
     ];
     const wsOrphans = XLSX.utils.aoa_to_sheet(orphanData);
+
+    // Estilos de encabezado y celdas en Solo Libros
+    const rangeOrf = XLSX.utils.decode_range(wsOrphans["!ref"] || "A1:H1");
+    for (let C = 0; C <= rangeOrf.e.c; ++C) {
+      const addr = XLSX.utils.encode_cell({ r: 0, c: C });
+      if (wsOrphans[addr]) wsOrphans[addr].s = HEADER_STYLE;
+    }
+    for (let R = 1; R <= rangeOrf.e.r; ++R) {
+      const isEven = R % 2 === 0;
+      const bg = isEven ? "F8FAFC" : "FFFFFF";
+      for (let C = 0; C <= rangeOrf.e.c; ++C) {
+        const addr = XLSX.utils.encode_cell({ r: R, c: C });
+        if (wsOrphans[addr]) {
+          wsOrphans[addr].s = {
+            fill: { fgColor: { rgb: bg } },
+            font: { name: "Calibri", sz: 10, color: { rgb: "1E293B" } },
+            alignment: { vertical: "center", horizontal: C === 6 || C === 7 ? "right" : "left" },
+            border: BORDER_THIN,
+          };
+          if (C === 6 || C === 7) {
+            wsOrphans[addr].z = '"$"#,##0.00';
+          }
+        }
+      }
+    }
+
     wsOrphans["!cols"] = [
-      { wch: 16 },
-      { wch: 12 },
-      { wch: 15 },
-      { wch: 32 },
-      { wch: 35 },
+      { wch: 18 },
       { wch: 14 },
       { wch: 16 },
+      { wch: 34 },
+      { wch: 36 },
       { wch: 16 },
+      { wch: 18 },
+      { wch: 18 },
     ];
+    wsOrphans["!rows"] = [{ hpt: 28 }, ...result.orphans.map(() => ({ hpt: 20 }))];
+    wsOrphans["!autofilter"] = { ref: `A1:H${result.orphans.length + 1}` };
+    wsOrphans["!views"] = [{ state: "frozen", ySplit: 1 }];
+
     XLSX.utils.book_append_sheet(wb, wsOrphans, "Solo Libros (Sin DIAN)");
   }
 
@@ -199,19 +367,43 @@ export function exportAuditoriaXlsx(
       ]),
     ];
     const wsCruzes = XLSX.utils.aoa_to_sheet(cruceData);
+
+    const rangeCr = XLSX.utils.decode_range(wsCruzes["!ref"] || "A1:G1");
+    for (let C = 0; C <= rangeCr.e.c; ++C) {
+      const addr = XLSX.utils.encode_cell({ r: 0, c: C });
+      if (wsCruzes[addr]) wsCruzes[addr].s = HEADER_STYLE;
+    }
+    for (let R = 1; R <= rangeCr.e.r; ++R) {
+      for (let C = 0; C <= rangeCr.e.c; ++C) {
+        const addr = XLSX.utils.encode_cell({ r: R, c: C });
+        if (wsCruzes[addr]) {
+          wsCruzes[addr].s = {
+            fill: { fgColor: { rgb: R % 2 === 0 ? "F8FAFC" : "FFFFFF" } },
+            border: BORDER_THIN,
+            alignment: { vertical: "center", horizontal: C === 6 ? "right" : "left" },
+          };
+          if (C === 6) wsCruzes[addr].z = '"$"#,##0.00';
+        }
+      }
+    }
+
     wsCruzes["!cols"] = [
       { wch: 18 },
       { wch: 18 },
       { wch: 20 },
       { wch: 18 },
-      { wch: 15 },
-      { wch: 32 },
-      { wch: 18 },
+      { wch: 16 },
+      { wch: 34 },
+      { wch: 20 },
     ];
+    wsCruzes["!rows"] = [{ hpt: 28 }, ...result.cruzes.map(() => ({ hpt: 20 }))];
+    wsCruzes["!autofilter"] = { ref: `A1:G${result.cruzes.length + 1}` };
+    wsCruzes["!views"] = [{ state: "frozen", ySplit: 1 }];
+
     XLSX.utils.book_append_sheet(wb, wsCruzes, "Cruces Factura-NC");
   }
 
-  // Generar y descargar archivo
+  // Generar y descargar archivo en navegador
   const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
   const blob = new Blob([out], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   AlertTriangle,
   Building2,
@@ -34,6 +34,7 @@ import { getTaxInsight, type TaxInsight } from "@/lib/tax-insights";
 import type { ConciliacionResult, ConciliacionRow, EstadoConciliacion } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { KpiRow } from "./kpi-row";
+import { ConciliationProgress } from "./conciliation-progress";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "cola", label: "Cola" },
@@ -94,6 +95,19 @@ export function ResultBoard() {
   const [showActaModal, setShowActaModal] = useState(false);
   const [materialidad, setMaterialidad] = useState<MaterialidadFilter>("todos");
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Atajo de teclado global Ctrl+K / Cmd+K para enfocar el buscador
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const counts = useMemo(() => {
     if (!result) return {} as Record<TabId, number>;
@@ -348,7 +362,19 @@ export function ResultBoard() {
       ) : null}
       {delta ? <DeltaBanner delta={delta} /> : null}
 
-      <KpiRow result={result} onSelectTab={setTab} />
+      {/* 1. Barra de Progreso y Efectividad Comercial */}
+      <div className="mt-4">
+        <ConciliationProgress
+          result={result}
+          currentTab={tab}
+          onSelectTab={setTab}
+        />
+      </div>
+
+      {/* 2. Tarjetas KPI de Estado */}
+      <div className="mt-4">
+        <KpiRow result={result} currentTab={tab} onSelectTab={setTab} />
+      </div>
 
       <div className="mt-6 flex flex-col gap-3 no-print">
         {/* Pestañas de estado */}
@@ -382,12 +408,30 @@ export function ResultBoard() {
             <label className="relative min-w-44 flex-1 max-w-sm">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-subtle" />
               <input
+                ref={searchInputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Buscar NIT, proveedor, N° factura…"
-                className="h-9 w-full rounded-lg border border-line bg-bg-elevated pl-9 pr-3 text-xs outline-none focus:border-teal"
+                className="h-9 w-full rounded-lg border border-line bg-bg-elevated pl-9 pr-14 text-xs outline-none focus:border-teal transition shadow-2xs"
               />
+              {query ? (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-ink-subtle hover:text-ink text-xs transition"
+                  title="Limpiar búsqueda"
+                >
+                  ✕
+                </button>
+              ) : (
+                <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-line bg-bg-subtle px-1.5 py-0.5 text-[10px] font-medium text-ink-subtle">
+                  Ctrl K
+                </kbd>
+              )}
             </label>
+            <span className="text-xs text-ink-subtle hidden sm:inline-block">
+              {filtered.length} {filtered.length === 1 ? "documento" : "documentos"}
+            </span>
 
             {/* Píldoras de Filtro por Materialidad */}
             <div className="flex items-center gap-1 rounded-lg border border-line bg-bg-elevated p-0.5 text-xs">
@@ -609,6 +653,13 @@ function Empty({ tab }: { tab: TabId }) {
   );
 }
 
+function getInitials(name?: string) {
+  if (!name) return "DOC";
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
 function DocTable({
   rows,
   selectedId,
@@ -627,7 +678,7 @@ function DocTable({
   return (
     <table className="w-full min-w-[920px] text-left text-sm">
       {!compact ? (
-        <thead className="border-b border-line bg-bg-subtle/60 text-xs uppercase tracking-wider text-ink-subtle">
+        <thead className="sticky top-0 z-10 border-b border-line bg-bg-surface/95 backdrop-blur text-xs uppercase tracking-wider text-ink-subtle shadow-xs">
           <tr>
             <th className="px-3 py-3 font-medium">Estado</th>
             <th className="px-3 py-3 font-medium">Documento</th>
@@ -651,8 +702,8 @@ function DocTable({
               key={r.id}
               onClick={() => onSelect(r.id)}
               className={cn(
-                "cursor-pointer border-b border-line/70 last:border-0 hover:bg-teal-soft/40 transition-colors",
-                selectedId === r.id && "bg-teal-soft/70",
+                "cursor-pointer border-b border-line/70 last:border-0 hover:bg-teal-soft/30 transition-all duration-150",
+                selectedId === r.id && "bg-teal-soft/70 ring-1 ring-inset ring-teal/30",
                 done && "opacity-55",
               )}
             >
@@ -696,29 +747,39 @@ function DocTable({
                 </div>
               </td>
               <td className="px-3 py-2.5">
-                <div className="max-w-56 truncate font-medium">{r.nombreContraparte || "—"}</div>
-                <div className="font-mono text-xs text-ink-subtle">{r.nitContraparte}</div>
-                {r.linked.length ? (
-                  <div className="mt-0.5 text-xs text-info font-medium">
-                    {r.estado === "solo_siigo" ? "Documentos DIAN del emisor: " : "Cruza con "}
-                    {r.linked.map((l) => l.numero).join(", ")}
+                <div className="flex items-center gap-2.5">
+                  <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-teal-soft/80 text-[10px] font-bold text-teal shadow-2xs">
+                    {getInitials(r.nombreContraparte)}
                   </div>
-                ) : null}
-                {r.alerta ? <div className="mt-0.5 max-w-56 text-xs text-warn font-medium">{r.alerta}</div> : null}
+                  <div className="min-w-0 flex-1">
+                    <div className="max-w-56 truncate font-medium text-ink" title={r.nombreContraparte}>
+                      {r.nombreContraparte || "—"}
+                    </div>
+                    <div className="font-mono text-xs text-ink-subtle">{r.nitContraparte}</div>
+                    {r.linked.length ? (
+                      <div className="mt-0.5 text-xs text-info font-medium">
+                        {r.estado === "solo_siigo" ? "Documentos DIAN del emisor: " : "Cruza con "}
+                        {r.linked.map((l) => l.numero).join(", ")}
+                      </div>
+                    ) : null}
+                    {r.alerta ? <div className="mt-0.5 max-w-56 text-xs text-warn font-medium">{r.alerta}</div> : null}
+                  </div>
+                </div>
               </td>
               <td className="px-3 py-2.5">
                 {r.cufe ? (
                   <button
                     type="button"
-                    title={r.cufe}
+                    title="Copiar CUFE al portapapeles"
                     onClick={(e) => {
                       e.stopPropagation();
                       void navigator.clipboard.writeText(r.cufe);
-                      useConciliacion.getState().flash("CUFE copiado");
+                      useConciliacion.getState().flash("CUFE copiado al portapapeles");
                     }}
-                    className="block max-w-[11rem] truncate font-mono text-[11px] text-ink-muted hover:text-teal"
+                    className="group inline-flex items-center gap-1 max-w-[11rem] truncate rounded px-1.5 py-0.5 font-mono text-[11px] text-ink-muted hover:bg-teal-soft hover:text-teal transition cursor-pointer"
                   >
-                    {r.cufe}
+                    <Copy className="size-3 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity" />
+                    <span className="truncate">{r.cufe}</span>
                   </button>
                 ) : (
                   <span className="text-ink-subtle">—</span>
@@ -728,27 +789,46 @@ function DocTable({
                 <div>{formatDate(r.fecha)}</div>
                 {dias != null ? (
                   <div className={cn("text-xs font-medium", dias > 30 ? "text-danger" : "text-ink-subtle")}>
-                    {dias} d
+                    {dias} {dias === 1 ? "día" : "días"}
                   </div>
                 ) : null}
               </td>
-              <td className="px-3 py-2.5 text-right tabular-nums font-semibold">
-                {r.totalDian > 0 ? formatMoneyExact(r.totalDian) : "—"}
+              <td className="px-3 py-2.5 text-right tabular-nums">
+                <div className="font-medium text-ink">{formatMoneyExact(r.totalDian)}</div>
+                {r.iva ? (
+                  <div className="text-xs text-ink-subtle" title="IVA en DIAN">
+                    IVA {formatMoneyExact(r.iva)}
+                  </div>
+                ) : null}
               </td>
               <td className="px-3 py-2.5 text-right tabular-nums">
-                {r.totalSiigo > 0 ? formatMoneyExact(r.totalSiigo) : "—"}
+                <div className="font-medium text-ink">
+                  {r.hits.length ? formatMoneyExact(r.totalSiigo) : "—"}
+                </div>
+                {r.hits.length ? (
+                  <div
+                    className={cn(
+                      "text-xs font-semibold",
+                      r.diferencia === 0 ? "text-ok" : "text-danger",
+                    )}
+                  >
+                    {r.diferencia === 0 ? "Cuadrado" : `Dif. ${formatMoneyExact(r.diferencia)}`}
+                  </div>
+                ) : null}
               </td>
             </tr>
           );
         })}
       </tbody>
       {footer ? (
-        <tfoot>
-          <tr className="border-t border-line bg-bg-subtle/40 text-sm font-medium">
-            <td className="px-3 py-2.5" colSpan={5}>
-              {rows.length} documentos
+        <tfoot className="border-t border-line bg-bg-subtle/60 text-xs font-medium text-ink-muted">
+          <tr>
+            <td colSpan={5} className="px-3 py-2 text-right">
+              Total DIAN visible
             </td>
-            <td className="px-3 py-2.5 text-right tabular-nums">{footer}</td>
+            <td className="px-3 py-2 text-right tabular-nums font-semibold text-ink">
+              {footer}
+            </td>
             <td />
           </tr>
         </tfoot>
