@@ -41,6 +41,40 @@ export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
     };
   }
 
+  // C. Detección de naturaleza contable para movimientos de 'Solo libros'
+  if (row.estado === "solo_siigo") {
+    if (/n[oó]mina|laboral/i.test(row.tipo) || /n[oó]mina|sueldo|salario/i.test(row.alerta)) {
+      return {
+        tipo: "redondeo",
+        etiqueta: "Pasivo laboral / Nómina",
+        detalle: "Movimiento de nómina de empleados o pagos laborales. No genera factura comercial ante la DIAN; su soporte es el documento de nómina electrónica.",
+        probabilidad: "alta",
+      };
+    }
+    if (/tasa|p[uú]blica|anla|dian/i.test(row.tipo) || /entidad p[uú]blica|anla|tasa/i.test(row.alerta)) {
+      return {
+        tipo: "redondeo",
+        etiqueta: "Tasa / Entidad Pública",
+        detalle: "Pago oficial a entidad gubernamental. Las tasas o licencias públicas no se soportan con factura comercial electrónica estándar.",
+        probabilidad: "alta",
+      };
+    }
+    if (row.linked && row.linked.length > 0) {
+      return {
+        tipo: "trm_diferencia",
+        etiqueta: `Tiene ${row.linked.length} factura(s) en DIAN`,
+        detalle: `Este tercero registra ${row.linked.length} factura(s) en el reporte DIAN del periodo con importes o fechas distintas. Revisa si corresponde a causaciones anticipadas o acumuladas.`,
+        probabilidad: "media",
+      };
+    }
+    return {
+      tipo: "redondeo",
+      etiqueta: "Solo en Libros",
+      detalle: "Registro contable sin factura electrónica en el reporte DIAN del mes. Puedes investigarlo, registrar notas de auditoría o validarlo.",
+      probabilidad: "media",
+    };
+  }
+
   if (row.estado !== "diferencia" && row.estado !== "totalizado") {
     return null;
   }

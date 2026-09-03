@@ -834,8 +834,29 @@ export function conciliar(
     if (!/^[FPU]\s/.test(l.comprobante)) return;
     if (seenOrphan.has(l.base)) return;
     seenOrphan.add(l.base);
+
+    const orphanAmt = Math.max(l.debito, l.credito);
+    const isNomina = /nomina|nómina|sueldo|salario|cesant|prima|vacaci/i.test(l.descripcion) || /^25/.test(l.cuenta);
+    const isPublicEntity = /anla|autoridad\s+nacional|dian|alcald|gobernac/i.test(l.nombre) || l.nit === "900467239";
+    const isUtility = /caribemar|afinia|aire|enel|epm|gases|acueducto/i.test(l.nombre);
+
+    let alertaOrphan = `Movimiento registrado en libros en comprobante ${l.base} (${l.cuenta || "sin cuenta"}) sin factura electrónica en el reporte DIAN del periodo.`;
+    if (isNomina) {
+      alertaOrphan = `Registro contable en cuenta de nómina / pasivos laborales (${l.cuenta}). Las obligaciones laborales no generan factura comercial ante la DIAN.`;
+    } else if (isPublicEntity) {
+      alertaOrphan = `Pago oficial a entidad pública / tasa administrativa (${l.nombre}). Las entidades gubernamentales están exentas de expedir factura comercial.`;
+    } else if (isUtility) {
+      alertaOrphan = `Servicio público domiciliario registrado en libros (${l.nombre}). Suelen ampararse bajo documento equivalente de servicios públicos.`;
+    }
+
+    const dianMatches = rows.filter((r) => r.estado !== "solo_siigo" && nitKey(r.nitContraparte) === l.nitK);
+    if (dianMatches.length > 0) {
+      alertaOrphan += ` El emisor tiene ${dianMatches.length} factura(s) en la DIAN en el periodo (ej. ${dianMatches[0].numero}).`;
+    }
+
+    const orphanId = `solo-${i}-${l.base.replace(/\s+/g, "_")}`;
     orphans.push({
-      id: `o-${i}`,
+      id: orphanId,
       comprobante: l.base,
       fecha: l.fecha,
       nit: l.nit,
@@ -846,9 +867,38 @@ export function conciliar(
       debito: l.debito,
       credito: l.credito,
     });
+
+    rows.push({
+      id: orphanId,
+      estado: "solo_siigo",
+      grupo: "Recibido",
+      tipo: isNomina ? "Nómina / Laboral" : isPublicEntity ? "Tasa / Pública" : isUtility ? "Servicio público" : "Causación contable",
+      prefijo: "",
+      folio: compFolio(l.base),
+      numero: l.base,
+      cufe: "",
+      fecha: l.fecha,
+      nitContraparte: l.nit,
+      nombreContraparte: l.nombre || "Sin tercero",
+      iva: 0,
+      totalDian: 0,
+      totalSiigo: orphanAmt,
+      diferencia: orphanAmt,
+      hits: toHits([l]),
+      comprobantes: [l.base],
+      matchVia: `En libros: ${l.base}`,
+      prioridad: orphanAmt >= 5000000 ? "audit" : "secundario",
+      linked: dianMatches.map((d) => ({
+        id: d.id,
+        numero: d.numero,
+        tipo: d.tipo,
+        total: d.totalDian,
+      })),
+      alerta: alertaOrphan,
+    });
   });
 
-  const op = rows.filter((r) => r.estado !== "no_aplica");
+  const op = rows.filter((r) => r.estado !== "no_aplica" && r.estado !== "solo_siigo");
   const recibidos = op.filter((r) => r.prioridad === "audit");
   const pendientesRec = recibidos.filter((r) => r.estado === "pendiente");
   const conciliadosRec = recibidos.filter(
@@ -969,7 +1019,7 @@ export const ESTADO_LABEL: Record<EstadoConciliacion, string> = {
   diferencia: "Diferencia",
   pendiente: "Por registrar",
   no_aplica: "No aplica",
-  solo_siigo: "Solo contabilidad",
+  solo_siigo: "Solo libros",
   duplicado: "Doble registro",
   cruce_nc: "Cruce factura / NC",
   posible_typo: "Revisar factura",

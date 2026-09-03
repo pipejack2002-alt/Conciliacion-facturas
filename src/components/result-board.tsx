@@ -118,24 +118,29 @@ export function ResultBoard() {
     const q = query.trim().toLowerCase();
     let list = result.rows.filter((r) => {
       if (r.estado === "no_aplica") return false;
-      if (tab === "solo_siigo") return false;
-      if (tab === "cola") {
-        if (!inCola(r)) return false;
-      } else if (tab === "pendiente") {
-        if (r.prioridad !== "audit" || r.estado !== "pendiente") return false;
-      } else if (tab === "posible_typo") {
-        if (r.estado !== "posible_typo") return false;
-      } else if (tab === "emitidos") {
-        if (r.grupo !== "Emitido") return false;
-      } else if (tab === "cruce_nc") {
-        if (r.estado !== "cruce_nc" && r.linked.length === 0) return false;
-      } else if (tab !== "todos" && r.estado !== tab) {
-        return false;
+      if (tab === "solo_siigo") {
+        if (r.estado !== "solo_siigo") return false;
+      } else {
+        if (r.estado === "solo_siigo" && tab !== "todos") return false;
+        if (tab === "cola") {
+          if (!inCola(r)) return false;
+        } else if (tab === "pendiente") {
+          if (r.prioridad !== "audit" || r.estado !== "pendiente") return false;
+        } else if (tab === "posible_typo") {
+          if (r.estado !== "posible_typo") return false;
+        } else if (tab === "emitidos") {
+          if (r.grupo !== "Emitido") return false;
+        } else if (tab === "cruce_nc") {
+          if (r.estado !== "cruce_nc" && r.linked.length === 0) return false;
+        } else if (tab !== "todos" && r.estado !== tab) {
+          return false;
+        }
       }
       if (hideRevisados && reviewOf(reviews, r)?.done) return false;
 
       // Filtro de Materialidad
-      if (materialidad === "altos" && r.totalDian < 5000000) return false;
+      const amt = r.estado === "solo_siigo" ? r.totalSiigo : r.totalDian;
+      if (materialidad === "altos" && amt < 5000000) return false;
       if (materialidad === "con_sugerencia" && !getTaxInsight(r)) return false;
       if (materialidad === "sin_revisar" && reviewOf(reviews, r)?.done) return false;
 
@@ -146,17 +151,20 @@ export function ResultBoard() {
         r.nitContraparte.includes(q) ||
         r.tipo.toLowerCase().includes(q) ||
         r.cufe.toLowerCase().includes(q) ||
+        r.alerta.toLowerCase().includes(q) ||
         r.comprobantes.join(" ").toLowerCase().includes(q)
       );
     });
     list = [...list].sort((a, b) => {
-      if (sort === "monto") return b.totalDian - a.totalDian;
+      const amtA = a.estado === "solo_siigo" ? a.totalSiigo : a.totalDian;
+      const amtB = b.estado === "solo_siigo" ? b.totalSiigo : b.totalDian;
+      if (sort === "monto") return amtB - amtA;
       if (sort === "fecha") return (a.fecha || "").localeCompare(b.fecha || "");
       if (sort === "proveedor") return (a.nombreContraparte || "").localeCompare(b.nombreContraparte || "", "es");
       const ra = RANK[a.estado] ?? 9;
       const rb = RANK[b.estado] ?? 9;
       if (ra !== rb) return ra - rb;
-      return b.totalDian - a.totalDian;
+      return amtB - amtA;
     });
     return list;
   }, [result, query, tab, sort, hideRevisados, reviews, materialidad]);
@@ -175,7 +183,7 @@ export function ResultBoard() {
         nit,
         nombre: rows[0]?.nombreContraparte || "—",
         rows,
-        total: rows.reduce((s, r) => s + r.totalDian, 0),
+        total: rows.reduce((s, r) => s + (r.estado === "solo_siigo" ? r.totalSiigo : r.totalDian), 0),
       }))
       .sort((a, b) => b.total - a.total);
   }, [filtered, groupByProveedor]);
@@ -229,7 +237,7 @@ export function ResultBoard() {
 
   if (!result) return null;
 
-  const sumaDian = filtered.reduce((s, r) => s + r.totalDian, 0);
+  const sumaDian = filtered.reduce((s, r) => s + (r.estado === "solo_siigo" ? r.totalSiigo : r.totalDian), 0);
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-20">
@@ -287,7 +295,7 @@ export function ResultBoard() {
             <button
               type="button"
               onClick={() => {
-                exportAuditoriaXlsx(tab === "solo_siigo" ? [] : filtered, result, tab, reviews);
+                exportAuditoriaXlsx(filtered, result, tab, reviews);
                 flash("Descargando reporte en Excel (.xlsx)...");
               }}
               className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium hover:bg-teal-soft/50 hover:text-teal"
@@ -299,7 +307,7 @@ export function ResultBoard() {
             <button
               type="button"
               onClick={() => {
-                exportCsv(tab === "solo_siigo" ? [] : filtered, result, tab);
+                exportCsv(filtered, result, tab);
                 flash("Descargando archivo CSV...");
               }}
               className="inline-flex h-8 items-center gap-1 rounded-md border-l border-line px-2 text-xs font-medium text-ink-muted hover:bg-teal-soft/50 hover:text-teal"
@@ -493,9 +501,7 @@ export function ResultBoard() {
 
       {tab === "cruce_nc" && result.cruzes.length ? <CruceBanner cruzes={result.cruzes} /> : null}
 
-      {tab === "solo_siigo" ? (
-        <OrphanTable />
-      ) : groups ? (
+      {groups ? (
         <div className="mt-4 space-y-3">
           {groups.length === 0 ? (
             <Empty tab={tab} />
@@ -717,9 +723,11 @@ function DocTable({
                   </div>
                 ) : null}
               </td>
-              <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{formatMoneyExact(r.totalDian)}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums font-semibold">
+                {r.totalDian > 0 ? formatMoneyExact(r.totalDian) : "—"}
+              </td>
               <td className="px-3 py-2.5 text-right tabular-nums">
-                {r.comprobantes.length ? formatMoneyExact(r.totalSiigo) : "—"}
+                {r.totalSiigo > 0 ? formatMoneyExact(r.totalSiigo) : "—"}
               </td>
             </tr>
           );
@@ -758,47 +766,6 @@ function shortTipo(t: string) {
   return t;
 }
 
-function OrphanTable() {
-  const orphans = useConciliacion((s) => s.result?.orphans ?? []);
-  if (!orphans.length) {
-    return (
-      <p className="px-3 py-10 text-center text-sm text-ink-muted">
-        No hay movimientos huérfanos en libros contables.
-      </p>
-    );
-  }
-  return (
-    <div className="mt-4 overflow-x-auto rounded-xl border border-line bg-bg-elevated">
-      <table className="w-full min-w-[760px] text-left text-sm">
-        <thead className="border-b border-line bg-bg-subtle/60 text-xs uppercase tracking-wider text-ink-subtle">
-          <tr>
-            <th className="px-3 py-3 font-medium">Comprobante</th>
-            <th className="px-3 py-3 font-medium">Tercero</th>
-            <th className="px-3 py-3 font-medium">Descripción</th>
-            <th className="px-3 py-3 font-medium">Fecha</th>
-            <th className="px-3 py-3 text-right font-medium">Débito</th>
-            <th className="px-3 py-3 text-right font-medium">Crédito</th>
-          </tr>
-        </thead>
-        <tbody>
-          {orphans.map((o) => (
-            <tr key={o.id} className="border-b border-line/70 last:border-0">
-              <td className="px-3 py-2.5 font-mono text-xs">{o.comprobante}</td>
-              <td className="px-3 py-2.5">
-                <div className="max-w-48 truncate">{o.nombre || "—"}</div>
-                <div className="font-mono text-xs text-ink-subtle">{o.nit}</div>
-              </td>
-              <td className="max-w-xs truncate px-3 py-2.5 text-ink-muted">{o.descripcion}</td>
-              <td className="px-3 py-2.5 tabular-nums">{formatDate(o.fecha)}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums">{o.debito ? formatMoneyExact(o.debito) : ""}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums">{o.credito ? formatMoneyExact(o.credito) : ""}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
 
 function DetailDrawer({
   row,
