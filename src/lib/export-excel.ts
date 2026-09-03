@@ -1,13 +1,14 @@
 import * as XLSX from "xlsx";
 import { ESTADO_LABEL } from "./conciliar";
 import { getTaxInsight } from "./tax-insights";
+import type { Review } from "./reviews";
 import type { ConciliacionResult, ConciliacionRow, EstadoConciliacion } from "./types";
 
 export function exportAuditoriaXlsx(
   rows: ConciliacionRow[],
   result: ConciliacionResult,
   tab: string,
-  reviews?: Record<string, { done: boolean; note?: string }>,
+  reviews?: Record<string, Review>,
 ) {
   const wb = XLSX.utils.book_new();
 
@@ -37,11 +38,18 @@ export function exportAuditoriaXlsx(
 
   const auditData: (string | number)[][] = [auditHeaders];
 
-  const dataRows = tab === "solo_siigo" ? [] : rows;
+  const dataRows = rows;
   for (const r of dataRows) {
     const rev = reviews ? reviews[r.id] : undefined;
     const revNota = rev?.note || "";
-    const revEstado = rev?.done ? "Revisado / Justificado" : "Pendiente de Revisión";
+    let revEstado = "Pendiente de Revisión";
+    if (rev?.done) {
+      revEstado = rev.action === "omitir" ? "Omitido por Auditor" : "Validado por Auditor";
+    } else if (r.estado === "conciliado" || r.estado === "totalizado" || r.estado === "cruce_nc") {
+      revEstado = "Conciliado OK (Automático)";
+    } else if (r.estado === "no_aplica") {
+      revEstado = "No Requiere Revisión";
+    }
     const insight = getTaxInsight(r);
     const causaTexto = insight ? `${insight.etiqueta}: ${insight.detalle}` : "";
 
