@@ -43,9 +43,53 @@ export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
     };
   }
 
-  // C. Detección de naturaleza contable para movimientos de 'Solo libros'
+  // C. Detección para facturas recibidas pendientes de registrar
+  if (row.estado === "pendiente" && row.grupo === "Recibido") {
+    // 1. Cámara de Comercio
+    if (/camara\s+de\s+comercio|c\.?\s*de\s*comercio/i.test(row.nombreContraparte)) {
+      return {
+        tipo: "redondeo",
+        etiqueta: "Cámara de Comercio / Trámite",
+        detalle: `Factura por compra de certificados o trámites ante Cámara de Comercio (${formatMoney(row.totalDian)}). Si se canceló en efectivo o caja menor, verificar si está pendiente de legalizar o causar en cuenta 5140 (Gastos legales).`,
+        probabilidad: "alta",
+      };
+    }
+
+    // 2. Combustible / Estaciones de servicio
+    if (/masser|terpel|biomax|esso|mobil|texaco|primax|combustible|gasolina/i.test(row.nombreContraparte)) {
+      return {
+        tipo: "redondeo",
+        etiqueta: "Gasto de Combustible",
+        detalle: `Factura de combustible (${formatMoney(row.totalDian)}). Suele pagarse en efectivo o anticipo y legalizarse mediante reembolso de gastos o caja menor.`,
+        probabilidad: "alta",
+      };
+    }
+
+    // 3. Transporte y Envíos
+    if (/colvanes|servientrega|interrapidisimo|envia|coordinadora|deprisa/i.test(row.nombreContraparte)) {
+      return {
+        tipo: "redondeo",
+        etiqueta: "Transporte y Envíos",
+        detalle: `Factura de envíos o mensajería (${formatMoney(row.totalDian)}). Verificar si se pagó de contado por caja menor o está en trámite de radicación contable.`,
+        probabilidad: "alta",
+      };
+    }
+
+    // 4. Ferretería y Materiales
+    if (/sodimac|homecenter|easy|ferreter|almacen.*ingeniero/i.test(row.nombreContraparte)) {
+      return {
+        tipo: "redondeo",
+        etiqueta: "Materiales / Ferretería",
+        detalle: `Compra de materiales o insumos de ferretería (${formatMoney(row.totalDian)}). Verificar si la factura está en trámite de legalización o pendiente de radicar.`,
+        probabilidad: "alta",
+      };
+    }
+  }
+
+  // D. Detección de naturaleza contable para movimientos de 'Solo libros'
   if (row.estado === "solo_siigo") {
-    const textBlob = `${row.tipo} ${row.alerta} ${row.nombreContraparte} ${row.comprobantes.join(" ")}`.toLowerCase();
+    const hitsDesc = row.hits.map((h) => h.descripcion).join(" ");
+    const textBlob = `${row.tipo} ${row.nombreContraparte} ${row.comprobantes.join(" ")} ${hitsDesc}`.toLowerCase();
 
     // 1. Nómina y pagos laborales
     if (/n[oó]mina|laboral|sueldo|salario|cesant|prima|vacaci/i.test(textBlob)) {
@@ -77,8 +121,8 @@ export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
       };
     }
 
-    // 4. Servicios Públicos Domiciliarios
-    if (/caribemar|afinia|aire|enel|epm|gases|acueducto|energia|energ[ií]a|\belectrificadora\b|\belectrificaci[oó]n\b|servicio\s+el[eé]ctrico|telecomunic|claro|tigo/i.test(textBlob)) {
+    // 4. Servicios Públicos Domiciliarios y Telecomunicaciones
+    if (/caribemar|afinia|air-?\s*e|enel|epm|gases|acueducto|energia|energ[ií]a|vatia|triple\s+a|\belectrificadora\b|\belectrificaci[oó]n\b|servicio\s+el[eé]ctrico|telecomunic|claro|tigo/i.test(textBlob)) {
       return {
         tipo: "redondeo",
         etiqueta: "Servicio Público",
@@ -87,8 +131,8 @@ export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
       };
     }
 
-    // 4. Seguridad Social y Parafiscales (PILA)
-    if (/sura|sanitas|nueva eps|salud total|compensar|colsubsidio|cafam|comfama|porvenir|proteccion|colfondos|positiva|pila|parafiscal|seguridad social/i.test(textBlob)) {
+    // 5. Seguridad Social y Parafiscales (PILA)
+    if (/sura|sanitas|nueva eps|salud total|susalud|compensar|colsubsidio|cafam|comfama|combarranquilla|porvenir|proteccion|colfondos|old mutual|positiva|pila|parafiscal|seguridad social/i.test(textBlob)) {
       return {
         tipo: "redondeo",
         etiqueta: "Seguridad Social / PILA",
@@ -97,8 +141,8 @@ export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
       };
     }
 
-    // 5. Tasas y Entidades Públicas Oficiales
-    if (/tasa|p[uú]blica|anla|dian|alcald|gobernac|secretar[ií]a de hacienda|superintend/i.test(textBlob)) {
+    // 6. Tasas y Entidades Públicas Oficiales
+    if (/\btasa\b|\bentidad\s+p[uú]blica\b|\banla\b|\bdian\s+impuestos\b|\bdirecci[oó]n\s+de\s+impuestos\b|\balcald[ií]a\b|\bgobernaci[oó]n\b|secretar[ií]a\s+de\s+hacienda|superintend/i.test(textBlob)) {
       return {
         tipo: "redondeo",
         etiqueta: "Tasa / Entidad Pública",
@@ -107,7 +151,7 @@ export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
       };
     }
 
-    // 6. Reembolsos de Caja Menor
+    // 7. Reembolsos de Caja Menor
     if (/caja menor|reembolso|legalizaci[oó]n|fondo fijo/i.test(textBlob)) {
       return {
         tipo: "redondeo",
