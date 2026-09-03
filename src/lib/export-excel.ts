@@ -38,7 +38,11 @@ export function exportAuditoriaXlsx(
 
   const auditData: (string | number)[][] = [auditHeaders];
 
-  const dataRows = rows;
+  // Si rows viene vacío o se exporta desde una vista sin elementos (ej. Cola con 0 inconsistencias),
+  // se exporta automáticamente el universo completo de auditoría para garantizar el soporte formal íntegro.
+  const dataRows = (rows && rows.length > 0)
+    ? rows
+    : result.rows.filter((r) => r.estado !== "no_aplica");
   for (const r of dataRows) {
     const rev = reviews ? reviews[r.id] : undefined;
     const revNota = rev?.note || "";

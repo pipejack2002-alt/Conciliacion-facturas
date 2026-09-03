@@ -295,8 +295,12 @@ export function ResultBoard() {
             <button
               type="button"
               onClick={() => {
-                exportAuditoriaXlsx(filtered, result, tab, reviews);
-                flash("Descargando reporte en Excel (.xlsx)...");
+                const fullUniverse = result.rows.filter((r) => r.estado !== "no_aplica");
+                const rowsToExport = query.trim()
+                  ? (filtered.length > 0 ? filtered : fullUniverse)
+                  : (tab === "solo_siigo" ? filtered : fullUniverse);
+                exportAuditoriaXlsx(rowsToExport, result, tab, reviews);
+                flash("Descargando reporte completo en Excel (.xlsx)...");
               }}
               className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium hover:bg-teal-soft/50 hover:text-teal"
               title="Descargar libro de Excel formateado con causas tributarias"
@@ -307,7 +311,11 @@ export function ResultBoard() {
             <button
               type="button"
               onClick={() => {
-                exportCsv(filtered, result, tab);
+                const fullUniverse = result.rows.filter((r) => r.estado !== "no_aplica");
+                const rowsToExport = query.trim()
+                  ? (filtered.length > 0 ? filtered : fullUniverse)
+                  : (tab === "solo_siigo" ? filtered : fullUniverse);
+                exportCsv(rowsToExport, result, tab);
                 flash("Descargando archivo CSV...");
               }}
               className="inline-flex h-8 items-center gap-1 rounded-md border-l border-line px-2 text-xs font-medium text-ink-muted hover:bg-teal-soft/50 hover:text-teal"
@@ -1021,6 +1029,7 @@ function Field({ label, value, mono }: { label: string; value: string; mono?: bo
 }
 
 function exportCsv(rows: ConciliacionRow[], result: ConciliacionResult, tab: string) {
+  const dataRows = rows.length > 0 ? rows : result.rows.filter((r) => r.estado !== "no_aplica");
   const lines: string[][] =
     tab === "solo_siigo"
       ? [
@@ -1053,7 +1062,7 @@ function exportCsv(rows: ConciliacionRow[], result: ConciliacionResult, tab: str
             "CUFE",
             "Alerta",
           ],
-          ...rows.map((r) => [
+          ...dataRows.map((r) => [
             ESTADO_LABEL[r.estado as EstadoConciliacion],
             r.grupo,
             r.tipo,
