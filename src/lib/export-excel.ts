@@ -24,15 +24,11 @@ const BORDER_THIN = {
   right: { style: "thin", color: { rgb: "E2E8F0" } },
 };
 
-export function exportAuditoriaXlsx(
-  rows: ConciliacionRow[],
-  result: ConciliacionResult,
-  tab: string,
+// Función auxiliar para construir y formatear una hoja de auditoría
+function buildAuditSheet(
+  dataRows: ConciliacionRow[],
   reviews?: Record<string, Review>,
 ) {
-  const wb = XLSX.utils.book_new();
-
-  // 1. Hoja de Documentos de Auditoría
   const auditHeaders = [
     "Estado Auditoría",
     "Grupo",
@@ -57,12 +53,6 @@ export function exportAuditoriaXlsx(
   ];
 
   const auditData: (string | number)[][] = [auditHeaders];
-
-  // Si rows viene vacío o se exporta desde una vista sin elementos (ej. Cola con 0 inconsistencias),
-  // se exporta automáticamente el universo completo de auditoría para garantizar el soporte formal íntegro.
-  const dataRows = (rows && rows.length > 0)
-    ? rows
-    : result.rows.filter((r) => r.estado !== "no_aplica");
 
   for (const r of dataRows) {
     const rev = reviews ? reviews[r.id] : undefined;
@@ -102,30 +92,27 @@ export function exportAuditoriaXlsx(
     ]);
   }
 
-  const wsAudit = XLSX.utils.aoa_to_sheet(auditData);
-
-  // Estilizado celda por celda de la Hoja 1
-  const rangeAudit = XLSX.utils.decode_range(wsAudit["!ref"] || "A1:T1");
+  const ws = XLSX.utils.aoa_to_sheet(auditData);
+  const range = XLSX.utils.decode_range(ws["!ref"] || "A1:T1");
 
   // A. Estilo de Encabezados (Fila 0)
-  for (let C = rangeAudit.s.c; C <= rangeAudit.e.c; ++C) {
+  for (let C = range.s.c; C <= range.e.c; ++C) {
     const addr = XLSX.utils.encode_cell({ r: 0, c: C });
-    if (wsAudit[addr]) {
-      wsAudit[addr].s = HEADER_STYLE;
+    if (ws[addr]) {
+      ws[addr].s = HEADER_STYLE;
     }
   }
 
   // B. Estilo de Filas de Datos (Fila 1 en adelante)
-  for (let R = 1; R <= rangeAudit.e.r; ++R) {
+  for (let R = 1; R <= range.e.r; ++R) {
     const isEven = R % 2 === 0;
     const bgRow = isEven ? "F8FAFC" : "FFFFFF";
 
-    for (let C = rangeAudit.s.c; C <= rangeAudit.e.c; ++C) {
+    for (let C = range.s.c; C <= range.e.c; ++C) {
       const addr = XLSX.utils.encode_cell({ r: R, c: C });
-      const cell = wsAudit[addr];
+      const cell = ws[addr];
       if (!cell) continue;
 
-      // Base style
       cell.s = {
         fill: { fgColor: { rgb: bgRow } },
         font: { name: "Calibri", sz: 10, color: { rgb: "1E293B" } },
@@ -133,37 +120,33 @@ export function exportAuditoriaXlsx(
         border: BORDER_THIN,
       };
 
-      // Columna A: Estado Conciliación (Centrado con negrita sutil)
       if (C === 0) {
         cell.s.alignment = { vertical: "center", horizontal: "center" };
         cell.s.font = { name: "Calibri", sz: 10, bold: true, color: { rgb: "0F172A" } };
       }
 
-      // Columnas D, E, G: Prefijo, Folio, Fecha (Centrado mono)
       if (C === 3 || C === 4 || C === 6) {
         cell.s.alignment = { vertical: "center", horizontal: "center" };
       }
 
-      // Columnas J, K, L (index 9, 10, 11): Moneda (Alineado a derecha con formato contable)
       if (C === 9 || C === 10 || C === 11) {
         cell.z = '"$"#,##0.00';
         cell.s.alignment = { vertical: "center", horizontal: "right" };
         cell.s.font = { name: "Calibri", sz: 10, bold: C === 9 || C === 10, color: { rgb: "0F172A" } };
       }
 
-      // Columna T (index 19): Revisión Auditor (Badges visuales de color)
       if (C === 19) {
         const val = String(cell.v || "");
         if (val.includes("Conciliado OK") || val.includes("Validado")) {
           cell.s = {
-            fill: { fgColor: { rgb: "DCFCE7" } }, // Verde suave
+            fill: { fgColor: { rgb: "DCFCE7" } },
             font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "166534" } },
             alignment: { vertical: "center", horizontal: "center" },
             border: BORDER_THIN,
           };
         } else if (val.includes("Pendiente")) {
           cell.s = {
-            fill: { fgColor: { rgb: "FEF3C7" } }, // Ámbar suave
+            fill: { fgColor: { rgb: "FEF3C7" } },
             font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "92400E" } },
             alignment: { vertical: "center", horizontal: "center" },
             border: BORDER_THIN,
@@ -180,38 +163,33 @@ export function exportAuditoriaXlsx(
     }
   }
 
-  // Anchos de columna optimizados
-  wsAudit["!cols"] = [
-    { wch: 18 }, // Estado
-    { wch: 12 }, // Grupo
-    { wch: 22 }, // Tipo
-    { wch: 10 }, // Prefijo
-    { wch: 12 }, // Folio
-    { wch: 20 }, // Número
-    { wch: 14 }, // Fecha
-    { wch: 16 }, // NIT
-    { wch: 36 }, // Razón Social
-    { wch: 18 }, // Total DIAN
-    { wch: 18 }, // Valor Libros
-    { wch: 18 }, // Diferencia
-    { wch: 35 }, // Causa Tributaria
-    { wch: 24 }, // Match
-    { wch: 26 }, // Comprobantes
-    { wch: 22 }, // Cruce NC
-    { wch: 32 }, // CUFE
-    { wch: 36 }, // Alerta
-    { wch: 35 }, // Justificación
-    { wch: 26 }, // Revisión
+  ws["!cols"] = [
+    { wch: 18 }, { wch: 12 }, { wch: 22 }, { wch: 10 }, { wch: 12 },
+    { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 36 }, { wch: 18 },
+    { wch: 18 }, { wch: 18 }, { wch: 35 }, { wch: 24 }, { wch: 26 },
+    { wch: 22 }, { wch: 32 }, { wch: 36 }, { wch: 35 }, { wch: 26 },
   ];
+  ws["!rows"] = [{ hpt: 28 }, ...dataRows.map(() => ({ hpt: 22 }))];
+  ws["!autofilter"] = { ref: `A1:T${dataRows.length + 1}` };
+  ws["!views"] = [{ state: "frozen", ySplit: 1, activeCell: "A2" }];
 
-  // Alturas de fila (Header 28pt, Filas 22pt)
-  wsAudit["!rows"] = [{ hpt: 28 }, ...dataRows.map(() => ({ hpt: 22 }))];
+  return ws;
+}
 
-  // Filtros automáticos nativos de Excel y Panel Congelado
-  wsAudit["!autofilter"] = { ref: `A1:T${dataRows.length + 1}` };
-  wsAudit["!views"] = [{ state: "frozen", ySplit: 1, activeCell: "A2" }];
+export function exportAuditoriaXlsx(
+  rows: ConciliacionRow[],
+  result: ConciliacionResult,
+  tab: string,
+  reviews?: Record<string, Review>,
+) {
+  const wb = XLSX.utils.book_new();
 
-  XLSX.utils.book_append_sheet(wb, wsAudit, "Auditoría DIAN");
+  // Siempre garantizamos el universo completo de auditoría
+  const allDataRows = result.rows.filter((r) => r.estado !== "no_aplica");
+  const conciliadasRows = allDataRows.filter((r) => r.estado === "conciliado");
+  const pendientesRows = allDataRows.filter((r) => r.estado === "pendiente" || r.estado === "posible_typo");
+  const totalizadasRows = allDataRows.filter((r) => r.estado === "totalizado");
+  const diferenciasRows = allDataRows.filter((r) => r.estado === "diferencia" || r.estado === "duplicado");
 
   // 2. Hoja de Resumen Ejecutivo (Con diseño de certificación gerencial)
   const t = result.totals;
@@ -272,9 +250,50 @@ export function exportAuditoriaXlsx(
 
   wsSummary["!cols"] = [{ wch: 44 }, { wch: 18 }, { wch: 24 }];
   wsSummary["!rows"] = [{ hpt: 30 }, { hpt: 15 }, { hpt: 24 }];
-  XLSX.utils.book_append_sheet(wb, wsSummary, "Resumen Ejecutivo");
+  
+  // 1. Hoja: Resumen Ejecutivo
+  XLSX.utils.book_append_sheet(wb, wsSummary, "1. Resumen Ejecutivo");
 
-  // 3. Hoja de Solo Libros (Huérfanos) con formato profesional
+  // 2. Hoja: Universo Completo (DIAN) - Todas las facturas
+  XLSX.utils.book_append_sheet(wb, buildAuditSheet(allDataRows, reviews), "2. Universo Completo DIAN");
+
+  // 3. Hoja: Facturas Conciliadas OK (Soportadas y Cuadradas al 100%)
+  if (conciliadasRows.length > 0) {
+    XLSX.utils.book_append_sheet(
+      wb,
+      buildAuditSheet(conciliadasRows, reviews),
+      `3. Conciliadas OK (${conciliadasRows.length})`,
+    );
+  }
+
+  // 4. Hoja: Facturas Pendientes (Cola de Auditoría por Causar)
+  if (pendientesRows.length > 0) {
+    XLSX.utils.book_append_sheet(
+      wb,
+      buildAuditSheet(pendientesRows, reviews),
+      `4. Pendientes Cola (${pendientesRows.length})`,
+    );
+  }
+
+  // 5. Hoja: Facturas Totalizadas / Agrupadas en Bloque
+  if (totalizadasRows.length > 0) {
+    XLSX.utils.book_append_sheet(
+      wb,
+      buildAuditSheet(totalizadasRows, reviews),
+      `5. Totalizadas Bloque (${totalizadasRows.length})`,
+    );
+  }
+
+  // 6. Hoja: Discrepancias / Diferencias y Duplicados si existen
+  if (diferenciasRows.length > 0) {
+    XLSX.utils.book_append_sheet(
+      wb,
+      buildAuditSheet(diferenciasRows, reviews),
+      `6. Diferencias (${diferenciasRows.length})`,
+    );
+  }
+
+  // 7. Hoja de Solo Libros (Huérfanos sin factura DIAN) con formato profesional
   if (result.orphans && result.orphans.length > 0) {
     const orphanHeaders = [
       "Comprobante",
@@ -340,10 +359,10 @@ export function exportAuditoriaXlsx(
     wsOrphans["!autofilter"] = { ref: `A1:H${result.orphans.length + 1}` };
     wsOrphans["!views"] = [{ state: "frozen", ySplit: 1 }];
 
-    XLSX.utils.book_append_sheet(wb, wsOrphans, "Solo Libros (Sin DIAN)");
+    XLSX.utils.book_append_sheet(wb, wsOrphans, `7. Solo Libros (${result.orphans.length})`);
   }
 
-  // 4. Hoja de Cruces Factura - NC
+  // 8. Hoja de Cruces Factura - NC
   if (result.cruzes && result.cruzes.length > 0) {
     const cruceHeaders = [
       "Factura Número",
@@ -400,7 +419,7 @@ export function exportAuditoriaXlsx(
     wsCruzes["!autofilter"] = { ref: `A1:G${result.cruzes.length + 1}` };
     wsCruzes["!views"] = [{ state: "frozen", ySplit: 1 }];
 
-    XLSX.utils.book_append_sheet(wb, wsCruzes, "Cruces Factura-NC");
+    XLSX.utils.book_append_sheet(wb, wsCruzes, `8. Cruces Factura-NC (${result.cruzes.length})`);
   }
 
   // Generar y descargar archivo en navegador

@@ -27,6 +27,7 @@ export function ActaConciliacionModal({ open, onClose, result, dianName, movName
   const totalDocs = totals.recibidos || 1;
   const pctConciliado = Math.min(100, Math.round((totals.conciliados / totalDocs) * 100));
 
+  const conciliatedRows = rows.filter((r) => r.estado === "conciliado" || r.estado === "totalizado");
   const pendingAudit = rows.filter((r) => r.prioridad === "audit" && (r.estado === "pendiente" || r.estado === "posible_typo"));
   const differences = rows.filter((r) => r.estado === "diferencia");
 
@@ -229,20 +230,77 @@ export function ActaConciliacionModal({ open, onClose, result, dianName, movName
               </div>
             </div>
 
-            {/* Partidas de Auditoría */}
-            {pendingAudit.length > 0 && (
+            {/* 2. Relación de Facturas Conciliadas y Soportadas en Libros */}
+            {conciliatedRows.length > 0 && (
               <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted mb-2">
-                  2. PRINCIPALES PARTIDAS CONCILIATORIAS PENDIENTES ({pendingAudit.length})
+                <h3 className="text-xs font-bold uppercase tracking-wider text-ok mb-2 flex items-center justify-between">
+                  <span>2. FACTURAS CONCILIADAS Y DEBIDAMENTE REGISTRADAS EN LIBROS ({conciliatedRows.length})</span>
+                  <span className="text-[11px] font-mono text-ink font-semibold">
+                    Total: {formatMoney(conciliatedRows.reduce((s, r) => s + r.totalDian, 0))}
+                  </span>
                 </h3>
                 <div className="overflow-hidden rounded-lg border border-line text-xs">
                   <table className="w-full text-left">
-                    <thead className="bg-bg-subtle border-b border-line text-ink-subtle">
+                    <thead className="bg-ok-bg/60 border-b border-line text-ink-subtle">
+                      <tr>
+                        <th className="p-2">Fecha</th>
+                        <th className="p-2">N° Factura</th>
+                        <th className="p-2">Tercero / Proveedor</th>
+                        <th className="p-2">Comprobante Libros</th>
+                        <th className="p-2 text-right">Valor DIAN</th>
+                        <th className="p-2 text-center">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line font-mono">
+                      {conciliatedRows.slice(0, 10).map((r) => (
+                        <tr key={r.id}>
+                          <td className="p-2 text-ink-muted">{r.fecha}</td>
+                          <td className="p-2 font-bold text-ink">{r.numero}</td>
+                          <td className="p-2 font-sans truncate max-w-[200px]" title={r.nombreContraparte}>
+                            {r.nombreContraparte}
+                          </td>
+                          <td className="p-2 text-teal font-semibold">
+                            {r.comprobantes.length ? r.comprobantes.slice(0, 2).join(", ") : r.matchVia || "Causado"}
+                          </td>
+                          <td className="p-2 text-right text-ink font-semibold">{formatMoney(r.totalDian)}</td>
+                          <td className="p-2 text-center">
+                            <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold bg-ok-bg text-ok">
+                              ✓ Conciliado
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {conciliatedRows.length > 10 && (
+                        <tr className="bg-bg-subtle/50 font-sans">
+                          <td colSpan={6} className="p-2 text-center text-ink-muted italic">
+                            ... y {conciliatedRows.length - 10} facturas conciliadas adicionales con soporte en libros (detalladas al 100% en la hoja Excel anexa).
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* 3. Partidas Conciliatorias Pendientes de Registro */}
+            {pendingAudit.length > 0 && (
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-warn mb-2 flex items-center justify-between">
+                  <span>3. PARTIDAS PENDIENTES DE REGISTRO / COLA AUDITORÍA ({pendingAudit.length})</span>
+                  <span className="text-[11px] font-mono text-ink font-semibold">
+                    Total: {formatMoney(totals.valorPendienteRecibido)}
+                  </span>
+                </h3>
+                <div className="overflow-hidden rounded-lg border border-line text-xs">
+                  <table className="w-full text-left">
+                    <thead className="bg-warn-bg/50 border-b border-line text-ink-subtle">
                       <tr>
                         <th className="p-2">Fecha</th>
                         <th className="p-2">N° Factura</th>
                         <th className="p-2">Tercero / Proveedor</th>
                         <th className="p-2 text-right">Valor DIAN</th>
+                        <th className="p-2 text-center">Estado</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-line font-mono">
@@ -252,11 +310,16 @@ export function ActaConciliacionModal({ open, onClose, result, dianName, movName
                           <td className="p-2 font-bold text-ink">{r.numero}</td>
                           <td className="p-2 font-sans truncate max-w-[220px]" title={r.nombreContraparte}>{r.nombreContraparte}</td>
                           <td className="p-2 text-right text-ink font-semibold">{formatMoney(r.totalDian)}</td>
+                          <td className="p-2 text-center">
+                            <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold bg-warn-bg text-warn">
+                              Pendiente
+                            </span>
+                          </td>
                         </tr>
                       ))}
                       {pendingAudit.length > 8 && (
                         <tr className="bg-bg-subtle/50 font-sans">
-                          <td colSpan={4} className="p-2 text-center text-ink-muted italic">
+                          <td colSpan={5} className="p-2 text-center text-ink-muted italic">
                             ... y {pendingAudit.length - 8} partidas pendientes adicionales detalladas en el anexo de auditoría.
                           </td>
                         </tr>

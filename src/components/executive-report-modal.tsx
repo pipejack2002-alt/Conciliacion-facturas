@@ -49,6 +49,7 @@ export function ExecutiveReportModal({ open, onClose, result, dianName, movName 
     .slice(0, 10);
 
   const pendingRows = rows.filter((r) => r.prioridad === "audit" && (r.estado === "pendiente" || r.estado === "posible_typo"));
+  const conciliatedRows = rows.filter((r) => r.estado === "conciliado" || r.estado === "totalizado");
   const totalMontoPendiente = pendingRows.reduce((s, r) => s + r.totalDian, 0);
 
   const handlePrint = () => {
@@ -248,10 +249,64 @@ export function ExecutiveReportModal({ open, onClose, result, dianName, movName 
             </div>
           </div>
 
+          {/* Section 4: Relación de Facturas Conciliadas y Soportadas en Libros */}
+          {conciliatedRows.length > 0 && (
+            <div className="mt-8">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="size-4 text-emerald-600" />
+                  4. Relación de Facturas Conciliadas y Soportadas en Libros ({conciliatedRows.length})
+                </span>
+                <span className="text-xs font-mono font-semibold text-emerald-800">
+                  {pctConciliado}% de Cobertura
+                </span>
+              </h2>
+              <div className="overflow-hidden rounded-lg border border-slate-200 text-xs">
+                <table className="min-w-full divide-y divide-slate-200">
+                  <thead className="bg-emerald-50 text-emerald-950 font-bold uppercase tracking-wider text-[11px]">
+                    <tr>
+                      <th className="py-2 px-3 text-left">Fecha</th>
+                      <th className="py-2 px-3 text-left">N° Factura</th>
+                      <th className="py-2 px-3 text-left">Proveedor</th>
+                      <th className="py-2 px-3 text-left">Comprobante Contable</th>
+                      <th className="py-2 px-3 text-right">Valor DIAN</th>
+                      <th className="py-2 px-3 text-center">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white text-slate-800">
+                    {conciliatedRows.slice(0, 8).map((r) => (
+                      <tr key={r.id}>
+                        <td className="py-2 px-3 text-slate-500">{r.fecha}</td>
+                        <td className="py-2 px-3 font-bold font-mono text-slate-900">{r.numero}</td>
+                        <td className="py-2 px-3 truncate max-w-[200px]" title={r.nombreContraparte}>{r.nombreContraparte}</td>
+                        <td className="py-2 px-3 font-mono font-semibold text-teal">
+                          {r.comprobantes.length ? r.comprobantes.slice(0, 2).join(", ") : r.matchVia || "Causado"}
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono font-bold">{formatMoney(r.totalDian)}</td>
+                        <td className="py-2 px-3 text-center">
+                          <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            ✓ Conciliado OK
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {conciliatedRows.length > 8 && (
+                      <tr className="bg-slate-50 text-slate-500 italic">
+                        <td colSpan={6} className="py-2 px-3 text-center">
+                          ... y {conciliatedRows.length - 8} facturas conciliadas adicionales detalladas en el libro de auditoría Excel (.xlsx).
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* Dictamen & Revisoría Conclusion */}
           <div className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs text-slate-700 leading-relaxed">
             <h3 className="font-bold text-slate-900 uppercase tracking-wider text-[11px] mb-1">
-              4. Dictamen y Conclusiones del Auditor
+              5. Dictamen y Conclusiones del Auditor
             </h3>
             <p>
               Se ha verificado la totalidad de la información contenida en el Reporte Oficial de Facturación Electrónica expedido por la Dirección de Impuestos y Aduanas Nacionales (DIAN) frente a los comprobantes de egreso, causación y compras registrados en el libro auxiliar de la compañía para el período indicado. Las inconsistencias detectadas se encuentran detalladas en los anexos correspondientes para su saneamiento antes del cierre contable e impositivo.

@@ -310,33 +310,27 @@ export function ResultBoard() {
               type="button"
               onClick={() => {
                 const fullUniverse = result.rows.filter((r) => r.estado !== "no_aplica");
-                const rowsToExport = query.trim()
-                  ? (filtered.length > 0 ? filtered : fullUniverse)
-                  : (tab === "solo_siigo" ? filtered : fullUniverse);
-                exportAuditoriaXlsx(rowsToExport, result, tab, reviews);
-                flash("Descargando reporte completo en Excel (.xlsx)...");
+                exportAuditoriaXlsx(fullUniverse, result, tab, reviews);
+                flash("Descargando reporte completo en Excel con todas las hojas...");
               }}
               className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium hover:bg-teal-soft/50 hover:text-teal"
-              title="Descargar libro de Excel formateado con causas tributarias"
+              title="Descargar libro de Excel completo con hojas de Conciliadas, Pendientes, Totalizadas, Solo Libros y Resumen"
             >
               <FileSpreadsheet className="size-3.5 text-ok" />
-              Excel (.xlsx)
+              Excel Completo (.xlsx)
             </button>
             <button
               type="button"
               onClick={() => {
                 const fullUniverse = result.rows.filter((r) => r.estado !== "no_aplica");
-                const rowsToExport = query.trim()
-                  ? (filtered.length > 0 ? filtered : fullUniverse)
-                  : (tab === "solo_siigo" ? filtered : fullUniverse);
-                exportCsv(rowsToExport, result, tab);
-                flash("Descargando archivo CSV...");
+                exportCsv(fullUniverse, result, tab);
+                flash("Descargando archivo CSV con todo el universo de auditoría...");
               }}
               className="inline-flex h-8 items-center gap-1 rounded-md border-l border-line px-2 text-xs font-medium text-ink-muted hover:bg-teal-soft/50 hover:text-teal"
-              title="Descargar datos en formato CSV plano"
+              title="Descargar datos en formato CSV plano de todo el universo"
             >
               <Download className="size-3" />
-              CSV
+              CSV Completo
             </button>
           </div>
 
