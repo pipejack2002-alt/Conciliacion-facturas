@@ -342,10 +342,41 @@ function collectHits(
     // (ej. Documento soporte emitido P 004 cruzado con causación P 002 / P 001)
     const crucesSet = new Set(lines.map((l) => l.cruce).filter(Boolean));
     if (crucesSet.size > 0) {
+      const existingBases = new Set(lines.map((l) => l.base));
       const cruceMatches = indexed.filter((l) => {
         if (!l.cruce || !crucesSet.has(l.cruce)) return false;
         if (cpNitK && l.nitK && l.nitK !== cpNitK) return false;
-        return !lines.some((x) => x.base === l.base && x.cuenta === l.cuenta && x.debito === l.debito && x.credito === l.credito);
+        if (lines.some((x) => x.base === l.base && x.cuenta === l.cuenta && x.debito === l.debito && x.credito === l.credito)) return false;
+
+        // A. Si es documento soporte y la línea pertenece a otro comprobante de emisión con diferente folio
+        // (ej. lines ya tiene P 003 00000001260, no absorber P 003 00000001259)
+        if (isDocumentoSoporte(doc)) {
+          const isEmissionComp = /^(P\s*00[345]|P-00[345])/i.test(l.base);
+          if (isEmissionComp && compFolio(l.base) !== f) {
+            return false;
+          }
+        }
+
+        // B. Si la línea tiene un folio propio que no coincide con doc.folio y corresponde a otro documento DIAN conocido
+        if (l.folioN && l.folioN !== "0" && l.folioN !== f && takenExact.has(l.folioN)) {
+          return false;
+        }
+
+        // C. En documentos soporte: si el comprobante o sus líneas contienen explícitamente una referencia a OTRO folio DSET del mismo tercero (y no al actual)
+        if (isDocumentoSoporte(doc) && f && f.length >= 3) {
+          const compLines = indexed.filter((x) => x.base === l.base);
+          const compText = compLines.map((x) => `${x.descripcion} ${x.cruce}`).join(" ").toUpperCase();
+          const hasCurrentFolio = compText.includes(f);
+          const mentionsOtherDoc = indexed.some((otherL) => {
+            if (otherL.nitK !== cpNitK || !otherL.folioN || otherL.folioN === "0" || otherL.folioN === f) return false;
+            return compText.includes(otherL.folioN);
+          });
+          if (mentionsOtherDoc && !hasCurrentFolio) {
+            return false;
+          }
+        }
+
+        return true;
       });
       if (cruceMatches.length > 0) {
         lines = lines.concat(cruceMatches);
@@ -914,6 +945,15 @@ export function conciliar(
             r.matchVia = `Comisión bancaria en ${l.base}`;
             r.alerta = `Comisión con IVA registrada en comprobante ${l.base} como gasto financiero (${l.cuenta}).`;
           } else {
+            // Un pago (2205 débito contra banco) o una constitución de anticipo (1330 débito contra 2205 crédito sin gasto)
+            // NO es la causación de una factura de compra. La factura debe quedar pendiente si no se ha registrado su costo/gasto.
+            const compLines = indexed.filter((x) => x.base === l.base);
+            const hasExpenseOrAsset = compLines.some((x) => /^(5|6|7|14|15|17|2408)/.test(x.cuenta));
+            const isOnlyPaymentOrAdvance = compLines.every((x) => /^(11|1330|2205)/.test(x.cuenta));
+            if (isOnlyPaymentOrAdvance && !hasExpenseOrAsset) {
+              continue;
+            }
+
             r.estado = "posible_typo";
             r.hits = toHits([l]);
             r.comprobantes = [l.base];
@@ -963,7 +1003,15 @@ export function conciliar(
       alertaOrphan = `Servicio público domiciliario registrado en libros (${l.nombre}). Suelen ampararse bajo documento equivalente de servicios públicos.`;
     }
 
-    const dianMatches = rows.filter((r) => r.estado !== "solo_siigo" && nitKey(r.nitContraparte) === l.nitK);
+    const dianMatches = rows.filter(
+      (r) =>
+        r.estado !== "solo_siigo" &&
+        r.estado !== "no_aplica" &&
+        !APP_RESPONSE.test(r.tipo) &&
+        r.tipo !== "Application response" &&
+        isInvoiceLike(r.tipo) &&
+        nitKey(r.nitContraparte) === l.nitK,
+    );
     if (dianMatches.length > 0) {
       alertaOrphan += ` El emisor tiene ${dianMatches.length} factura(s) en la DIAN en el periodo (ej. ${dianMatches[0].numero}).`;
     }

@@ -697,4 +697,285 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
     const insight = getTaxInsight(rowCCB);
     assert.strictEqual(insight?.tipo !== "comision_bancaria", true);
   });
+
+  it("debe conciliar documentos soporte independientes del mismo proveedor y mismo valor sin marcarlos como duplicados", () => {
+    const dianDocs: DianDoc[] = [
+      {
+        grupo: "Emitido",
+        tipo: "Documento soporte con no obligados",
+        prefijo: "DSET",
+        folio: "1260",
+        cufe: "CUFE1260",
+        fechaEmision: "2026-08-05",
+        fechaRecepcion: "2026-08-05",
+        nitEmisor: "901260460",
+        nombreEmisor: "EMPRESA S.A.S.",
+        nitReceptor: "8738279",
+        nombreReceptor: "RAUL ROCHA FONSECA",
+        estadoDian: "Aceptado",
+        iva: 0,
+        total: 2639000,
+      },
+      {
+        grupo: "Emitido",
+        tipo: "Documento soporte con no obligados",
+        prefijo: "DSET",
+        folio: "1259",
+        cufe: "CUFE1259",
+        fechaEmision: "2026-08-05",
+        fechaRecepcion: "2026-08-05",
+        nitEmisor: "901260460",
+        nombreEmisor: "EMPRESA S.A.S.",
+        nitReceptor: "8738279",
+        nombreReceptor: "RAUL ROCHA FONSECA",
+        estadoDian: "Aceptado",
+        iva: 0,
+        total: 2639000,
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      // DSET 1260
+      {
+        cuenta: "73451501",
+        cuentaNombre: "MANTENIMIENTO",
+        comprobante: "P 003 00000001260 001",
+        fecha: "2026-08-05",
+        nit: "8738279",
+        nombre: "RAUL ROCHA FONSECA",
+        descripcion: "CC20260805 OC1320 REPARACION DE MOTOR",
+        cruce: "",
+        debito: 2639000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "22050501",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "P 003 00000001260 002",
+        fecha: "2026-08-05",
+        nit: "8738279",
+        nombre: "RAUL ROCHA FONSECA",
+        descripcion: "RAUL ROCHA FONSECA",
+        cruce: "P-003-00020260805-001",
+        debito: 0,
+        credito: 2639000,
+        observacion: "",
+      },
+      {
+        cuenta: "22050501",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "P 002 00000002872 001",
+        fecha: "2026-08-05",
+        nit: "8738279",
+        nombre: "RAUL ROCHA FONSECA",
+        descripcion: "DSET1260 OC1320 REPARACION DE MOTOR",
+        cruce: "P-003-00020260805-001",
+        debito: 2639000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "23652501",
+        cuentaNombre: "RETEFUENTE",
+        comprobante: "P 002 00000002872 002",
+        fecha: "2026-08-05",
+        nit: "8738279",
+        nombre: "RAUL ROCHA FONSECA",
+        descripcion: "DSET1260 OC1320 REPARACION DE MOTOR",
+        cruce: "",
+        debito: 0,
+        credito: 105560,
+        observacion: "",
+      },
+      // DSET 1259
+      {
+        cuenta: "73451501",
+        cuentaNombre: "MANTENIMIENTO",
+        comprobante: "P 003 00000001259 001",
+        fecha: "2026-08-05",
+        nit: "8738279",
+        nombre: "RAUL ROCHA FONSECA",
+        descripcion: "CC20260805 OC1319 REPARACION DE MOTOR",
+        cruce: "",
+        debito: 2639000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "22050501",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "P 003 00000001259 002",
+        fecha: "2026-08-05",
+        nit: "8738279",
+        nombre: "RAUL ROCHA FONSECA",
+        descripcion: "RAUL ROCHA FONSECA",
+        cruce: "P-003-00020260805-001",
+        debito: 0,
+        credito: 2639000,
+        observacion: "",
+      },
+      {
+        cuenta: "22050501",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "P 002 00000002871 001",
+        fecha: "2026-08-05",
+        nit: "8738279",
+        nombre: "RAUL ROCHA FONSECA",
+        descripcion: "DSET1238 OC1319 REPARACION DE MOTOR",
+        cruce: "P-003-00020260805-001",
+        debito: 2639000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "22050501",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "P 002 00000002871 004",
+        fecha: "2026-08-05",
+        nit: "8738279",
+        nombre: "RAUL ROCHA FONSECA",
+        descripcion: "RAUL ROCHA FONSECA",
+        cruce: "P-002-00000001259-001",
+        debito: 0,
+        credito: 2500452.5,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "AGO 2026");
+    const d1260 = res.rows.find((r) => r.numero === "DSET-1260")!;
+    const d1259 = res.rows.find((r) => r.numero === "DSET-1259")!;
+
+    assert.strictEqual(d1260.estado, "conciliado");
+    assert.strictEqual(d1259.estado, "conciliado");
+    assert.strictEqual(res.totals.duplicados, 0);
+  });
+
+  it("no debe cruzar facturas DIAN con pagos (2205 débito) o anticipos sin causación de gasto dejándolas pendientes", () => {
+    const dianDocs: DianDoc[] = [
+      {
+        grupo: "Recibido",
+        tipo: "Factura electrónica",
+        prefijo: "93",
+        folio: "281656",
+        cufe: "CUFE-SIIGO-281656",
+        fechaEmision: "2026-08-15",
+        fechaRecepcion: "2026-08-15",
+        nitEmisor: "830048145",
+        nombreEmisor: "SIIGO S.A.S.",
+        nitReceptor: "901260460",
+        nombreReceptor: "EMPRESA S.A.S.",
+        estadoDian: "Aceptado",
+        iva: 86400,
+        total: 541100,
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      // Anticipo
+      {
+        cuenta: "13300508",
+        cuentaNombre: "ANTICIPOS",
+        comprobante: "P 002 00000002876 001",
+        fecha: "2026-08-10",
+        nit: "830048145",
+        nombre: "SIIGO S.A.",
+        descripcion: "ANT1104 COMPRA DOCUMENTOS ELECTRONICOS",
+        cruce: "P-002-00000002876-001",
+        debito: 541100,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "22050501",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "P 002 00000002876 002",
+        fecha: "2026-08-10",
+        nit: "830048145",
+        nombre: "SIIGO S.A.",
+        descripcion: "SIIGO S.A.",
+        cruce: "P-002-00000001104-001",
+        debito: 0,
+        credito: 541100,
+        observacion: "",
+      },
+      // Pago bancario
+      {
+        cuenta: "22050501",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "G 002 00000002760 001",
+        fecha: "2026-08-10",
+        nit: "830048145",
+        nombre: "SIIGO S.A.",
+        descripcion: "PAG COMPRA DOCS ELECTRONICO - SIIGO S.A",
+        cruce: "P-002-00000001104-001",
+        debito: 541100,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "11100512",
+        cuentaNombre: "BANCOS",
+        comprobante: "G 002 00000002760 002",
+        fecha: "2026-08-10",
+        nit: "830048145",
+        nombre: "SIIGO S.A.",
+        descripcion: "SIIGO S.A.",
+        cruce: "",
+        debito: 0,
+        credito: 541100,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "AGO 2026");
+    const siigoRow = res.rows.find((r) => r.folio === "281656")!;
+
+    assert.strictEqual(siigoRow.estado, "pendiente");
+    assert.strictEqual(siigoRow.comprobantes.length, 0);
+  });
+
+  it("no debe mostrar eventos Application response como facturas en las alertas de Solo Libros", () => {
+    const dianDocs: DianDoc[] = [
+      {
+        grupo: "Emitido",
+        tipo: "Application response",
+        prefijo: "",
+        folio: "HFYF11935212",
+        cufe: "CUFE-EVENTO-1",
+        fechaEmision: "2026-08-05",
+        fechaRecepcion: "2026-08-05",
+        nitEmisor: "901260460",
+        nombreEmisor: "EMPRESA S.A.S.",
+        nitReceptor: "900414976",
+        nombreReceptor: "EMPAQUETADURA E INYECCION DIESEL",
+        estadoDian: "Aprobado",
+        iva: 0,
+        total: 0,
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      {
+        cuenta: "13300508",
+        cuentaNombre: "ANTICIPOS",
+        comprobante: "P 002 00000002874 001",
+        fecha: "2026-08-05",
+        nit: "900414976",
+        nombre: "EMPAQUETADURA E INYECCION DIESEL",
+        descripcion: "ANT1102 OC1293 SERVICIO EVALUACION",
+        cruce: "P-002-00000002874-001",
+        debito: 7211750,
+        credito: 0,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "AGO 2026");
+    const soloRow = res.rows.find((r) => r.estado === "solo_siigo")!;
+
+    assert.strictEqual(soloRow.linked.length, 0);
+    assert.strictEqual(soloRow.alerta.includes("HFYF11935212"), false);
+  });
 });
