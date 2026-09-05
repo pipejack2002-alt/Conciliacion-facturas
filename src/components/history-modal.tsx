@@ -12,16 +12,23 @@ import {
   Download,
   Upload,
   Search,
+  Cloud,
+  RefreshCw,
+  UserCheck,
+  ShieldCheck,
 } from "lucide-react";
 import { formatMoney } from "@/lib/format";
 import {
   getHistoryEntries,
+  syncUserHistoryWithCloud,
   deleteHistoryEntry,
   clearAllHistory,
   exportHistoryJson,
   importHistoryJson,
+  getActiveUserKey,
   type HistoryEntry,
 } from "@/lib/history-store";
+import { useTributoAuth } from "./tributo-auth-guardian";
 
 interface Props {
   open: boolean;
@@ -30,36 +37,73 @@ interface Props {
 }
 
 export function HistoryModal({ open, onClose, onSelectEntry }: Props) {
+  const { session } = useTributoAuth();
+  const user = session?.user;
+  const activeUserKey = getActiveUserKey(user?.email || (user?.id ? String(user.id) : ""));
+
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [query, setQuery] = useState("");
   const [feedback, setFeedback] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
-      setEntries(getHistoryEntries());
+      // 1. Mostrar de inmediato la versión local en caché
+      setEntries(getHistoryEntries(activeUserKey));
       setFeedback(null);
+
+      // 2. Sincronizar en segundo plano con la base de datos en la nube
+      setIsSyncing(true);
+      syncUserHistoryWithCloud(activeUserKey)
+        .then((synced) => {
+          setEntries(synced);
+        })
+        .catch((err) => {
+          console.warn("Fallo sincronización en nube:", err);
+        })
+        .finally(() => {
+          setIsSyncing(false);
+        });
     }
-  }, [open]);
+  }, [open, activeUserKey]);
 
   if (!open) return null;
 
+  async function handleManualSync() {
+    setIsSyncing(true);
+    setFeedback(null);
+    try {
+      const synced = await syncUserHistoryWithCloud(activeUserKey);
+      setEntries(synced);
+      setFeedback({ msg: "✅ Historial sincronizado con la nube exitosamente.", type: "ok" });
+    } catch {
+      setFeedback({ msg: "⚠️ No se pudo conectar a la base de datos en la nube. Mostrando caché local.", type: "err" });
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
   function handleDelete(id: string, e: React.MouseEvent) {
     e.stopPropagation();
-    const updated = deleteHistoryEntry(id);
+    const updated = deleteHistoryEntry(id, activeUserKey);
     setEntries(updated);
   }
 
   function handleClearAll() {
-    if (window.confirm("¿Está seguro de eliminar todo el historial de conciliaciones guardadas?")) {
-      clearAllHistory();
+    if (
+      window.confirm(
+        `¿Está seguro de eliminar todo el historial de conciliaciones de la cuenta "${user?.email || activeUserKey}"? Esta acción se aplicará en todos sus dispositivos.`
+      )
+    ) {
+      clearAllHistory(activeUserKey);
       setEntries([]);
-      setFeedback({ msg: "Historial vaciado correctamente.", type: "ok" });
+      setFeedback({ msg: "Historial vaciado en este equipo y en la nube.", type: "ok" });
     }
   }
 
   function handleExport() {
-    exportHistoryJson();
+    exportHistoryJson(activeUserKey);
   }
 
   function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -70,10 +114,10 @@ export function HistoryModal({ open, onClose, onSelectEntry }: Props) {
     reader.onload = (event) => {
       const content = event.target?.result as string;
       if (!content) return;
-      const res = importHistoryJson(content);
+      const res = importHistoryJson(content, activeUserKey);
       if (res.success) {
-        setEntries(getHistoryEntries());
-        setFeedback({ msg: `✅ Se importaron y restauraron ${res.count} sesiones exitosamente.`, type: "ok" });
+        setEntries(getHistoryEntries(activeUserKey));
+        setFeedback({ msg: `✅ Se importaron y sincronizaron ${res.count} sesiones exitosamente.`, type: "ok" });
       } else {
         setFeedback({ msg: `❌ Error al importar: ${res.error || "Formato no válido"}`, type: "err" });
       }
@@ -105,15 +149,38 @@ export function HistoryModal({ open, onClose, onSelectEntry }: Props) {
               <Building2 className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-ink">
-                Historial de Sesiones Multi-Empresa
-              </h2>
-              <p className="text-xs text-ink-muted">
-                Consulte, recupere o descargue copias de seguridad de sus auditorías previas
-              </p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold text-ink">
+                  Historial de Sesiones Multi-Empresa
+                </h2>
+                <span className="inline-flex items-center gap-1 rounded-full bg-teal-soft/80 border border-teal/30 px-2 py-0.5 text-[10px] font-semibold text-teal-deep">
+                  <Cloud className="size-3 text-teal" />
+                  Nube Sincronizada
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <p className="text-xs text-ink-muted">
+                  Sesiones vinculadas a su cuenta:
+                </p>
+                <span className="inline-flex items-center gap-1 font-semibold text-xs text-ink bg-bg-elevated px-2 py-0.2 rounded border border-line">
+                  <UserCheck className="size-3 text-teal" />
+                  {user?.email || user?.name || activeUserKey}
+                </span>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={isSyncing}
+              onClick={handleManualSync}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-bg-elevated px-2.5 py-1.5 text-xs font-medium text-ink hover:border-teal hover:text-teal transition disabled:opacity-60"
+              title="Sincronizar historial con la base de datos en la nube"
+            >
+              <RefreshCw className={`size-3.5 text-teal ${isSyncing ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">{isSyncing ? "Sincronizando..." : "Sincronizar"}</span>
+            </button>
+
             <input
               ref={fileInputRef}
               type="file"
@@ -129,7 +196,7 @@ export function HistoryModal({ open, onClose, onSelectEntry }: Props) {
               title="Restaurar sesiones desde un archivo JSON de respaldo"
             >
               <Upload className="size-3.5 text-teal" />
-              Importar copia
+              <span className="hidden sm:inline">Importar</span>
             </button>
 
             {entries.length > 0 && (
@@ -140,7 +207,7 @@ export function HistoryModal({ open, onClose, onSelectEntry }: Props) {
                 title="Descargar copia de seguridad en JSON de todas las sesiones"
               >
                 <Download className="size-3.5 text-teal" />
-                Exportar respaldo
+                <span className="hidden sm:inline">Exportar</span>
               </button>
             )}
 
@@ -149,9 +216,10 @@ export function HistoryModal({ open, onClose, onSelectEntry }: Props) {
                 type="button"
                 onClick={handleClearAll}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-danger/30 bg-danger-bg px-2.5 py-1.5 text-xs font-medium text-danger hover:bg-danger/20 transition"
+                title="Vaciar historial de esta cuenta"
               >
                 <Trash2 className="size-3.5" />
-                Vaciar
+                <span className="hidden sm:inline">Vaciar</span>
               </button>
             )}
             <button
@@ -191,9 +259,9 @@ export function HistoryModal({ open, onClose, onSelectEntry }: Props) {
           {entries.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <FolderOpen className="size-12 text-ink-subtle/50 mb-3" />
-              <h3 className="text-base font-semibold text-ink">No hay conciliaciones guardadas</h3>
+              <h3 className="text-base font-semibold text-ink">No hay conciliaciones para esta cuenta</h3>
               <p className="mt-1 max-w-sm text-xs text-ink-muted leading-relaxed">
-                Cada vez que ejecute una conciliación entre el archivo DIAN y los libros contables, la sesión se guardará automáticamente aquí para su posterior consulta o auditoría.
+                Cada vez que ejecute una conciliación entre el archivo DIAN y los libros contables, la sesión se guardará automáticamente y se sincronizará en la nube para su usuario <b className="text-ink font-semibold">{user?.email || activeUserKey}</b>.
               </p>
             </div>
           ) : filteredEntries.length === 0 ? (
@@ -280,9 +348,12 @@ export function HistoryModal({ open, onClose, onSelectEntry }: Props) {
 
         {/* Footer */}
         <div className="border-t border-line bg-bg-subtle/50 px-6 py-3 flex items-center justify-between">
-          <span className="text-xs text-ink-muted">
-            {entries.length} {entries.length === 1 ? "sesión guardada" : "sesiones guardadas"} localmente
-          </span>
+          <div className="flex items-center gap-2 text-xs text-ink-muted">
+            <ShieldCheck className="size-3.5 text-teal" />
+            <span>
+              {entries.length} {entries.length === 1 ? "sesión vinculada" : "sesiones vinculadas"} a esta cuenta y sincronizadas en la nube
+            </span>
+          </div>
           <button
             type="button"
             onClick={onClose}

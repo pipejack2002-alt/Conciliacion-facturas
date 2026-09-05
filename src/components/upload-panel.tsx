@@ -31,7 +31,8 @@ import {
 } from "@/lib/parse-excel";
 import type { ColumnMapping, DetectedProfile, SoftwareProfileId } from "@/lib/types";
 import { useConciliacion } from "@/lib/store";
-import { getHistoryEntries } from "@/lib/history-store";
+import { getHistoryEntries, syncUserHistoryWithCloud } from "@/lib/history-store";
+import { useTributoAuth } from "./tributo-auth-guardian";
 import { HistoryModal } from "./history-modal";
 import { GuiaConciliacionModal } from "./guia-conciliacion-modal";
 import { ColumnMapperModal } from "./column-mapper-modal";
@@ -72,14 +73,23 @@ export function UploadPanel() {
   const [isDraggingDian, setIsDraggingDian] = useState(false);
   const [isDraggingMov, setIsDraggingMov] = useState(false);
 
+  const { session } = useTributoAuth();
+  const userKey = session?.user?.email || (session?.user?.id ? String(session.user.id) : "");
+
   useEffect(() => {
     try {
-      const entries = getHistoryEntries();
+      const entries = getHistoryEntries(userKey);
       setHistoryCount(entries.length);
+
+      syncUserHistoryWithCloud(userKey)
+        .then((synced) => {
+          setHistoryCount(synced.length);
+        })
+        .catch(() => {});
     } catch {
       setHistoryCount(0);
     }
-  }, [showHistory]);
+  }, [showHistory, userKey]);
 
   async function handleDianPick(file: File | null) {
     setDianFile(file);

@@ -137,11 +137,13 @@ async function createPgliteSql(): Promise<Sql> {
   // passes serialized on a global chain so concurrent callers never
   // double-apply.
   const migrate = async (): Promise<void> => {
-    const migrations = import.meta.glob("/migrations/*.sql", {
-      query: "?raw",
-      import: "default",
-      eager: true,
-    }) as Record<string, string>;
+    const migrations = (typeof (import.meta as any).glob === "function"
+      ? (import.meta as any).glob("/migrations/*.sql", {
+          query: "?raw",
+          import: "default",
+          eager: true,
+        })
+      : {}) as Record<string, string>;
     const doneRows = await pg.query<{ name: string }>(
       "select name from _migrations",
     );
