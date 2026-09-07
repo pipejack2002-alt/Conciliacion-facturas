@@ -365,7 +365,7 @@ export function ResultBoard() {
   const sumaDian = filtered.reduce((s, r) => s + (r.estado === "solo_siigo" ? r.totalSiigo : r.totalDian), 0);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-20">
+    <div className="mx-auto w-full max-w-[1600px] px-3 sm:px-6 lg:px-8 pb-20">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-ink-muted">
         <div>
           <span className="font-medium text-ink">{result.company.nombre}</span>
@@ -974,11 +974,13 @@ function ColumnHeader({
   columnKey,
   title,
   align = "left",
+  className,
   renderFilter,
 }: {
   columnKey: SortId;
   title: string;
   align?: "left" | "right";
+  className?: string;
   renderFilter?: (close: () => void) => React.ReactNode;
 }) {
   const sort = useConciliacion((s) => s.sort);
@@ -1024,6 +1026,7 @@ function ColumnHeader({
         "relative px-3 py-2.5 font-medium transition-colors select-none text-xs uppercase tracking-wider",
         align === "right" ? "text-right" : "text-left",
         isSorted ? "bg-teal-soft/40 text-teal font-semibold" : "text-ink-subtle",
+        className,
       )}
     >
       <div
@@ -1146,13 +1149,23 @@ function DocTable({
   ];
 
   return (
-    <table className="w-full min-w-[920px] text-left text-sm">
+    <table className="w-full min-w-[960px] text-left text-sm table-auto">
+      <colgroup>
+        <col className="w-[14%] min-w-[135px]" />
+        <col className="w-[14%] min-w-[140px]" />
+        <col className="w-[30%] min-w-[200px]" />
+        <col className="w-[11%] min-w-[100px]" />
+        <col className="w-[9%] min-w-[90px]" />
+        <col className="w-[11%] min-w-[125px]" />
+        <col className="w-[11%] min-w-[125px]" />
+      </colgroup>
       {!compact ? (
         <thead className="sticky top-0 z-10 border-b border-line bg-bg-surface/95 backdrop-blur text-xs uppercase tracking-wider text-ink-subtle shadow-xs">
           <tr>
             <ColumnHeader
               columnKey="estado"
               title="Estado"
+              className="w-[14%] min-w-[135px]"
               renderFilter={(close) => (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-line pb-2">
@@ -1248,6 +1261,7 @@ function DocTable({
             <ColumnHeader
               columnKey="documento"
               title="Documento"
+              className="w-[14%] min-w-[140px] whitespace-nowrap"
               renderFilter={(close) => (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-line pb-2">
@@ -1334,6 +1348,7 @@ function DocTable({
             <ColumnHeader
               columnKey="proveedor"
               title="Proveedor / cliente"
+              className="w-[30%] min-w-[200px]"
               renderFilter={(close) => (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-line pb-2">
@@ -1410,6 +1425,7 @@ function DocTable({
             <ColumnHeader
               columnKey="cufe"
               title="CUFE"
+              className="w-[11%] min-w-[100px]"
               renderFilter={(close) => (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-line pb-2">
@@ -1507,6 +1523,7 @@ function DocTable({
             <ColumnHeader
               columnKey="fecha"
               title="Fecha"
+              className="w-[9%] min-w-[90px] whitespace-nowrap"
               renderFilter={(close) => (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-line pb-2">
@@ -1603,6 +1620,7 @@ function DocTable({
               columnKey="dian"
               title="DIAN"
               align="right"
+              className="w-[11%] min-w-[125px] whitespace-nowrap"
               renderFilter={(close) => (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-line pb-2">
@@ -1696,6 +1714,7 @@ function DocTable({
               columnKey="libros"
               title="Libros"
               align="right"
+              className="w-[11%] min-w-[125px] whitespace-nowrap"
               renderFilter={(close) => (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-line pb-2">
@@ -1769,7 +1788,7 @@ function DocTable({
                 done && "opacity-55",
               )}
             >
-              <td className="px-3 py-2.5">
+              <td className="px-3 py-2.5 min-w-[135px]">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <BadgeEstado estado={r.estado} />
                   {done ? (
@@ -1801,33 +1820,35 @@ function DocTable({
                   )}
                 </div>
               </td>
-              <td className="px-3 py-2.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-medium tabular-nums select-text">{r.numero || "—"}</span>
+              <td className="px-3 py-2.5 min-w-[140px] whitespace-nowrap">
+                <div className="flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="font-semibold tabular-nums select-text whitespace-nowrap text-ink">
+                    {r.numero || "—"}
+                  </span>
                   {r.numero && (
                     <CopyButton
                       text={r.numero}
                       label={`Copiar N° ${r.numero}`}
                       successMessage={`N° de documento ${r.numero} copiado al portapapeles`}
-                      className="rounded p-0.5 text-ink-subtle hover:bg-teal-soft hover:text-teal transition cursor-pointer"
+                      className="rounded p-0.5 text-ink-subtle hover:bg-teal-soft hover:text-teal transition cursor-pointer shrink-0"
                     >
                       <Copy className="size-3" />
                     </CopyButton>
                   )}
                 </div>
-                <div className="text-xs text-ink-subtle">
+                <div className="text-xs text-ink-subtle whitespace-nowrap">
                   {r.grupo} · {shortTipo(r.tipo)}
                   {r.matchVia ? ` · ${r.matchVia}` : ""}
                 </div>
               </td>
-              <td className="px-3 py-2.5">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-teal-soft/80 text-[10px] font-bold text-teal shadow-2xs">
+              <td className="px-3 py-2.5 min-w-[200px]">
+                <div className="flex items-start gap-2.5">
+                  <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-teal-soft/80 text-[10px] font-bold text-teal shadow-2xs mt-0.5">
                     {getInitials(r.nombreContraparte)}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <div className="max-w-56 truncate font-medium text-ink select-text" title={r.nombreContraparte}>
+                      <div className="max-w-xs sm:max-w-sm md:max-w-md truncate font-medium text-ink select-text" title={r.nombreContraparte}>
                         {r.nombreContraparte || "—"}
                       </div>
                       {r.nombreContraparte && (
@@ -1835,7 +1856,7 @@ function DocTable({
                           text={r.nombreContraparte}
                           label="Copiar nombre del proveedor"
                           successMessage={`Proveedor "${r.nombreContraparte}" copiado`}
-                          className="rounded p-0.5 text-ink-subtle hover:bg-teal-soft hover:text-teal transition cursor-pointer"
+                          className="rounded p-0.5 text-ink-subtle hover:bg-teal-soft hover:text-teal transition cursor-pointer shrink-0"
                         >
                           <Copy className="size-2.5" />
                         </CopyButton>
@@ -1857,17 +1878,21 @@ function DocTable({
                         {r.linked.map((l) => l.numero).join(", ")}
                       </div>
                     ) : null}
-                    {r.alerta ? <div className="mt-0.5 max-w-56 text-xs text-warn font-medium">{r.alerta}</div> : null}
+                    {r.alerta ? (
+                      <div className="mt-0.5 max-w-xs sm:max-w-sm md:max-w-md text-xs text-warn font-medium leading-relaxed select-text">
+                        {r.alerta}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </td>
-              <td className="px-3 py-2.5">
+              <td className="px-3 py-2.5 min-w-[100px]">
                 {r.cufe ? (
                   <CopyButton
                     text={r.cufe}
                     label="Copiar CUFE al portapapeles"
                     successMessage="CUFE copiado al portapapeles"
-                    className="group inline-flex items-center gap-1 max-w-[11rem] truncate rounded px-1.5 py-0.5 font-mono text-[11px] text-ink-muted hover:bg-teal-soft hover:text-teal transition cursor-pointer"
+                    className="group inline-flex items-center gap-1 max-w-[8rem] sm:max-w-[9.5rem] truncate rounded px-1.5 py-0.5 font-mono text-[11px] text-ink-muted hover:bg-teal-soft hover:text-teal transition cursor-pointer"
                   >
                     <span className="flex items-center gap-1 truncate">
                       <Copy className="size-3 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity" />
@@ -1878,7 +1903,7 @@ function DocTable({
                   <span className="text-ink-subtle">—</span>
                 )}
               </td>
-              <td className="px-3 py-2.5 tabular-nums text-ink-muted">
+              <td className="px-3 py-2.5 min-w-[90px] whitespace-nowrap tabular-nums text-ink-muted">
                 <div>{formatDate(r.fecha)}</div>
                 {dias != null ? (
                   <div className={cn("text-xs font-medium", dias > 30 ? "text-danger" : "text-ink-subtle")}>
@@ -1886,16 +1911,16 @@ function DocTable({
                   </div>
                 ) : null}
               </td>
-              <td className="px-3 py-2.5 text-right tabular-nums">
-                <div className="font-medium text-ink">{formatMoneyExact(r.totalDian)}</div>
+              <td className="px-3 py-2.5 min-w-[125px] whitespace-nowrap text-right tabular-nums">
+                <div className="font-semibold text-ink">{formatMoneyExact(r.totalDian)}</div>
                 {r.iva ? (
                   <div className="text-xs text-ink-subtle" title="IVA en DIAN">
                     IVA {formatMoneyExact(r.iva)}
                   </div>
                 ) : null}
               </td>
-              <td className="px-3 py-2.5 text-right tabular-nums">
-                <div className="font-medium text-ink">
+              <td className="px-3 py-2.5 min-w-[125px] whitespace-nowrap text-right tabular-nums">
+                <div className="font-semibold text-ink">
                   {r.hits.length ? formatMoneyExact(r.totalSiigo) : "—"}
                 </div>
                 {r.hits.length ? (
@@ -1916,13 +1941,13 @@ function DocTable({
       {footer ? (
         <tfoot className="border-t border-line bg-bg-subtle/60 text-xs font-medium text-ink-muted">
           <tr>
-            <td colSpan={5} className="px-3 py-2 text-right">
+            <td colSpan={5} className="px-3 py-2.5 text-right">
               Total DIAN visible
             </td>
-            <td className="px-3 py-2 text-right tabular-nums font-semibold text-ink">
+            <td className="px-3 py-2.5 text-right font-mono font-semibold text-ink whitespace-nowrap">
               {footer}
             </td>
-            <td />
+            <td className="px-3 py-2.5" />
           </tr>
         </tfoot>
       ) : null}
