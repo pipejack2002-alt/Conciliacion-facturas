@@ -94,11 +94,17 @@ export function ReplaceBar() {
     try {
       const wb = await readWorkbook(file);
       const dian = parseDianSheet(wb);
-      if (!dian.length) throw new Error("No pude leer documentos en el reporte DIAN.");
-      replaceDian(dian, file.name);
-      flash("Reporte DIAN actualizado. Recalculamos la conciliación.");
+      if (!dian.length) {
+        throw new Error(
+          `No se pudieron leer documentos en el reporte DIAN "${file.name}". Verifica que contenga las columnas oficiales de la DIAN.`
+        );
+      }
+      await replaceDian(dian, file.name);
+      flash(`Reporte DIAN actualizado (${dian.length} documentos). Conciliación recalculada.`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error al leer el DIAN.");
+      const msg = e instanceof Error ? e.message : "Error al leer el DIAN.";
+      setError(msg);
+      flash(`⚠️ ${msg}`);
     } finally {
       setBusy(null);
       if (dianRef.current) dianRef.current.value = "";
@@ -111,11 +117,22 @@ export function ReplaceBar() {
     try {
       const wb = await readWorkbook(file);
       const mov = parseMovSheet(wb);
-      if (!mov.length) throw new Error("No pude leer movimientos en el archivo contable.");
-      replaceMov(mov, file.name);
-      flash("Movimiento actualizado. Cruzamos de nuevo contra el DIAN.");
+      if (!mov.length) {
+        throw new Error(
+          `No se pudieron leer movimientos en el archivo "${file.name}". Verifica que contenga cuentas, comprobantes, débitos o créditos.`
+        );
+      }
+      await replaceMov(mov, file.name);
+      const delta = useConciliacion.getState().delta;
+      if (delta?.confirmed && delta.confirmed.length > 0) {
+        flash(`✅ Movimiento actualizado: ${delta.confirmed.length} factura(s) que estaban en cola ya aparecen en libros.`);
+      } else {
+        flash(`✅ Movimiento actualizado (${mov.length} registros contables cruzados contra el DIAN).`);
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error al leer el movimiento.");
+      const msg = e instanceof Error ? e.message : "Error al leer el movimiento.";
+      setError(msg);
+      flash(`⚠️ ${msg}`);
     } finally {
       setBusy(null);
       if (movRef.current) movRef.current.value = "";

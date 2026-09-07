@@ -12,6 +12,13 @@ import {
 import { conciliar } from "./conciliar.ts";
 import { saveHistoryEntry, getHistoryEntries, type HistoryEntry } from "./history-store.ts";
 import type { ConciliacionResult, DianDoc, MovLine } from "./types.ts";
+import {
+  clearCachedFiles,
+  loadCachedFiles,
+  reconstructDianFromRows,
+  reconstructMovFromResults,
+  saveCachedFiles,
+} from "./file-cache.ts";
 
 export type { Review } from "./reviews.ts";
 
@@ -71,8 +78,8 @@ type State = {
   delta: AuditDelta | null;
   setFiles: (dian: DianDoc[], mov: MovLine[], names: { dian: string; mov: string }, period?: string) => void;
   loadHistorySession: (entry: HistoryEntry) => void;
-  replaceDian: (dian: DianDoc[], name: string) => void;
-  replaceMov: (mov: MovLine[], name: string) => void;
+  replaceDian: (dian: DianDoc[], name: string) => Promise<void> | void;
+  replaceMov: (mov: MovLine[], name: string) => Promise<void> | void;
   setQuery: (q: string) => void;
   setTab: (t: TabId) => void;
   setSort: (s: SortId, dir?: SortDirection) => void;
@@ -240,6 +247,15 @@ export const useConciliacion = create<State>((set, get) => ({
         hideRevisados: active.hideRevisados ?? get().hideRevisados,
         reviews: active.reviews || get().reviews || {},
       });
+      // Cargar archivos raw desde IndexedDB en segundo plano
+      void loadCachedFiles().then((cached) => {
+        if (cached && (cached.dian.length || cached.mov.length)) {
+          set({
+            dian: cached.dian.length ? cached.dian : get().dian,
+            mov: cached.mov.length ? cached.mov : get().mov,
+          });
+        }
+      });
       return true;
     }
     return false;
@@ -270,6 +286,8 @@ export const useConciliacion = create<State>((set, get) => ({
     const delta = delta0 ? { ...delta0, stillMarked } : stillMarked.length ? { at: new Date().toISOString(), confirmed: [], stillOpen: [], newIssues: [], stillMarked } : null;
     saveSnapshot(result);
     saveHistoryEntry(result, names.dian, names.mov, reviews);
+    // Guardar en caché persistente IndexedDB
+    void saveCachedFiles(dian, mov);
     set({
       dian,
       mov,
@@ -306,15 +324,41 @@ export const useConciliacion = create<State>((set, get) => ({
     });
     autoPersist(get);
   },
-  replaceDian: (dian, name) => {
-    const { mov, movName } = get();
-    if (!mov.length) return;
-    get().setFiles(dian, mov, { dian: name, mov: movName });
+  replaceDian: async (dian, name) => {
+    let { mov, movName, result } = get();
+    if (!mov.length) {
+      const cached = await loadCachedFiles();
+      if (cached && cached.mov && cached.mov.length) {
+        mov = cached.mov;
+      }
+    }
+    if (!mov.length && result && result.rows && result.rows.length) {
+      mov = reconstructMovFromResults(result);
+    }
+    if (!mov.length) {
+      get().setError("No se encontraron movimientos contables previos para cruzar contra el nuevo reporte DIAN.");
+      get().flash("⚠️ No hay movimientos contables en la sesión. Sube ambos archivos.");
+      return;
+    }
+    get().setFiles(dian, mov, { dian: name, mov: movName || "Movimiento Contable" });
   },
-  replaceMov: (mov, name) => {
-    const { dian, dianName } = get();
-    if (!dian.length) return;
-    get().setFiles(dian, mov, { dian: dianName, mov: name });
+  replaceMov: async (mov, name) => {
+    let { dian, dianName, result } = get();
+    if (!dian.length) {
+      const cached = await loadCachedFiles();
+      if (cached && cached.dian && cached.dian.length) {
+        dian = cached.dian;
+      }
+    }
+    if (!dian.length && result && result.rows && result.rows.length) {
+      dian = reconstructDianFromRows(result.rows, result.company);
+    }
+    if (!dian.length) {
+      get().setError("No se encontraron documentos DIAN previos para cruzar contra el nuevo movimiento.");
+      get().flash("⚠️ No hay documentos DIAN en la sesión. Sube ambos archivos.");
+      return;
+    }
+    get().setFiles(dian, mov, { dian: dianName || "Reporte DIAN", mov: name });
   },
   setQuery: (query) => set({ query }),
   setTab: (tab) => {
@@ -407,6 +451,7 @@ export const useConciliacion = create<State>((set, get) => ({
   select: (selectedId) => set({ selectedId }),
   reset: () => {
     clearActiveSession();
+    void clearCachedFiles();
     set({
       dian: [],
       mov: [],

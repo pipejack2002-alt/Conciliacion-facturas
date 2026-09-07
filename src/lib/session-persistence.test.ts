@@ -238,4 +238,47 @@ describe("Persistencia de Sesión Activa (Evitar pérdida en F5 / Actualizar)", 
     assert.equal(fallbackSession.result?.company.nit, "900999888");
     assert.equal(fallbackSession.dianName, "Dian_Fallback.xlsx");
   });
+
+  it("debe actualizar el movimiento y re-conciliar exitosamente aunque dian esté vacío en memoria", async () => {
+    // Simular estado tras recargar página (F5): result existe pero dian y mov son []
+    useConciliacion.setState({
+      result: mockResult,
+      dian: [],
+      mov: [],
+      dianName: "REPORTE DIAN CDS JUL 2026.xlsx",
+      movName: "MOV CDS JUL 2026.xlsx",
+    });
+
+    assert.equal(useConciliacion.getState().dian.length, 0);
+
+    // Nuevo movimiento que contiene la factura FE-101 que estaba pendiente
+    const updatedMov = [
+      {
+        cuenta: "220505",
+        cuentaNombre: "Proveedores",
+        comprobante: "FC-10",
+        fecha: "2026-08-15",
+        nit: "800111222",
+        nombre: "Proveedor A",
+        descripcion: "Causacion Factura FE-101",
+        cruce: "FE-101",
+        referencia: "FE-101",
+        debito: 0,
+        credito: 150000,
+        observacion: "",
+      },
+    ];
+
+    await useConciliacion.getState().replaceMov(updatedMov, "MOV CDS JUL 2026 ACTUALIZADO.xlsx");
+
+    const state = useConciliacion.getState();
+    assert.equal(state.movName, "MOV CDS JUL 2026 ACTUALIZADO.xlsx");
+    assert.ok(state.result);
+    // La factura FE-101 que estaba pendiente ahora debe estar conciliada
+    const row = state.result.rows.find((r) => r.numero === "FE-101");
+    assert.ok(row, "Debe existir la fila FE-101");
+    assert.equal(row.estado, "conciliado");
+    assert.equal(state.result.totals.pendientesRecibidos, 0);
+    assert.equal(state.result.totals.conciliados, 1);
+  });
 });

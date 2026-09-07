@@ -173,26 +173,33 @@ export function findBestMovSheet(wb: XLSX.WorkBook): string {
       raw: true,
     });
     if (!rows.length) continue;
-    const text = rows.slice(0, 20).map((r) => r.map((c) => cellStr(c).toUpperCase()).join(" ")).join(" ");
-    if (text.includes("COMPROBANTE") && text.includes("DEBITO")) return name;
-    if (text.includes("CUENTA") && (text.includes("DEBITO") || text.includes("CREDITO"))) return name;
-    if (text.includes("DOCUMENTO DE REFERENCIA") || text.includes("DOC. FUENTE") || text.includes("CHEQUE / REFERENCIA")) return name;
-    if (text.includes("NIT") && (text.includes("DEBITO") || text.includes("CREDITO"))) return name;
+    const text = rows
+      .slice(0, 40)
+      .map((r) => r.map((c) => cellStr(c).toUpperCase()).join(" "))
+      .join(" ");
+    if (text.includes("COMPROBANTE") && (text.includes("DEBITO") || text.includes("DÉBITO") || text.includes("CREDITO") || text.includes("CRÉDITO"))) return name;
+    if (text.includes("CUENTA") && (text.includes("DEBITO") || text.includes("DÉBITO") || text.includes("CREDITO") || text.includes("CRÉDITO"))) return name;
+    if (text.includes("DOCUMENTO DE REFERENCIA") || text.includes("DOC. FUENTE") || text.includes("CHEQUE / REFERENCIA") || text.includes("DOC CRUCE") || text.includes("DOC. CRUCE")) return name;
+    if (text.includes("NIT") && (text.includes("DEBITO") || text.includes("DÉBITO") || text.includes("CREDITO") || text.includes("CRÉDITO") || text.includes("SALDO"))) return name;
   }
   return names[0];
 }
 
-export function parseDianSheet(wb: XLSX.WorkBook, sheetName?: string): DianDoc[] {
-  const chosenSheet = sheetName && wb.Sheets[sheetName] ? sheetName : findBestDianSheet(wb);
-  const sheet = wb.Sheets[chosenSheet];
-  if (!sheet) return [];
-  const rows = XLSX.utils.sheet_to_json<(string | number | Date | null)[]>(sheet, {
-    header: 1,
-    defval: "",
-    raw: true,
-  });
+export function extractDianDocsFromRows(rows: (string | number | Date | null)[][]): DianDoc[] {
   if (!rows.length) return [];
-  const headerRow = rows[0].map((c) => cellStr(c));
+  // Detectar la fila de encabezado en las primeras 5 filas (por si la fila 0 es un título)
+  let headerIndex = 0;
+  for (let r = 0; r < Math.min(rows.length, 5); r++) {
+    const rowNorm = (rows[r] || []).map((c) => normHeader(cellStr(c)));
+    const hasFolio = rowNorm.some((h) => h.includes("folio") || h.includes("prefijo"));
+    const hasDianId = rowNorm.some((h) => h.includes("cufe") || h.includes("tipo de documento") || h.includes("nit emisor"));
+    if (hasFolio || hasDianId) {
+      headerIndex = r;
+      break;
+    }
+  }
+
+  const headerRow = (rows[headerIndex] || []).map((c) => cellStr(c));
   const map = new Map<string, number>();
   headerRow.forEach((h, i) => map.set(normHeader(h), i));
 
@@ -212,7 +219,7 @@ export function parseDianSheet(wb: XLSX.WorkBook, sheetName?: string): DianDoc[]
   const iGr = col(map, ["grupo"]);
 
   const out: DianDoc[] = [];
-  for (let r = 1; r < rows.length; r++) {
+  for (let r = headerIndex + 1; r < rows.length; r++) {
     const row = rows[r];
     if (!row || !row.length) continue;
     const tipo = iTipo != null ? cellStr(row[iTipo]) : "";
@@ -233,6 +240,35 @@ export function parseDianSheet(wb: XLSX.WorkBook, sheetName?: string): DianDoc[]
       estadoDian: iEst != null ? cellStr(row[iEst]) : "",
       grupo: iGr != null ? cellStr(row[iGr]) : "",
     });
+  }
+  return out;
+}
+
+export function parseDianSheet(wb: XLSX.WorkBook, sheetName?: string): DianDoc[] {
+  const chosenSheet = sheetName && wb.Sheets[sheetName] ? sheetName : findBestDianSheet(wb);
+  const sheet = wb.Sheets[chosenSheet];
+  const rows = sheet
+    ? XLSX.utils.sheet_to_json<(string | number | Date | null)[]>(sheet, {
+        header: 1,
+        defval: "",
+        raw: true,
+      })
+    : [];
+
+  let out = extractDianDocsFromRows(rows);
+  if (!out.length && wb.SheetNames && wb.SheetNames.length > 1) {
+    for (const name of wb.SheetNames) {
+      if (name === chosenSheet) continue;
+      const otherSheet = wb.Sheets[name];
+      if (!otherSheet) continue;
+      const otherRows = XLSX.utils.sheet_to_json<(string | number | Date | null)[]>(otherSheet, {
+        header: 1,
+        defval: "",
+        raw: true,
+      });
+      const candidate = extractDianDocsFromRows(otherRows);
+      if (candidate.length > 0) return candidate;
+    }
   }
   return out;
 }
@@ -289,21 +325,11 @@ export function inspectMovSheet(
   };
 }
 
-export function parseMovSheet(
-  wb: XLSX.WorkBook,
-  sheetName?: string,
+export function parseRowsToMov(
+  rows: (string | number | Date | null)[][],
   options?: ParseMovOptions,
 ): MovLine[] {
-  const chosenSheet = sheetName && wb.Sheets[sheetName] ? sheetName : findBestMovSheet(wb);
-  const sheet = wb.Sheets[chosenSheet];
-  if (!sheet) return [];
-  const rows = XLSX.utils.sheet_to_json<(string | number | Date | null)[]>(sheet, {
-    header: 1,
-    defval: "",
-    raw: true,
-  });
-  if (!rows.length) return [];
-
+  if (!rows || !rows.length) return [];
   const detected = detectSoftwareProfile(rows);
   const headerIdx = options?.headerRow ?? detected.headerRow;
   const mapping = options?.mapping ?? detected.mapping;
@@ -364,6 +390,42 @@ export function parseMovSheet(
       origenSoftware: detected.id,
     });
   }
+  return out;
+}
+
+export function parseMovSheet(
+  wb: XLSX.WorkBook,
+  sheetName?: string,
+  options?: ParseMovOptions,
+): MovLine[] {
+  const chosenSheet = sheetName && wb.Sheets[sheetName] ? sheetName : findBestMovSheet(wb);
+  const sheet = wb.Sheets[chosenSheet];
+  const rows = sheet
+    ? XLSX.utils.sheet_to_json<(string | number | Date | null)[]>(sheet, {
+        header: 1,
+        defval: "",
+        raw: true,
+      })
+    : [];
+
+  let out = parseRowsToMov(rows, options);
+
+  // Si la hoja seleccionada no produjo movimientos y el archivo tiene otras hojas, intentar en las demás
+  if (!out.length && wb.SheetNames && wb.SheetNames.length > 1) {
+    for (const name of wb.SheetNames) {
+      if (name === chosenSheet) continue;
+      const otherSheet = wb.Sheets[name];
+      if (!otherSheet) continue;
+      const otherRows = XLSX.utils.sheet_to_json<(string | number | Date | null)[]>(otherSheet, {
+        header: 1,
+        defval: "",
+        raw: true,
+      });
+      const candidate = parseRowsToMov(otherRows, options);
+      if (candidate.length > 0) return candidate;
+    }
+  }
+
   return out;
 }
 
