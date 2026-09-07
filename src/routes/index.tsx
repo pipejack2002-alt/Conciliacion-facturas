@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { UploadPanel } from "@/components/upload-panel";
 import { ResultBoard } from "@/components/result-board";
@@ -18,6 +19,13 @@ function ProtectedConciliadorApp() {
 
 function ConciliadorApp() {
   const result = useConciliacion((s) => s.result);
+  const restoreActiveSession = useConciliacion((s) => s.restoreActiveSession);
+
+  useEffect(() => {
+    if (!result) {
+      restoreActiveSession();
+    }
+  }, [result, restoreActiveSession]);
 
   return (
     <div className="min-h-screen bg-bg text-ink flex flex-col selection:bg-teal-soft selection:text-teal-deep">

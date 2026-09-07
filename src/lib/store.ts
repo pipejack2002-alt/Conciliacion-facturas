@@ -10,7 +10,7 @@ import {
   saveSnapshot,
 } from "./reviews.ts";
 import { conciliar } from "./conciliar.ts";
-import { saveHistoryEntry, type HistoryEntry } from "./history-store.ts";
+import { saveHistoryEntry, getHistoryEntries, type HistoryEntry } from "./history-store.ts";
 import type { ConciliacionResult, DianDoc, MovLine } from "./types.ts";
 
 export type { Review } from "./reviews.ts";
@@ -86,6 +86,7 @@ type State = {
   markValidated: (row: { cufe?: string; nitContraparte?: string; numero?: string; folio?: string }, action: "validada" | "omitir") => void;
   select: (id: string | null) => void;
   reset: () => void;
+  restoreActiveSession: () => boolean;
   setError: (e: string | null) => void;
   flash: (msg: string | null) => void;
   dismissDelta: () => void;
@@ -98,24 +99,151 @@ export function reviewOf(
   return reviews[docKey(row)];
 }
 
+export interface ActiveSessionData {
+  result: ConciliacionResult | null;
+  dianName: string;
+  movName: string;
+  reviews: Record<string, Review>;
+  tab?: TabId;
+  sort?: SortId;
+  sortDirection?: SortDirection;
+  columnFilters?: ColumnFilters;
+  groupByProveedor?: boolean;
+  hideRevisados?: boolean;
+}
+
+const ACTIVE_SESSION_STORAGE_KEY = "conciliacion_active_session_v1";
+const DISMISSED_SESSION_STORAGE_KEY = "conciliacion_session_dismissed_v1";
+
+export function loadActiveSession(): ActiveSessionData | null {
+  if (typeof window === "undefined") return null;
+  try {
+    // Si el usuario explícitamente hizo clic en "Nueva auditoría", respetar su decisión
+    if (
+      sessionStorage.getItem(DISMISSED_SESSION_STORAGE_KEY) === "true" ||
+      localStorage.getItem(DISMISSED_SESSION_STORAGE_KEY) === "true"
+    ) {
+      return null;
+    }
+
+    const raw = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.result && parsed.result.company && Array.isArray(parsed.result.rows)) {
+        return parsed as ActiveSessionData;
+      }
+    }
+
+    // Fallback inteligente: si no hay sesión activa guardada pero el usuario tiene historial reciente
+    const historyEntries = getHistoryEntries();
+    if (historyEntries.length > 0) {
+      const latest = historyEntries[0];
+      if (latest && latest.result) {
+        return {
+          result: latest.result,
+          dianName: latest.dianName || "Reporte DIAN",
+          movName: latest.movName || "Movimiento Contable",
+          reviews: latest.reviews || {},
+          tab: "cola",
+          sort: "prioridad",
+          sortDirection: "asc",
+          columnFilters: {},
+          groupByProveedor: false,
+          hideRevisados: false,
+        };
+      }
+    }
+
+    return null;
+  } catch (e) {
+    console.warn("[store] No se pudo cargar sesión activa previa:", e);
+    return null;
+  }
+}
+
+export function saveActiveSession(data: ActiveSessionData) {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(DISMISSED_SESSION_STORAGE_KEY);
+    localStorage.removeItem(DISMISSED_SESSION_STORAGE_KEY);
+    if (!data.result) {
+      localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.warn("[store] Error al persistir sesión activa:", e);
+  }
+}
+
+export function clearActiveSession() {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(DISMISSED_SESSION_STORAGE_KEY, "true");
+    localStorage.setItem(DISMISSED_SESSION_STORAGE_KEY, "true");
+    localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+  } catch {}
+}
+
+function autoPersist(get: () => State) {
+  const s = get();
+  if (s.result) {
+    saveActiveSession({
+      result: s.result,
+      dianName: s.dianName,
+      movName: s.movName,
+      reviews: s.reviews,
+      tab: s.tab,
+      sort: s.sort,
+      sortDirection: s.sortDirection,
+      columnFilters: s.columnFilters,
+      groupByProveedor: s.groupByProveedor,
+      hideRevisados: s.hideRevisados,
+    });
+  } else {
+    clearActiveSession();
+  }
+}
+
+const initialActive = typeof window !== "undefined" ? loadActiveSession() : null;
+
 export const useConciliacion = create<State>((set, get) => ({
   dian: [],
   mov: [],
-  dianName: "",
-  movName: "",
-  result: null,
+  dianName: initialActive?.dianName || "",
+  movName: initialActive?.movName || "",
+  result: initialActive?.result || null,
   query: "",
-  tab: "cola",
-  sort: "prioridad",
-  sortDirection: "asc",
-  columnFilters: {},
-  groupByProveedor: false,
-  hideRevisados: false,
-  reviews: {},
+  tab: initialActive?.tab || "cola",
+  sort: initialActive?.sort || "prioridad",
+  sortDirection: initialActive?.sortDirection || "asc",
+  columnFilters: initialActive?.columnFilters || {},
+  groupByProveedor: Boolean(initialActive?.groupByProveedor),
+  hideRevisados: Boolean(initialActive?.hideRevisados),
+  reviews: initialActive?.reviews || {},
   selectedId: null,
   error: null,
   toast: null,
   delta: null,
+  restoreActiveSession: () => {
+    const active = loadActiveSession();
+    if (active && active.result) {
+      set({
+        dianName: active.dianName || "",
+        movName: active.movName || "",
+        result: active.result,
+        tab: active.tab || get().tab || "cola",
+        sort: active.sort || get().sort || "prioridad",
+        sortDirection: active.sortDirection || get().sortDirection || "asc",
+        columnFilters: active.columnFilters || get().columnFilters || {},
+        groupByProveedor: active.groupByProveedor ?? get().groupByProveedor,
+        hideRevisados: active.hideRevisados ?? get().hideRevisados,
+        reviews: active.reviews || get().reviews || {},
+      });
+      return true;
+    }
+    return false;
+  },
   setFiles: (dian, mov, names, period) => {
     const result = conciliar(dian, mov, period || names.dian);
     const nit = result.company.nit;
@@ -158,6 +286,7 @@ export const useConciliacion = create<State>((set, get) => ({
         ? `${delta.confirmed.length} documento${delta.confirmed.length === 1 ? "" : "s"} que estaban en cola ya aparecen en libros.`
         : get().toast,
     });
+    autoPersist(get);
   },
   loadHistorySession: (entry: HistoryEntry) => {
     const reviews = entry.reviews || loadReviews(entry.company.nit);
@@ -175,6 +304,7 @@ export const useConciliacion = create<State>((set, get) => ({
       delta: null,
       toast: `Sesión de ${entry.company.nombre || "Empresa"} (${entry.periodLabel || "Período"}) cargada desde el historial.`,
     });
+    autoPersist(get);
   },
   replaceDian: (dian, name) => {
     const { mov, movName } = get();
@@ -187,7 +317,10 @@ export const useConciliacion = create<State>((set, get) => ({
     get().setFiles(dian, mov, { dian: dianName, mov: name });
   },
   setQuery: (query) => set({ query }),
-  setTab: (tab) => set({ tab, selectedId: null }),
+  setTab: (tab) => {
+    set({ tab, selectedId: null });
+    autoPersist(get);
+  },
   setSort: (sort, dir) => {
     if (dir) {
       set({ sort, sortDirection: dir });
@@ -196,6 +329,7 @@ export const useConciliacion = create<State>((set, get) => ({
         sort === "monto" || sort === "dian" || sort === "libros" ? "desc" : "asc";
       set({ sort, sortDirection: defaultDir });
     }
+    autoPersist(get);
   },
   toggleSort: (col) => {
     const currentSort = get().sort;
@@ -207,6 +341,7 @@ export const useConciliacion = create<State>((set, get) => ({
         col === "monto" || col === "dian" || col === "libros" ? "desc" : "asc";
       set({ sort: col, sortDirection: defaultDir });
     }
+    autoPersist(get);
   },
   setColumnFilter: (key, value) => {
     set((state) => ({
@@ -215,6 +350,7 @@ export const useConciliacion = create<State>((set, get) => ({
         [key]: value,
       },
     }));
+    autoPersist(get);
   },
   clearColumnFilter: (key) => {
     set((state) => {
@@ -222,10 +358,20 @@ export const useConciliacion = create<State>((set, get) => ({
       delete next[key];
       return { columnFilters: next };
     });
+    autoPersist(get);
   },
-  clearAllColumnFilters: () => set({ columnFilters: {} }),
-  toggleGroup: () => set({ groupByProveedor: !get().groupByProveedor }),
-  toggleHideRevisados: () => set({ hideRevisados: !get().hideRevisados }),
+  clearAllColumnFilters: () => {
+    set({ columnFilters: {} });
+    autoPersist(get);
+  },
+  toggleGroup: () => {
+    set({ groupByProveedor: !get().groupByProveedor });
+    autoPersist(get);
+  },
+  toggleHideRevisados: () => {
+    set({ hideRevisados: !get().hideRevisados });
+    autoPersist(get);
+  },
   setReview: (row, patch) => {
     const nit = get().result?.company.nit || "";
     const key = docKey(row);
@@ -233,6 +379,7 @@ export const useConciliacion = create<State>((set, get) => ({
     const next = { ...get().reviews, [key]: { ...prev, ...patch } };
     saveReviews(nit, next);
     set({ reviews: next });
+    autoPersist(get);
   },
   markValidated: (row, action) => {
     const nit = get().result?.company.nit || "";
@@ -255,9 +402,11 @@ export const useConciliacion = create<State>((set, get) => ({
           : "Omitida en esta auditoría. Puedes ocultar las revisadas."
         : "Marca quitada",
     });
+    autoPersist(get);
   },
   select: (selectedId) => set({ selectedId }),
-  reset: () =>
+  reset: () => {
+    clearActiveSession();
     set({
       dian: [],
       mov: [],
@@ -276,7 +425,8 @@ export const useConciliacion = create<State>((set, get) => ({
       error: null,
       toast: null,
       delta: null,
-    }),
+    });
+  },
   setError: (error) => set({ error }),
   flash: (toast) => set({ toast }),
   dismissDelta: () => set({ delta: null }),
