@@ -1023,15 +1023,15 @@ function ColumnHeader({
   return (
     <th
       className={cn(
-        "relative px-3 py-2.5 font-medium transition-colors select-none text-xs uppercase tracking-wider",
+        "relative px-2.5 py-2 font-semibold transition-colors select-none text-[11px] sm:text-xs uppercase tracking-wider",
         align === "right" ? "text-right" : "text-left",
-        isSorted ? "bg-teal-soft/40 text-teal font-semibold" : "text-ink-subtle",
+        isSorted ? "bg-teal-soft/40 text-teal font-bold" : "text-ink-subtle",
         className,
       )}
     >
       <div
         className={cn(
-          "inline-flex items-center gap-1.5 group",
+          "inline-flex items-center gap-1 group",
           align === "right" && "justify-end flex-row-reverse",
         )}
       >
@@ -1039,7 +1039,7 @@ function ColumnHeader({
           type="button"
           onClick={() => toggleSort(columnKey)}
           className={cn(
-            "inline-flex items-center gap-1.5 transition-colors cursor-pointer text-inherit font-inherit",
+            "inline-flex items-center gap-1 transition-colors cursor-pointer text-inherit font-inherit whitespace-nowrap",
             isSorted ? "text-teal" : "hover:text-teal",
             align === "right" && "flex-row-reverse",
           )}
@@ -1049,7 +1049,7 @@ function ColumnHeader({
               : `Clic para ordenar por ${title}`
           }
         >
-          <span>{title}</span>
+          <span className="font-bold uppercase tracking-wider whitespace-nowrap">{title}</span>
           <span className="shrink-0 inline-flex items-center">
             {isSorted ? (
               sortDirection === "asc" ? (
@@ -1149,23 +1149,23 @@ function DocTable({
   ];
 
   return (
-    <table className="w-full min-w-[960px] text-left text-sm table-auto">
+    <table className="w-full min-w-[820px] text-left text-sm table-auto">
       <colgroup>
-        <col className="w-[14%] min-w-[135px]" />
-        <col className="w-[14%] min-w-[140px]" />
-        <col className="w-[30%] min-w-[200px]" />
-        <col className="w-[11%] min-w-[100px]" />
-        <col className="w-[9%] min-w-[90px]" />
-        <col className="w-[11%] min-w-[125px]" />
-        <col className="w-[11%] min-w-[125px]" />
+        <col className="w-[15%] min-w-[125px]" />
+        <col className="w-[13%] min-w-[110px]" />
+        <col className="w-[32%] min-w-[190px]" />
+        <col className="w-[10%] min-w-[85px]" />
+        <col className="w-[9%] min-w-[80px]" />
+        <col className="w-[11%] min-w-[110px]" />
+        <col className="w-[10%] min-w-[110px]" />
       </colgroup>
       {!compact ? (
-        <thead className="sticky top-0 z-10 border-b border-line bg-bg-surface/95 backdrop-blur text-xs uppercase tracking-wider text-ink-subtle shadow-xs">
+        <thead className="sticky top-0 z-10 border-b border-line bg-bg-surface/95 backdrop-blur text-[11px] sm:text-xs uppercase tracking-wider text-ink-subtle shadow-xs">
           <tr>
             <ColumnHeader
               columnKey="estado"
-              title="Estado"
-              className="w-[14%] min-w-[135px]"
+              title="ESTADO"
+              className="w-[15%] min-w-[125px]"
               renderFilter={(close) => (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-line pb-2">
@@ -1260,8 +1260,8 @@ function DocTable({
 
             <ColumnHeader
               columnKey="documento"
-              title="Documento"
-              className="w-[14%] min-w-[140px] whitespace-nowrap"
+              title="DOCUMENTO"
+              className="w-[13%] min-w-[110px] whitespace-nowrap"
               renderFilter={(close) => (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-line pb-2">
@@ -1347,8 +1347,8 @@ function DocTable({
 
             <ColumnHeader
               columnKey="proveedor"
-              title="Proveedor / cliente"
-              className="w-[30%] min-w-[200px]"
+              title="PROVEEDOR / CLIENTE"
+              className="w-[32%] min-w-[190px]"
               renderFilter={(close) => (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-line pb-2">
@@ -1425,7 +1425,7 @@ function DocTable({
             <ColumnHeader
               columnKey="cufe"
               title="CUFE"
-              className="w-[11%] min-w-[100px]"
+              className="w-[10%] min-w-[85px]"
               renderFilter={(close) => (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-line pb-2">
@@ -1522,8 +1522,8 @@ function DocTable({
 
             <ColumnHeader
               columnKey="fecha"
-              title="Fecha"
-              className="w-[9%] min-w-[90px] whitespace-nowrap"
+              title="FECHA"
+              className="w-[9%] min-w-[80px] whitespace-nowrap"
               renderFilter={(close) => (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-line pb-2">
@@ -1620,7 +1620,7 @@ function DocTable({
               columnKey="dian"
               title="DIAN"
               align="right"
-              className="w-[11%] min-w-[125px] whitespace-nowrap"
+              className="w-[11%] min-w-[110px] whitespace-nowrap"
               renderFilter={(close) => (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-line pb-2">
@@ -1712,9 +1712,9 @@ function DocTable({
 
             <ColumnHeader
               columnKey="libros"
-              title="Libros"
+              title="LIBROS"
               align="right"
-              className="w-[11%] min-w-[125px] whitespace-nowrap"
+              className="w-[10%] min-w-[110px] whitespace-nowrap"
               renderFilter={(close) => (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-line pb-2">
@@ -1788,18 +1788,20 @@ function DocTable({
                 done && "opacity-55",
               )}
             >
-              <td className="px-3 py-2.5 min-w-[135px]">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <BadgeEstado estado={r.estado} />
-                  {done ? (
-                    <span className="text-[11px] font-medium text-ok">
-                      {action === "omitir" ? "Omitida" : "Validada"}
-                    </span>
-                  ) : null}
+              <td className="px-2.5 py-2 min-w-[125px]">
+                <div className="flex flex-col items-start gap-1">
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <BadgeEstado estado={r.estado} />
+                    {done ? (
+                      <span className="text-[10px] font-semibold text-ok">
+                        {action === "omitir" ? "Omitida" : "Validada"}
+                      </span>
+                    ) : null}
+                  </div>
                   {insight && (
                     <span
                       className={cn(
-                        "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border shadow-2xs whitespace-nowrap",
+                        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold border shadow-2xs whitespace-nowrap",
                         insight.tipo === "redondeo"
                           ? "bg-slate-100 text-slate-800 border-slate-300"
                           : insight.tipo === "retefuente"
@@ -1814,41 +1816,37 @@ function DocTable({
                       )}
                       title={insight.detalle}
                     >
-                      <Sparkles className="size-3 shrink-0 text-current" />
+                      <Sparkles className="size-2.5 shrink-0 text-current" />
                       {insight.etiqueta}
                     </span>
                   )}
                 </div>
               </td>
-              <td className="px-3 py-2.5 min-w-[140px] whitespace-nowrap">
+              <td className="px-2.5 py-2 min-w-[110px] whitespace-nowrap">
                 <div className="flex items-center gap-1.5 whitespace-nowrap">
-                  <span className="font-semibold tabular-nums select-text whitespace-nowrap text-ink">
+                  <span className="font-bold tabular-nums select-text text-ink text-xs sm:text-sm tracking-tight">
                     {r.numero || "—"}
                   </span>
                   {r.numero && (
                     <CopyButton
                       text={r.numero}
                       label={`Copiar N° ${r.numero}`}
-                      successMessage={`N° de documento ${r.numero} copiado al portapapeles`}
+                      successMessage={`N° de documento ${r.numero} copiado`}
                       className="rounded p-0.5 text-ink-subtle hover:bg-teal-soft hover:text-teal transition cursor-pointer shrink-0"
                     >
                       <Copy className="size-3" />
                     </CopyButton>
                   )}
                 </div>
-                <div className="text-xs text-ink-subtle whitespace-nowrap">
-                  {r.grupo} · {shortTipo(r.tipo)}
-                  {r.matchVia ? ` · ${r.matchVia}` : ""}
-                </div>
               </td>
-              <td className="px-3 py-2.5 min-w-[200px]">
-                <div className="flex items-start gap-2.5">
-                  <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-teal-soft/80 text-[10px] font-bold text-teal shadow-2xs mt-0.5">
+              <td className="px-2.5 py-2 min-w-[190px]">
+                <div className="flex items-start gap-2">
+                  <div className="flex size-6 shrink-0 items-center justify-center rounded bg-teal-soft/80 text-[9px] font-bold text-teal shadow-2xs mt-0.5">
                     {getInitials(r.nombreContraparte)}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <div className="max-w-xs sm:max-w-sm md:max-w-md truncate font-medium text-ink select-text" title={r.nombreContraparte}>
+                      <div className="max-w-[200px] sm:max-w-[260px] truncate font-semibold text-ink text-xs select-text" title={r.nombreContraparte}>
                         {r.nombreContraparte || "—"}
                       </div>
                       {r.nombreContraparte && (
@@ -1863,70 +1861,71 @@ function DocTable({
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="font-mono text-xs text-ink-subtle font-semibold select-text">{r.nitContraparte}</span>
+                      <span className="font-mono text-[11px] text-ink-subtle font-medium select-text">{r.nitContraparte}</span>
                       {r.nitContraparte && (
                         <CopyButton
                           text={r.nitContraparte}
                           label="Copiar NIT al portapapeles"
-                          successMessage={`NIT ${r.nitContraparte} copiado al portapapeles`}
+                          successMessage={`NIT ${r.nitContraparte} copiado`}
                         />
                       )}
                     </div>
                     {r.linked.length ? (
-                      <div className="mt-0.5 text-xs text-info font-medium">
-                        {r.estado === "solo_siigo" ? "Documentos DIAN del emisor: " : "Cruza con "}
+                      <div className="mt-0.5 text-[11px] text-info font-medium truncate max-w-[260px]" title={r.linked.map((l) => l.numero).join(", ")}>
+                        {r.estado === "solo_siigo" ? "DIAN: " : "Cruza con: "}
                         {r.linked.map((l) => l.numero).join(", ")}
                       </div>
                     ) : null}
                     {r.alerta ? (
-                      <div className="mt-0.5 max-w-xs sm:max-w-sm md:max-w-md text-xs text-warn font-medium leading-relaxed select-text">
+                      <div
+                        className="mt-0.5 line-clamp-2 text-[11px] text-amber-800 font-medium leading-snug select-text max-w-[300px]"
+                        title={r.alerta}
+                      >
                         {r.alerta}
                       </div>
                     ) : null}
                   </div>
                 </div>
               </td>
-              <td className="px-3 py-2.5 min-w-[100px]">
+              <td className="px-2 py-2 min-w-[85px]">
                 {r.cufe ? (
                   <CopyButton
                     text={r.cufe}
-                    label="Copiar CUFE al portapapeles"
+                    label="Copiar CUFE"
                     successMessage="CUFE copiado al portapapeles"
-                    className="group inline-flex items-center gap-1 max-w-[8rem] sm:max-w-[9.5rem] truncate rounded px-1.5 py-0.5 font-mono text-[11px] text-ink-muted hover:bg-teal-soft hover:text-teal transition cursor-pointer"
+                    className="group inline-flex items-center gap-1 max-w-[5.5rem] truncate rounded px-1 py-0.5 font-mono text-[10px] text-ink-muted hover:bg-teal-soft hover:text-teal transition cursor-pointer"
                   >
-                    <span className="flex items-center gap-1 truncate">
-                      <Copy className="size-3 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity" />
-                      <span className="truncate">{r.cufe}</span>
-                    </span>
+                    <Copy className="size-2.5 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity" />
+                    <span className="truncate">{r.cufe}</span>
                   </CopyButton>
                 ) : (
-                  <span className="text-ink-subtle">—</span>
+                  <span className="text-ink-subtle text-xs">—</span>
                 )}
               </td>
-              <td className="px-3 py-2.5 min-w-[90px] whitespace-nowrap tabular-nums text-ink-muted">
+              <td className="px-2 py-2 min-w-[80px] whitespace-nowrap tabular-nums text-ink-muted text-xs">
                 <div>{formatDate(r.fecha)}</div>
                 {dias != null ? (
-                  <div className={cn("text-xs font-medium", dias > 30 ? "text-danger" : "text-ink-subtle")}>
+                  <div className={cn("text-[10px] font-medium", dias > 30 ? "text-danger" : "text-ink-subtle")}>
                     {dias} {dias === 1 ? "día" : "días"}
                   </div>
                 ) : null}
               </td>
-              <td className="px-3 py-2.5 min-w-[125px] whitespace-nowrap text-right tabular-nums">
-                <div className="font-semibold text-ink">{formatMoneyExact(r.totalDian)}</div>
+              <td className="px-2.5 py-2 min-w-[110px] whitespace-nowrap text-right tabular-nums">
+                <div className="font-semibold text-ink text-xs sm:text-sm">{formatMoneyExact(r.totalDian)}</div>
                 {r.iva ? (
-                  <div className="text-xs text-ink-subtle" title="IVA en DIAN">
+                  <div className="text-[10px] text-ink-subtle" title="IVA en DIAN">
                     IVA {formatMoneyExact(r.iva)}
                   </div>
                 ) : null}
               </td>
-              <td className="px-3 py-2.5 min-w-[125px] whitespace-nowrap text-right tabular-nums">
-                <div className="font-semibold text-ink">
+              <td className="px-2.5 py-2 min-w-[110px] whitespace-nowrap text-right tabular-nums">
+                <div className="font-semibold text-ink text-xs sm:text-sm">
                   {r.hits.length ? formatMoneyExact(r.totalSiigo) : "—"}
                 </div>
                 {r.hits.length ? (
                   <div
                     className={cn(
-                      "text-xs font-semibold",
+                      "text-[10px] font-semibold",
                       r.diferencia === 0 ? "text-ok" : "text-danger",
                     )}
                   >
