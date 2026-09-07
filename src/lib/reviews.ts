@@ -1,5 +1,5 @@
-import { inCola } from "./conciliar";
-import type { ConciliacionResult, ConciliacionRow, EstadoConciliacion } from "./types";
+import { inCola } from "./conciliar.ts";
+import type { ConciliacionResult, ConciliacionRow, EstadoConciliacion } from "./types.ts";
 
 export type ReviewAction = "validada" | "omitir";
 

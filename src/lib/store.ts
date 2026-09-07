@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AuditDelta, Review } from "./reviews";
+import type { AuditDelta, Review } from "./reviews.ts";
 import {
   clearConfirmedMarks,
   computeDelta,
@@ -8,12 +8,12 @@ import {
   loadSnapshot,
   saveReviews,
   saveSnapshot,
-} from "./reviews";
-import { conciliar } from "./conciliar";
-import { saveHistoryEntry, type HistoryEntry } from "./history-store";
-import type { ConciliacionResult, DianDoc, MovLine } from "./types";
+} from "./reviews.ts";
+import { conciliar } from "./conciliar.ts";
+import { saveHistoryEntry, type HistoryEntry } from "./history-store.ts";
+import type { ConciliacionResult, DianDoc, MovLine } from "./types.ts";
 
-export type { Review } from "./reviews";
+export type { Review } from "./reviews.ts";
 
 export type TabId =
   | "cola"
@@ -29,7 +29,27 @@ export type TabId =
   | "solo_siigo";
 
 
-export type SortId = "prioridad" | "monto" | "fecha" | "proveedor";
+export type SortId =
+  | "prioridad"
+  | "monto"
+  | "fecha"
+  | "proveedor"
+  | "estado"
+  | "documento"
+  | "cufe"
+  | "dian"
+  | "libros";
+
+export type SortDirection = "asc" | "desc";
+
+export interface ColumnFilters {
+  estado?: string[];
+  tipo?: string[];
+  proveedor?: string;
+  hasCufe?: boolean | null;
+  fechaRange?: "all" | "7dias" | "15dias" | "30dias" | "mas30dias";
+  montoRange?: "all" | "gte5m" | "1m_5m" | "lt1m";
+}
 
 type State = {
   dian: DianDoc[];
@@ -40,6 +60,8 @@ type State = {
   query: string;
   tab: TabId;
   sort: SortId;
+  sortDirection: SortDirection;
+  columnFilters: ColumnFilters;
   groupByProveedor: boolean;
   hideRevisados: boolean;
   reviews: Record<string, Review>;
@@ -53,7 +75,11 @@ type State = {
   replaceMov: (mov: MovLine[], name: string) => void;
   setQuery: (q: string) => void;
   setTab: (t: TabId) => void;
-  setSort: (s: SortId) => void;
+  setSort: (s: SortId, dir?: SortDirection) => void;
+  toggleSort: (col: SortId) => void;
+  setColumnFilter: <K extends keyof ColumnFilters>(key: K, value: ColumnFilters[K]) => void;
+  clearColumnFilter: (key: keyof ColumnFilters) => void;
+  clearAllColumnFilters: () => void;
   toggleGroup: () => void;
   toggleHideRevisados: () => void;
   setReview: (row: { cufe?: string; nitContraparte?: string; numero?: string; folio?: string }, patch: Partial<Review>) => void;
@@ -81,6 +107,8 @@ export const useConciliacion = create<State>((set, get) => ({
   query: "",
   tab: "cola",
   sort: "prioridad",
+  sortDirection: "asc",
+  columnFilters: {},
   groupByProveedor: false,
   hideRevisados: false,
   reviews: {},
@@ -160,7 +188,42 @@ export const useConciliacion = create<State>((set, get) => ({
   },
   setQuery: (query) => set({ query }),
   setTab: (tab) => set({ tab, selectedId: null }),
-  setSort: (sort) => set({ sort }),
+  setSort: (sort, dir) => {
+    if (dir) {
+      set({ sort, sortDirection: dir });
+    } else {
+      const defaultDir: SortDirection =
+        sort === "monto" || sort === "dian" || sort === "libros" ? "desc" : "asc";
+      set({ sort, sortDirection: defaultDir });
+    }
+  },
+  toggleSort: (col) => {
+    const currentSort = get().sort;
+    const currentDir = get().sortDirection;
+    if (currentSort === col) {
+      set({ sortDirection: currentDir === "asc" ? "desc" : "asc" });
+    } else {
+      const defaultDir: SortDirection =
+        col === "monto" || col === "dian" || col === "libros" ? "desc" : "asc";
+      set({ sort: col, sortDirection: defaultDir });
+    }
+  },
+  setColumnFilter: (key, value) => {
+    set((state) => ({
+      columnFilters: {
+        ...state.columnFilters,
+        [key]: value,
+      },
+    }));
+  },
+  clearColumnFilter: (key) => {
+    set((state) => {
+      const next = { ...state.columnFilters };
+      delete next[key];
+      return { columnFilters: next };
+    });
+  },
+  clearAllColumnFilters: () => set({ columnFilters: {} }),
   toggleGroup: () => set({ groupByProveedor: !get().groupByProveedor }),
   toggleHideRevisados: () => set({ hideRevisados: !get().hideRevisados }),
   setReview: (row, patch) => {
@@ -204,6 +267,8 @@ export const useConciliacion = create<State>((set, get) => ({
       query: "",
       tab: "cola",
       sort: "prioridad",
+      sortDirection: "asc",
+      columnFilters: {},
       groupByProveedor: false,
       hideRevisados: false,
       reviews: {},

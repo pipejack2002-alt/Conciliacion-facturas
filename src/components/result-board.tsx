@@ -17,10 +17,14 @@ import {
   Sparkles,
   Keyboard,
   Filter,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+  RotateCcw,
 } from "lucide-react";
 import { BadgeEstado } from "./badge-estado";
 import { DeltaBanner, ReplaceBar } from "./audit-chrome";
-import { reviewOf, useConciliacion, type Review, type TabId } from "@/lib/store";
+import { reviewOf, useConciliacion, type Review, type TabId, type SortDirection, type SortId, type ColumnFilters } from "@/lib/store";
 import { daysAgo, formatDate, formatMoney, formatMoneyExact } from "@/lib/format";
 import { ESTADO_LABEL, inCola } from "@/lib/conciliar";
 import { exportAuditoriaXlsx } from "@/lib/export-excel";
@@ -72,6 +76,12 @@ export function ResultBoard() {
   const setTab = useConciliacion((s) => s.setTab);
   const sort = useConciliacion((s) => s.sort);
   const setSort = useConciliacion((s) => s.setSort);
+  const sortDirection = useConciliacion((s) => s.sortDirection);
+  const toggleSort = useConciliacion((s) => s.toggleSort);
+  const columnFilters = useConciliacion((s) => s.columnFilters);
+  const setColumnFilter = useConciliacion((s) => s.setColumnFilter);
+  const clearColumnFilter = useConciliacion((s) => s.clearColumnFilter);
+  const clearAllColumnFilters = useConciliacion((s) => s.clearAllColumnFilters);
   const groupByProveedor = useConciliacion((s) => s.groupByProveedor);
   const toggleGroup = useConciliacion((s) => s.toggleGroup);
   const hideRevisados = useConciliacion((s) => s.hideRevisados);
@@ -96,6 +106,15 @@ export function ResultBoard() {
   const [materialidad, setMaterialidad] = useState<MaterialidadFilter>("todos");
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const hasActiveFilters = Boolean(
+    (columnFilters.estado && columnFilters.estado.length > 0) ||
+    (columnFilters.tipo && columnFilters.tipo.length > 0) ||
+    (columnFilters.proveedor && columnFilters.proveedor.trim().length > 0) ||
+    columnFilters.hasCufe != null ||
+    (columnFilters.fechaRange && columnFilters.fechaRange !== "all") ||
+    (columnFilters.montoRange && columnFilters.montoRange !== "all")
+  );
 
   // Atajo de teclado global Ctrl+K / Cmd+K para enfocar el buscador
   useEffect(() => {
@@ -158,6 +177,40 @@ export function ResultBoard() {
       if (materialidad === "con_sugerencia" && !getTaxInsight(r)) return false;
       if (materialidad === "sin_revisar" && reviewOf(reviews, r)?.done) return false;
 
+      // Filtros específicos por columna ("El filtríco")
+      if (columnFilters.estado && columnFilters.estado.length > 0) {
+        if (!columnFilters.estado.includes(r.estado)) return false;
+      }
+      if (columnFilters.tipo && columnFilters.tipo.length > 0) {
+        const sTipo = shortTipo(r.tipo);
+        if (!columnFilters.tipo.includes(sTipo) && !columnFilters.tipo.includes(r.tipo)) return false;
+      }
+      if (columnFilters.proveedor && columnFilters.proveedor.trim().length > 0) {
+        const pQuery = columnFilters.proveedor.trim().toLowerCase();
+        if (
+          !r.nombreContraparte.toLowerCase().includes(pQuery) &&
+          !r.nitContraparte.includes(pQuery)
+        ) {
+          return false;
+        }
+      }
+      if (columnFilters.hasCufe != null) {
+        if (columnFilters.hasCufe && !r.cufe) return false;
+        if (!columnFilters.hasCufe && r.cufe) return false;
+      }
+      if (columnFilters.fechaRange && columnFilters.fechaRange !== "all") {
+        const dias = daysAgo(r.fecha);
+        if (columnFilters.fechaRange === "7dias" && (dias == null || dias > 7)) return false;
+        if (columnFilters.fechaRange === "15dias" && (dias == null || dias > 15)) return false;
+        if (columnFilters.fechaRange === "30dias" && (dias == null || dias > 30)) return false;
+        if (columnFilters.fechaRange === "mas30dias" && (dias == null || dias <= 30)) return false;
+      }
+      if (columnFilters.montoRange && columnFilters.montoRange !== "all") {
+        if (columnFilters.montoRange === "gte5m" && amt < 5000000) return false;
+        if (columnFilters.montoRange === "1m_5m" && (amt < 1000000 || amt >= 5000000)) return false;
+        if (columnFilters.montoRange === "lt1m" && amt >= 1000000) return false;
+      }
+
       if (!q) return true;
       return (
         r.numero.toLowerCase().includes(q) ||
@@ -169,19 +222,77 @@ export function ResultBoard() {
         r.comprobantes.join(" ").toLowerCase().includes(q)
       );
     });
+
+    const dirMult = sortDirection === "desc" ? -1 : 1;
+
     list = [...list].sort((a, b) => {
       const amtA = a.estado === "solo_siigo" ? a.totalSiigo : a.totalDian;
       const amtB = b.estado === "solo_siigo" ? b.totalSiigo : b.totalDian;
-      if (sort === "monto") return amtB - amtA;
-      if (sort === "fecha") return (a.fecha || "").localeCompare(b.fecha || "");
-      if (sort === "proveedor") return (a.nombreContraparte || "").localeCompare(b.nombreContraparte || "", "es");
+
+      if (sort === "monto" || sort === "dian") {
+        const diff = amtA - amtB;
+        if (diff !== 0) return diff * dirMult;
+        return (a.numero || "").localeCompare(b.numero || "", undefined, { numeric: true });
+      }
+
+      if (sort === "libros") {
+        const librosA = a.hits.length ? a.totalSiigo : 0;
+        const librosB = b.hits.length ? b.totalSiigo : 0;
+        const diff = librosA - librosB;
+        if (diff !== 0) return diff * dirMult;
+        return (amtA - amtB) * dirMult;
+      }
+
+      if (sort === "fecha") {
+        const dateA = a.fecha || "";
+        const dateB = b.fecha || "";
+        const cmp = dateA.localeCompare(dateB);
+        if (cmp !== 0) return cmp * dirMult;
+        return (amtB - amtA);
+      }
+
+      if (sort === "proveedor") {
+        const nameA = a.nombreContraparte || "";
+        const nameB = b.nombreContraparte || "";
+        const cmp = nameA.localeCompare(nameB, "es", { sensitivity: "base" });
+        if (cmp !== 0) return cmp * dirMult;
+        return (amtB - amtA);
+      }
+
+      if (sort === "documento") {
+        const docA = a.numero || "";
+        const docB = b.numero || "";
+        const cmp = docA.localeCompare(docB, undefined, { numeric: true, sensitivity: "base" });
+        if (cmp !== 0) return cmp * dirMult;
+        return (amtB - amtA);
+      }
+
+      if (sort === "cufe") {
+        const cufeA = a.cufe || "";
+        const cufeB = b.cufe || "";
+        if (!cufeA && cufeB) return 1 * dirMult;
+        if (cufeA && !cufeB) return -1 * dirMult;
+        const cmp = cufeA.localeCompare(cufeB);
+        if (cmp !== 0) return cmp * dirMult;
+        return (amtB - amtA);
+      }
+
+      if (sort === "estado") {
+        const ra = RANK[a.estado] ?? 9;
+        const rb = RANK[b.estado] ?? 9;
+        if (ra !== rb) return (ra - rb) * dirMult;
+        return (amtB - amtA);
+      }
+
+      // Default: sort === "prioridad"
       const ra = RANK[a.estado] ?? 9;
       const rb = RANK[b.estado] ?? 9;
-      if (ra !== rb) return ra - rb;
+      if (ra !== rb) return (ra - rb) * dirMult;
       return amtB - amtA;
     });
+
     return list;
-  }, [result, query, tab, sort, hideRevisados, reviews, materialidad]);
+  }, [result, query, tab, sort, sortDirection, columnFilters, hideRevisados, reviews, materialidad]);
 
   const groups = useMemo(() => {
     if (!groupByProveedor) return null;
@@ -475,16 +586,41 @@ export function ResultBoard() {
               </button>
             </div>
 
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as typeof sort)}
-              className="h-9 rounded-lg border border-line bg-bg-elevated px-2.5 text-xs text-ink outline-none"
-            >
-              <option value="prioridad">Ordenar: Prioridad</option>
-              <option value="monto">Ordenar: Monto mayor</option>
-              <option value="fecha">Ordenar: Fecha</option>
-              <option value="proveedor">Ordenar: Proveedor</option>
-            </select>
+            <div className="inline-flex items-center rounded-lg border border-line bg-bg-elevated shadow-2xs">
+              <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value as typeof sort)}
+                className="h-9 rounded-l-lg border-r border-line bg-transparent px-2.5 text-xs text-ink outline-none cursor-pointer"
+                title="Criterio de ordenamiento principal"
+              >
+                <option value="prioridad">Ordenar: Prioridad contable</option>
+                <option value="estado">Ordenar: Estado</option>
+                <option value="documento">Ordenar: N° Documento</option>
+                <option value="proveedor">Ordenar: Proveedor</option>
+                <option value="cufe">Ordenar: CUFE</option>
+                <option value="fecha">Ordenar: Fecha</option>
+                <option value="dian">Ordenar: Monto DIAN</option>
+                <option value="libros">Ordenar: Libros</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => toggleSort(sort)}
+                className="inline-flex h-9 items-center gap-1 px-2.5 text-xs font-semibold text-teal hover:bg-teal-soft/40 transition cursor-pointer"
+                title={`Cambiar dirección de orden (actual: ${sortDirection === "asc" ? "Menor a mayor / A-Z" : "Mayor a menor / Z-A"}). Clic para alternar.`}
+              >
+                {sortDirection === "asc" ? (
+                  <>
+                    <ArrowUp className="size-3.5" />
+                    <span>Asc</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowDown className="size-3.5" />
+                    <span>Desc</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -540,6 +676,120 @@ export function ResultBoard() {
               className="text-ink-subtle hover:text-ink"
             >
               <X className="size-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Barra de Filtros por Columna Activos ("El filtríco") */}
+        {hasActiveFilters && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-teal/30 bg-teal-soft/30 px-3.5 py-2 text-xs text-ink animate-in fade-in">
+            <span className="font-semibold text-teal flex items-center gap-1.5">
+              <Filter className="size-3.5" />
+              Filtros activos:
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {columnFilters.estado && columnFilters.estado.length > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-bg-surface px-2 py-0.5 border border-line shadow-2xs text-[11px] font-medium">
+                  <span>Estado: {columnFilters.estado.map((e) => ESTADO_LABEL[e as EstadoConciliacion] || e).join(", ")}</span>
+                  <button
+                    type="button"
+                    onClick={() => clearColumnFilter("estado")}
+                    className="text-ink-subtle hover:text-danger ml-0.5 cursor-pointer font-bold"
+                    title="Quitar filtro de estado"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+              {columnFilters.tipo && columnFilters.tipo.length > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-bg-surface px-2 py-0.5 border border-line shadow-2xs text-[11px] font-medium">
+                  <span>Tipo: {columnFilters.tipo.join(", ")}</span>
+                  <button
+                    type="button"
+                    onClick={() => clearColumnFilter("tipo")}
+                    className="text-ink-subtle hover:text-danger ml-0.5 cursor-pointer font-bold"
+                    title="Quitar filtro de tipo de documento"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+              {columnFilters.proveedor && columnFilters.proveedor.trim().length > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-bg-surface px-2 py-0.5 border border-line shadow-2xs text-[11px] font-medium">
+                  <span>Proveedor: "{columnFilters.proveedor}"</span>
+                  <button
+                    type="button"
+                    onClick={() => clearColumnFilter("proveedor")}
+                    className="text-ink-subtle hover:text-danger ml-0.5 cursor-pointer font-bold"
+                    title="Quitar filtro de proveedor"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+              {columnFilters.hasCufe != null && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-bg-surface px-2 py-0.5 border border-line shadow-2xs text-[11px] font-medium">
+                  <span>CUFE: {columnFilters.hasCufe ? "Solo con CUFE" : "Sin CUFE"}</span>
+                  <button
+                    type="button"
+                    onClick={() => clearColumnFilter("hasCufe")}
+                    className="text-ink-subtle hover:text-danger ml-0.5 cursor-pointer font-bold"
+                    title="Quitar filtro de CUFE"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+              {columnFilters.fechaRange && columnFilters.fechaRange !== "all" && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-bg-surface px-2 py-0.5 border border-line shadow-2xs text-[11px] font-medium">
+                  <span>
+                    Fecha:{" "}
+                    {columnFilters.fechaRange === "7dias"
+                      ? "Últimos 7 días"
+                      : columnFilters.fechaRange === "15dias"
+                      ? "Últimos 15 días"
+                      : columnFilters.fechaRange === "30dias"
+                      ? "Últimos 30 días"
+                      : "Más de 30 días"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => clearColumnFilter("fechaRange")}
+                    className="text-ink-subtle hover:text-danger ml-0.5 cursor-pointer font-bold"
+                    title="Quitar filtro de fecha"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+              {columnFilters.montoRange && columnFilters.montoRange !== "all" && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-bg-surface px-2 py-0.5 border border-line shadow-2xs text-[11px] font-medium">
+                  <span>
+                    Monto:{" "}
+                    {columnFilters.montoRange === "gte5m"
+                      ? "≥ $5.000.000"
+                      : columnFilters.montoRange === "1m_5m"
+                      ? "$1M - $5M"
+                      : "< $1.000.000"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => clearColumnFilter("montoRange")}
+                    className="text-ink-subtle hover:text-danger ml-0.5 cursor-pointer font-bold"
+                    title="Quitar filtro de monto"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={clearAllColumnFilters}
+              className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-teal hover:underline cursor-pointer"
+            >
+              <RotateCcw className="size-3" />
+              Limpiar todos los filtros
             </button>
           </div>
         )}
@@ -720,6 +970,140 @@ function CopyButton({
   );
 }
 
+function ColumnHeader({
+  columnKey,
+  title,
+  align = "left",
+  renderFilter,
+}: {
+  columnKey: SortId;
+  title: string;
+  align?: "left" | "right";
+  renderFilter?: (close: () => void) => React.ReactNode;
+}) {
+  const sort = useConciliacion((s) => s.sort);
+  const sortDirection = useConciliacion((s) => s.sortDirection);
+  const toggleSort = useConciliacion((s) => s.toggleSort);
+  const columnFilters = useConciliacion((s) => s.columnFilters);
+  const [open, setOpen] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  const isSorted = sort === columnKey || (columnKey === "dian" && sort === "monto");
+
+  const hasFilterActive = useMemo(() => {
+    if (columnKey === "estado") return Boolean(columnFilters.estado && columnFilters.estado.length > 0);
+    if (columnKey === "documento") return Boolean(columnFilters.tipo && columnFilters.tipo.length > 0);
+    if (columnKey === "proveedor") return Boolean(columnFilters.proveedor && columnFilters.proveedor.trim().length > 0);
+    if (columnKey === "cufe") return columnFilters.hasCufe != null;
+    if (columnKey === "fecha") return Boolean(columnFilters.fechaRange && columnFilters.fechaRange !== "all");
+    if (columnKey === "dian" || columnKey === "monto") return Boolean(columnFilters.montoRange && columnFilters.montoRange !== "all");
+    return false;
+  }, [columnKey, columnFilters]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [open]);
+
+  return (
+    <th
+      className={cn(
+        "relative px-3 py-2.5 font-medium transition-colors select-none text-xs uppercase tracking-wider",
+        align === "right" ? "text-right" : "text-left",
+        isSorted ? "bg-teal-soft/40 text-teal font-semibold" : "text-ink-subtle",
+      )}
+    >
+      <div
+        className={cn(
+          "inline-flex items-center gap-1.5 group",
+          align === "right" && "justify-end flex-row-reverse",
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => toggleSort(columnKey)}
+          className={cn(
+            "inline-flex items-center gap-1.5 transition-colors cursor-pointer text-inherit font-inherit",
+            isSorted ? "text-teal" : "hover:text-teal",
+            align === "right" && "flex-row-reverse",
+          )}
+          title={
+            isSorted
+              ? `Orden actual: ${sortDirection === "asc" ? "Menor a mayor / A-Z" : "Mayor a menor / Z-A"}. Clic para alternar dirección.`
+              : `Clic para ordenar por ${title}`
+          }
+        >
+          <span>{title}</span>
+          <span className="shrink-0 inline-flex items-center">
+            {isSorted ? (
+              sortDirection === "asc" ? (
+                <ArrowUp className="size-3.5 text-teal animate-in zoom-in-50 duration-150" />
+              ) : (
+                <ArrowDown className="size-3.5 text-teal animate-in zoom-in-50 duration-150" />
+              )
+            ) : (
+              <ArrowUpDown className="size-3 text-ink-subtle/40 opacity-0 group-hover:opacity-100 group-hover:text-teal transition-all" />
+            )}
+          </span>
+        </button>
+
+        {renderFilter ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen((v) => !v);
+            }}
+            title={
+              hasFilterActive
+                ? `Filtro activo en ${title}. Clic para ver o cambiar.`
+                : `Filtrar y opciones de ${title}`
+            }
+            className={cn(
+              "relative rounded p-1 transition-all cursor-pointer",
+              hasFilterActive
+                ? "bg-teal text-bg-elevated shadow-xs ring-2 ring-teal/30"
+                : "text-ink-subtle/50 hover:bg-teal-soft hover:text-teal group-hover:opacity-100 opacity-60",
+              open && "bg-teal-soft text-teal opacity-100",
+            )}
+          >
+            <Filter className="size-3" />
+            {hasFilterActive && (
+              <span className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-amber-400 ring-1 ring-white" />
+            )}
+          </button>
+        ) : null}
+      </div>
+
+      {open && renderFilter ? (
+        <div
+          ref={popoverRef}
+          onClick={(e) => e.stopPropagation()}
+          className={cn(
+            "absolute top-full mt-1.5 z-30 min-w-64 max-w-xs rounded-xl border border-line bg-bg-surface p-3.5 shadow-xl text-ink font-normal normal-case text-xs tracking-normal select-text animate-in fade-in-50 zoom-in-95 duration-150",
+            align === "right" ? "right-2" : "left-2",
+          )}
+        >
+          {renderFilter(() => setOpen(false))}
+        </div>
+      ) : null}
+    </th>
+  );
+}
+
 function DocTable({
   rows,
   selectedId,
@@ -735,18 +1119,631 @@ function DocTable({
   footer?: string;
   compact?: boolean;
 }) {
+  const sort = useConciliacion((s) => s.sort);
+  const sortDirection = useConciliacion((s) => s.sortDirection);
+  const setSort = useConciliacion((s) => s.setSort);
+  const columnFilters = useConciliacion((s) => s.columnFilters);
+  const setColumnFilter = useConciliacion((s) => s.setColumnFilter);
+  const clearColumnFilter = useConciliacion((s) => s.clearColumnFilter);
+
+  const stateCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const r of rows) {
+      map[r.estado] = (map[r.estado] || 0) + 1;
+    }
+    return map;
+  }, [rows]);
+
+  const stateOptions: { id: EstadoConciliacion; label: string }[] = [
+    { id: "pendiente", label: "Por registrar" },
+    { id: "posible_typo", label: "Revisar factura" },
+    { id: "totalizado", label: "Totalizados" },
+    { id: "duplicado", label: "Dobles" },
+    { id: "diferencia", label: "Diferencias" },
+    { id: "cruce_nc", label: "Cruces NC" },
+    { id: "conciliado", label: "Registrados" },
+    { id: "solo_siigo", label: "Solo libros" },
+  ];
+
   return (
     <table className="w-full min-w-[920px] text-left text-sm">
       {!compact ? (
         <thead className="sticky top-0 z-10 border-b border-line bg-bg-surface/95 backdrop-blur text-xs uppercase tracking-wider text-ink-subtle shadow-xs">
           <tr>
-            <th className="px-3 py-3 font-medium">Estado</th>
-            <th className="px-3 py-3 font-medium">Documento</th>
-            <th className="px-3 py-3 font-medium">Proveedor / cliente</th>
-            <th className="px-3 py-3 font-medium">CUFE</th>
-            <th className="px-3 py-3 font-medium">Fecha</th>
-            <th className="px-3 py-3 text-right font-medium">DIAN</th>
-            <th className="px-3 py-3 text-right font-medium">Libros</th>
+            <ColumnHeader
+              columnKey="estado"
+              title="Estado"
+              renderFilter={(close) => (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-line pb-2">
+                    <span className="font-semibold text-ink">Columna: Estado</span>
+                    {columnFilters.estado?.length ? (
+                      <button
+                        type="button"
+                        onClick={() => clearColumnFilter("estado")}
+                        className="text-[11px] text-teal hover:underline font-semibold cursor-pointer"
+                      >
+                        Limpiar
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-medium text-ink-subtle block mb-1">Ordenar:</span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => { setSort("estado", "asc"); close(); }}
+                        className={cn(
+                          "flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs transition cursor-pointer",
+                          sort === "estado" && sortDirection === "asc"
+                            ? "bg-teal text-bg-elevated border-teal font-semibold"
+                            : "border-line bg-bg-subtle hover:bg-teal-soft/50 text-ink"
+                        )}
+                      >
+                        <ArrowUp className="size-3" /> Prioridad
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setSort("estado", "desc"); close(); }}
+                        className={cn(
+                          "flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs transition cursor-pointer",
+                          sort === "estado" && sortDirection === "desc"
+                            ? "bg-teal text-bg-elevated border-teal font-semibold"
+                            : "border-line bg-bg-subtle hover:bg-teal-soft/50 text-ink"
+                        )}
+                      >
+                        <ArrowDown className="size-3" /> Invertido
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-medium text-ink-subtle block mb-1">Filtrar por estado:</span>
+                    <div className="space-y-1 max-h-44 overflow-y-auto pr-1">
+                      {stateOptions.map((opt) => {
+                        const count = stateCounts[opt.id] || 0;
+                        const isChecked = columnFilters.estado?.includes(opt.id) ?? false;
+                        return (
+                          <label
+                            key={opt.id}
+                            className="flex items-center justify-between gap-2 rounded px-2 py-1 hover:bg-bg-subtle cursor-pointer text-xs"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  const curr = columnFilters.estado || [];
+                                  const next = e.target.checked
+                                    ? [...curr, opt.id]
+                                    : curr.filter((s) => s !== opt.id);
+                                  if (next.length === 0) clearColumnFilter("estado");
+                                  else setColumnFilter("estado", next);
+                                }}
+                                className="rounded border-line text-teal focus:ring-teal size-3.5"
+                              />
+                              <span>{opt.label}</span>
+                            </div>
+                            <span className="text-[10px] text-ink-subtle font-mono">{count}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1 border-t border-line">
+                    <button
+                      type="button"
+                      onClick={close}
+                      className="rounded-md bg-bg-subtle px-2.5 py-1 text-xs font-medium text-ink hover:bg-line transition cursor-pointer"
+                    >
+                      Listo
+                    </button>
+                  </div>
+                </div>
+              )}
+            />
+
+            <ColumnHeader
+              columnKey="documento"
+              title="Documento"
+              renderFilter={(close) => (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-line pb-2">
+                    <span className="font-semibold text-ink">Columna: Documento</span>
+                    {columnFilters.tipo?.length ? (
+                      <button
+                        type="button"
+                        onClick={() => clearColumnFilter("tipo")}
+                        className="text-[11px] text-teal hover:underline font-semibold cursor-pointer"
+                      >
+                        Limpiar
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-medium text-ink-subtle block mb-1">Ordenar por número:</span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => { setSort("documento", "asc"); close(); }}
+                        className={cn(
+                          "flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs transition cursor-pointer",
+                          sort === "documento" && sortDirection === "asc"
+                            ? "bg-teal text-bg-elevated border-teal font-semibold"
+                            : "border-line bg-bg-subtle hover:bg-teal-soft/50 text-ink"
+                        )}
+                      >
+                        <ArrowUp className="size-3" /> 0-9 / A-Z
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setSort("documento", "desc"); close(); }}
+                        className={cn(
+                          "flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs transition cursor-pointer",
+                          sort === "documento" && sortDirection === "desc"
+                            ? "bg-teal text-bg-elevated border-teal font-semibold"
+                            : "border-line bg-bg-subtle hover:bg-teal-soft/50 text-ink"
+                        )}
+                      >
+                        <ArrowDown className="size-3" /> 9-0 / Z-A
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-medium text-ink-subtle block mb-1">Filtrar por tipo:</span>
+                    <div className="space-y-1">
+                      {["Factura", "Doc. soporte", "Nota crédito", "Nómina", "Doc. equivalente"].map((t) => {
+                        const isChecked = columnFilters.tipo?.includes(t) ?? false;
+                        return (
+                          <label key={t} className="flex items-center gap-2 rounded px-2 py-1 hover:bg-bg-subtle cursor-pointer text-xs">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                const curr = columnFilters.tipo || [];
+                                const next = e.target.checked ? [...curr, t] : curr.filter((x) => x !== t);
+                                if (next.length === 0) clearColumnFilter("tipo");
+                                else setColumnFilter("tipo", next);
+                              }}
+                              className="rounded border-line text-teal focus:ring-teal size-3.5"
+                            />
+                            <span>{t}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1 border-t border-line">
+                    <button
+                      type="button"
+                      onClick={close}
+                      className="rounded-md bg-bg-subtle px-2.5 py-1 text-xs font-medium text-ink hover:bg-line transition cursor-pointer"
+                    >
+                      Listo
+                    </button>
+                  </div>
+                </div>
+              )}
+            />
+
+            <ColumnHeader
+              columnKey="proveedor"
+              title="Proveedor / cliente"
+              renderFilter={(close) => (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-line pb-2">
+                    <span className="font-semibold text-ink">Columna: Proveedor</span>
+                    {columnFilters.proveedor?.trim() ? (
+                      <button
+                        type="button"
+                        onClick={() => clearColumnFilter("proveedor")}
+                        className="text-[11px] text-teal hover:underline font-semibold cursor-pointer"
+                      >
+                        Limpiar
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-medium text-ink-subtle block mb-1">Ordenar alfabéticamente:</span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => { setSort("proveedor", "asc"); close(); }}
+                        className={cn(
+                          "flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs transition cursor-pointer",
+                          sort === "proveedor" && sortDirection === "asc"
+                            ? "bg-teal text-bg-elevated border-teal font-semibold"
+                            : "border-line bg-bg-subtle hover:bg-teal-soft/50 text-ink"
+                        )}
+                      >
+                        <ArrowUp className="size-3" /> A → Z
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setSort("proveedor", "desc"); close(); }}
+                        className={cn(
+                          "flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs transition cursor-pointer",
+                          sort === "proveedor" && sortDirection === "desc"
+                            ? "bg-teal text-bg-elevated border-teal font-semibold"
+                            : "border-line bg-bg-subtle hover:bg-teal-soft/50 text-ink"
+                        )}
+                      >
+                        <ArrowDown className="size-3" /> Z → A
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-medium text-ink-subtle block mb-1">Filtrar por proveedor o NIT:</span>
+                    <input
+                      type="text"
+                      placeholder="Ej. Éxito, Claro, 900..."
+                      value={columnFilters.proveedor || ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val.trim()) clearColumnFilter("proveedor");
+                        else setColumnFilter("proveedor", val);
+                      }}
+                      className="w-full rounded-lg border border-line bg-bg-elevated px-2.5 py-1.5 text-xs outline-none focus:border-teal"
+                    />
+                  </div>
+
+                  <div className="flex justify-end pt-1 border-t border-line">
+                    <button
+                      type="button"
+                      onClick={close}
+                      className="rounded-md bg-bg-subtle px-2.5 py-1 text-xs font-medium text-ink hover:bg-line transition cursor-pointer"
+                    >
+                      Listo
+                    </button>
+                  </div>
+                </div>
+              )}
+            />
+
+            <ColumnHeader
+              columnKey="cufe"
+              title="CUFE"
+              renderFilter={(close) => (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-line pb-2">
+                    <span className="font-semibold text-ink">Columna: CUFE</span>
+                    {columnFilters.hasCufe != null ? (
+                      <button
+                        type="button"
+                        onClick={() => clearColumnFilter("hasCufe")}
+                        className="text-[11px] text-teal hover:underline font-semibold cursor-pointer"
+                      >
+                        Limpiar
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-medium text-ink-subtle block mb-1">Ordenar:</span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => { setSort("cufe", "asc"); close(); }}
+                        className={cn(
+                          "flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs transition cursor-pointer",
+                          sort === "cufe" && sortDirection === "asc"
+                            ? "bg-teal text-bg-elevated border-teal font-semibold"
+                            : "border-line bg-bg-subtle hover:bg-teal-soft/50 text-ink"
+                        )}
+                      >
+                        <ArrowUp className="size-3" /> Con CUFE 1°
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setSort("cufe", "desc"); close(); }}
+                        className={cn(
+                          "flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs transition cursor-pointer",
+                          sort === "cufe" && sortDirection === "desc"
+                            ? "bg-teal text-bg-elevated border-teal font-semibold"
+                            : "border-line bg-bg-subtle hover:bg-teal-soft/50 text-ink"
+                        )}
+                      >
+                        <ArrowDown className="size-3" /> Sin CUFE 1°
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-medium text-ink-subtle block mb-1">Filtrar por presencia de CUFE:</span>
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => { clearColumnFilter("hasCufe"); close(); }}
+                        className={cn(
+                          "w-full text-left rounded px-2 py-1 text-xs transition cursor-pointer",
+                          columnFilters.hasCufe == null ? "bg-teal-soft text-teal font-semibold" : "hover:bg-bg-subtle text-ink"
+                        )}
+                      >
+                        Todos los documentos
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setColumnFilter("hasCufe", true); close(); }}
+                        className={cn(
+                          "w-full text-left rounded px-2 py-1 text-xs transition cursor-pointer",
+                          columnFilters.hasCufe === true ? "bg-teal-soft text-teal font-semibold" : "hover:bg-bg-subtle text-ink"
+                        )}
+                      >
+                        Solo con CUFE registrado
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setColumnFilter("hasCufe", false); close(); }}
+                        className={cn(
+                          "w-full text-left rounded px-2 py-1 text-xs transition cursor-pointer",
+                          columnFilters.hasCufe === false ? "bg-teal-soft text-teal font-semibold" : "hover:bg-bg-subtle text-ink"
+                        )}
+                      >
+                        Solo sin CUFE
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1 border-t border-line">
+                    <button
+                      type="button"
+                      onClick={close}
+                      className="rounded-md bg-bg-subtle px-2.5 py-1 text-xs font-medium text-ink hover:bg-line transition cursor-pointer"
+                    >
+                      Listo
+                    </button>
+                  </div>
+                </div>
+              )}
+            />
+
+            <ColumnHeader
+              columnKey="fecha"
+              title="Fecha"
+              renderFilter={(close) => (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-line pb-2">
+                    <span className="font-semibold text-ink">Columna: Fecha</span>
+                    {columnFilters.fechaRange && columnFilters.fechaRange !== "all" ? (
+                      <button
+                        type="button"
+                        onClick={() => clearColumnFilter("fechaRange")}
+                        className="text-[11px] text-teal hover:underline font-semibold cursor-pointer"
+                      >
+                        Limpiar
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-medium text-ink-subtle block mb-1">Ordenar cronológicamente:</span>
+                    <div className="space-y-1.5">
+                      <button
+                        type="button"
+                        onClick={() => { setSort("fecha", "asc"); close(); }}
+                        className={cn(
+                          "w-full flex items-center justify-start gap-2 rounded-md border px-2.5 py-1.5 text-xs transition cursor-pointer",
+                          sort === "fecha" && sortDirection === "asc"
+                            ? "bg-teal text-bg-elevated border-teal font-semibold"
+                            : "border-line bg-bg-subtle hover:bg-teal-soft/50 text-ink"
+                        )}
+                      >
+                        <ArrowUp className="size-3.5 shrink-0" />
+                        <span>Menor a mayor (más antiguo primero)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setSort("fecha", "desc"); close(); }}
+                        className={cn(
+                          "w-full flex items-center justify-start gap-2 rounded-md border px-2.5 py-1.5 text-xs transition cursor-pointer",
+                          sort === "fecha" && sortDirection === "desc"
+                            ? "bg-teal text-bg-elevated border-teal font-semibold"
+                            : "border-line bg-bg-subtle hover:bg-teal-soft/50 text-ink"
+                        )}
+                      >
+                        <ArrowDown className="size-3.5 shrink-0" />
+                        <span>Mayor a menor (más reciente primero)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-medium text-ink-subtle block mb-1">Filtrar por período:</span>
+                    <div className="space-y-1">
+                      {[
+                        { id: "all", label: "Todas las fechas" },
+                        { id: "7dias", label: "Últimos 7 días" },
+                        { id: "15dias", label: "Últimos 15 días" },
+                        { id: "30dias", label: "Últimos 30 días" },
+                        { id: "mas30dias", label: "Más de 30 días" },
+                      ].map((opt) => {
+                        const isCurrent = (columnFilters.fechaRange || "all") === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              if (opt.id === "all") clearColumnFilter("fechaRange");
+                              else setColumnFilter("fechaRange", opt.id as any);
+                              close();
+                            }}
+                            className={cn(
+                              "w-full text-left rounded px-2 py-1 text-xs transition cursor-pointer",
+                              isCurrent ? "bg-teal-soft text-teal font-semibold" : "hover:bg-bg-subtle text-ink"
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1 border-t border-line">
+                    <button
+                      type="button"
+                      onClick={close}
+                      className="rounded-md bg-bg-subtle px-2.5 py-1 text-xs font-medium text-ink hover:bg-line transition cursor-pointer"
+                    >
+                      Listo
+                    </button>
+                  </div>
+                </div>
+              )}
+            />
+
+            <ColumnHeader
+              columnKey="dian"
+              title="DIAN"
+              align="right"
+              renderFilter={(close) => (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-line pb-2">
+                    <span className="font-semibold text-ink">Columna: Monto DIAN</span>
+                    {columnFilters.montoRange && columnFilters.montoRange !== "all" ? (
+                      <button
+                        type="button"
+                        onClick={() => clearColumnFilter("montoRange")}
+                        className="text-[11px] text-teal hover:underline font-semibold cursor-pointer"
+                      >
+                        Limpiar
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-medium text-ink-subtle block mb-1">Ordenar por valor:</span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => { setSort("dian", "desc"); close(); }}
+                        className={cn(
+                          "flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs transition cursor-pointer",
+                          (sort === "dian" || sort === "monto") && sortDirection === "desc"
+                            ? "bg-teal text-bg-elevated border-teal font-semibold"
+                            : "border-line bg-bg-subtle hover:bg-teal-soft/50 text-ink"
+                        )}
+                      >
+                        <ArrowDown className="size-3" /> Mayor a menor
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setSort("dian", "asc"); close(); }}
+                        className={cn(
+                          "flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs transition cursor-pointer",
+                          (sort === "dian" || sort === "monto") && sortDirection === "asc"
+                            ? "bg-teal text-bg-elevated border-teal font-semibold"
+                            : "border-line bg-bg-subtle hover:bg-teal-soft/50 text-ink"
+                        )}
+                      >
+                        <ArrowUp className="size-3" /> Menor a mayor
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-medium text-ink-subtle block mb-1">Filtrar por rango:</span>
+                    <div className="space-y-1">
+                      {[
+                        { id: "all", label: "Todos los montos" },
+                        { id: "gte5m", label: "≥ $5.000.000 (Altos)" },
+                        { id: "1m_5m", label: "$1.000.000 a $5.000.000" },
+                        { id: "lt1m", label: "< $1.000.000 (Menores)" },
+                      ].map((opt) => {
+                        const isCurrent = (columnFilters.montoRange || "all") === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              if (opt.id === "all") clearColumnFilter("montoRange");
+                              else setColumnFilter("montoRange", opt.id as any);
+                              close();
+                            }}
+                            className={cn(
+                              "w-full text-left rounded px-2 py-1 text-xs transition cursor-pointer",
+                              isCurrent ? "bg-teal-soft text-teal font-semibold" : "hover:bg-bg-subtle text-ink"
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1 border-t border-line">
+                    <button
+                      type="button"
+                      onClick={close}
+                      className="rounded-md bg-bg-subtle px-2.5 py-1 text-xs font-medium text-ink hover:bg-line transition cursor-pointer"
+                    >
+                      Listo
+                    </button>
+                  </div>
+                </div>
+              )}
+            />
+
+            <ColumnHeader
+              columnKey="libros"
+              title="Libros"
+              align="right"
+              renderFilter={(close) => (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-line pb-2">
+                    <span className="font-semibold text-ink">Columna: Libros</span>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-medium text-ink-subtle block mb-1">Ordenar por valor en libros:</span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => { setSort("libros", "desc"); close(); }}
+                        className={cn(
+                          "flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs transition cursor-pointer",
+                          sort === "libros" && sortDirection === "desc"
+                            ? "bg-teal text-bg-elevated border-teal font-semibold"
+                            : "border-line bg-bg-subtle hover:bg-teal-soft/50 text-ink"
+                        )}
+                      >
+                        <ArrowDown className="size-3" /> Mayor a menor
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setSort("libros", "asc"); close(); }}
+                        className={cn(
+                          "flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs transition cursor-pointer",
+                          sort === "libros" && sortDirection === "asc"
+                            ? "bg-teal text-bg-elevated border-teal font-semibold"
+                            : "border-line bg-bg-subtle hover:bg-teal-soft/50 text-ink"
+                        )}
+                      >
+                        <ArrowUp className="size-3" /> Menor a mayor
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1 border-t border-line">
+                    <button
+                      type="button"
+                      onClick={close}
+                      className="rounded-md bg-bg-subtle px-2.5 py-1 text-xs font-medium text-ink hover:bg-line transition cursor-pointer"
+                    >
+                      Listo
+                    </button>
+                  </div>
+                </div>
+              )}
+            />
           </tr>
         </thead>
       ) : null}
