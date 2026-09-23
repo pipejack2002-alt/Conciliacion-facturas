@@ -7,6 +7,8 @@ import {
   getStoredSession,
   clearStoredSession,
   TRIBUTO_SESSION_KEY,
+  parseTokenPayload,
+  SESSION_TTL_MS,
 } from "./tributo-auth.ts";
 
 describe("Guardián TributoApp SSO - Pruebas Unitarias", () => {
@@ -119,5 +121,44 @@ describe("Guardián TributoApp SSO - Pruebas Unitarias", () => {
     const result = await verifyTributoToken("unauthorized_token", mockFetch);
     assert.equal(result.success, false);
     assert.equal(result.error, "Acceso no autorizado");
+  });
+  it("debe decodificar claims válidos con parseTokenPayload", () => {
+    const payload = { userId: "usr_1", email: "test@tributo.com", plan: "empresarial", exp: Date.now() + 60000, iss: "tributoapp" };
+    const base64 = Buffer.from(JSON.stringify(payload)).toString("base64").replace(/=/g, "");
+    const token = `${base64}.dummy_signature`;
+
+    const parsed = parseTokenPayload(token);
+    assert.equal(parsed?.userId, "usr_1");
+    assert.equal(parsed?.email, "test@tributo.com");
+    assert.equal(parsed?.plan, "empresarial");
+    assert.equal(parsed?.iss, "tributoapp");
+  });
+
+  it("debe retornar null en parseTokenPayload si el token no tiene formato válido", () => {
+    assert.equal(parseTokenPayload("token_invalido_sin_punto"), null);
+    assert.equal(parseTokenPayload(""), null);
+  });
+
+  it("debe persistir la sesión con saveSession y recuperarla con getStoredSession", () => {
+    const mockStorage: Record<string, string> = {};
+    (globalThis as any).window = {
+      sessionStorage: {
+        getItem: (k: string) => mockStorage[k] || null,
+        setItem: (k: string, v: string) => { mockStorage[k] = v; },
+        removeItem: (k: string) => { delete mockStorage[k]; },
+      },
+      localStorage: {
+        getItem: (k: string) => mockStorage[k] || null,
+        setItem: (k: string, v: string) => { mockStorage[k] = v; },
+        removeItem: (k: string) => { delete mockStorage[k]; },
+      },
+    };
+
+    const saved = saveSession({ email: "pro@tributoapp.me", plan: "profesional" }, "token_123");
+    assert.equal(saved.valid, true);
+
+    const retrieved = getStoredSession();
+    assert.equal(retrieved?.valid, true);
+    assert.equal(retrieved?.user?.email, "pro@tributoapp.me");
   });
 });

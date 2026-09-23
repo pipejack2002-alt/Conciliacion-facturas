@@ -9,6 +9,7 @@ import {
   extractTokenFromSearch,
   cleanUrlToken,
   verifyTributoToken,
+  parseTokenPayload,
 } from "@/lib/tributo-auth";
 import {
   ShieldCheck,
@@ -64,7 +65,7 @@ export function TributoAuthGuardian({ children }: TributoAuthGuardianProps) {
     let isMounted = true;
 
     async function initAuth() {
-      // 1. Revisar si ya hay sesión en sessionStorage
+      // 1. Revisar si ya hay sesión válida activa (sessionStorage o localStorage dentro de 12 horas)
       const existingSession = getStoredSession();
       if (existingSession && existingSession.valid) {
         if (isMounted) {
@@ -77,36 +78,62 @@ export function TributoAuthGuardian({ children }: TributoAuthGuardianProps) {
       // 2. Revisar si viene token en la URL (?auth_token=... o ?token=...)
       const urlToken = extractTokenFromSearch();
       if (urlToken) {
-        if (isMounted) {
-          setIsLoading(true);
-          setError(null);
+        // Fast-path: Validar estructura y vigencia preliminar
+        const claims = parseTokenPayload(urlToken);
+        const ahora = Date.now();
+        const esValidoPreliminar =
+          claims &&
+          claims.iss === "tributoapp" &&
+          typeof claims.exp === "number" &&
+          claims.exp > ahora;
+
+        if (esValidoPreliminar && claims) {
+          // Renderizado Optimista Instantáneo: entrar de inmediato sin pantalla de bloqueo de 5 segundos
+          const optimisticSession: TributoAuthSession = {
+            valid: true,
+            user: {
+              id: claims.userId,
+              email: claims.email,
+              plan: claims.plan || "profesional",
+            },
+            authenticatedAt: new Date().toISOString(),
+            token: urlToken,
+          };
+
+          if (isMounted) {
+            setSession(optimisticSession);
+            setIsLoading(false);
+            setError(null);
+          }
+
+          // Validación criptográfica en segundo plano de la firma HMAC con el servidor de TributoApp
+          verifyTributoToken(urlToken)
+            .then((result) => {
+              if (!isMounted) return;
+              if (result.success && result.session) {
+                // Confirmado 100%: Guardar de forma persistente y limpiar la URL
+                saveSession(result.session.user, urlToken);
+                cleanUrlToken();
+              } else {
+                // Token falsificado, firma inválida o expirado en servidor: EXPULSIÓN INMEDIATA
+                clearStoredSession();
+                setSession(null);
+                setError(result.error || "Firma de seguridad no válida. Acceso revocado.");
+                cleanUrlToken();
+              }
+            })
+            .catch(() => {
+              // En caso de corte momentáneo de red, mantiene la sesión preliminar
+            });
+
+          return;
         }
 
-        try {
-          const result = await verifyTributoToken(urlToken);
-          if (!isMounted) return;
-
-          if (result.success && result.session) {
-            // Guardar sesión y sanitizar la barra de URL
-            const saved = saveSession(result.session.user, urlToken);
-            cleanUrlToken();
-            setSession(saved);
-            setError(null);
-          } else {
-            setError(
-              result.error ||
-                "El token de acceso no es válido o ha expirado. Por favor inicia sesión en TributoApp."
-            );
-            cleanUrlToken();
-          }
-        } catch (err) {
-          if (isMounted) {
-            setError("Error al conectar con TributoApp. Por favor verifica tu conexión a internet.");
-          }
-        } finally {
-          if (isMounted) {
-            setIsLoading(false);
-          }
+        // Si el token ni siquiera tiene formato válido o ya expiró por reloj:
+        if (isMounted) {
+          cleanUrlToken();
+          setError("El token de acceso no es válido o ha expirado. Por favor ingresa desde TributoApp.");
+          setIsLoading(false);
         }
         return;
       }

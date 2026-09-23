@@ -5,6 +5,9 @@
 
 export const TRIBUTO_SESSION_KEY = "tributo_conciliador_auth_session";
 
+// Tiempo máximo de validez de la sesión almacenada en el navegador: 12 horas
+export const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+
 export const TRIBUTO_API_ENDPOINTS = [
   "https://www.tributoapp.me/api/conciliador/verify",
   "https://tributoapp.me/api/conciliador/verify",
@@ -36,30 +39,93 @@ export interface VerifyTokenResult {
   error?: string;
 }
 
+export interface TokenPayloadClaims {
+  userId?: string;
+  email?: string;
+  plan?: string;
+  exp?: number;
+  nonce?: string;
+  iss?: string;
+}
+
 /**
- * Obtiene la sesión activa almacenada en sessionStorage si existe y es válida.
+ * Decodifica de forma segura la carga útil (claims) de un token HMAC-SHA256
+ * sin requerir la clave secreta privada del servidor.
  */
-export function getStoredSession(): TributoAuthSession | null {
-  if (typeof window === "undefined" || !window.sessionStorage) {
-    return null;
-  }
-
+export function parseTokenPayload(token: string): TokenPayloadClaims | null {
+  if (!token || typeof token !== "string") return null;
   try {
-    const raw = window.sessionStorage.getItem(TRIBUTO_SESSION_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as TributoAuthSession;
-    if (parsed && parsed.valid === true) {
-      return parsed;
+    const parts = token.trim().split(".");
+    if (parts.length !== 2) return null;
+    let base64 = parts[0].replace(/-/g, "+").replace(/_/g, "/");
+    while (base64.length % 4) {
+      base64 += "=";
     }
-    return null;
+    const json = typeof atob !== "undefined"
+      ? atob(base64)
+      : Buffer.from(base64, "base64").toString("utf8");
+    return JSON.parse(json) as TokenPayloadClaims;
   } catch {
     return null;
   }
 }
 
 /**
- * Guarda la sesión validada en sessionStorage.
+ * Obtiene la sesión activa almacenada en sessionStorage o localStorage si existe y no ha expirado.
+ */
+export function getStoredSession(): TributoAuthSession | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  // 1. Intentar leer de sessionStorage (rápido en la misma pestaña)
+  try {
+    if (window.sessionStorage) {
+      const rawSession = window.sessionStorage.getItem(TRIBUTO_SESSION_KEY);
+      if (rawSession) {
+        const parsed = JSON.parse(rawSession) as TributoAuthSession;
+        if (parsed?.valid) {
+          const authTime = new Date(parsed.authenticatedAt).getTime();
+          if (!isNaN(authTime) && Date.now() - authTime < SESSION_TTL_MS) {
+            return parsed;
+          }
+        }
+      }
+    }
+  } catch {
+    // Continuar a localStorage
+  }
+
+  // 2. Intentar leer de localStorage (permite abrir nuevas pestañas sin esperar 5 segundos)
+  try {
+    if (window.localStorage) {
+      const rawLocal = window.localStorage.getItem(TRIBUTO_SESSION_KEY);
+      if (rawLocal) {
+        const parsed = JSON.parse(rawLocal) as TributoAuthSession;
+        if (parsed?.valid) {
+          const authTime = new Date(parsed.authenticatedAt).getTime();
+          if (!isNaN(authTime) && Date.now() - authTime < SESSION_TTL_MS) {
+            // Sincronizar en sessionStorage para acceso rápido
+            try {
+              window.sessionStorage?.setItem(TRIBUTO_SESSION_KEY, rawLocal);
+            } catch {}
+            return parsed;
+          } else {
+            // Sesión expirada por TTL
+            window.localStorage.removeItem(TRIBUTO_SESSION_KEY);
+          }
+        }
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+/**
+ * Guarda la sesión validada tanto en sessionStorage como en localStorage.
  */
 export function saveSession(user: TributoUser | null, token?: string): TributoAuthSession {
   const session: TributoAuthSession = {
@@ -69,11 +135,19 @@ export function saveSession(user: TributoUser | null, token?: string): TributoAu
     token: token || undefined,
   };
 
-  if (typeof window !== "undefined" && window.sessionStorage) {
+  const serialized = JSON.stringify(session);
+
+  if (typeof window !== "undefined") {
     try {
-      window.sessionStorage.setItem(TRIBUTO_SESSION_KEY, JSON.stringify(session));
+      window.sessionStorage?.setItem(TRIBUTO_SESSION_KEY, serialized);
     } catch (e) {
       console.warn("[TributoAuth] Error al guardar sesión en sessionStorage:", e);
+    }
+
+    try {
+      window.localStorage?.setItem(TRIBUTO_SESSION_KEY, serialized);
+    } catch (e) {
+      console.warn("[TributoAuth] Error al guardar sesión en localStorage:", e);
     }
   }
 
@@ -81,14 +155,19 @@ export function saveSession(user: TributoUser | null, token?: string): TributoAu
 }
 
 /**
- * Elimina la sesión actual de sessionStorage.
+ * Elimina la sesión actual de sessionStorage y localStorage.
  */
 export function clearStoredSession(): void {
-  if (typeof window !== "undefined" && window.sessionStorage) {
+  if (typeof window !== "undefined") {
     try {
-      window.sessionStorage.removeItem(TRIBUTO_SESSION_KEY);
+      window.sessionStorage?.removeItem(TRIBUTO_SESSION_KEY);
     } catch (e) {
       console.warn("[TributoAuth] Error al limpiar sesión de sessionStorage:", e);
+    }
+    try {
+      window.localStorage?.removeItem(TRIBUTO_SESSION_KEY);
+    } catch (e) {
+      console.warn("[TributoAuth] Error al limpiar sesión de localStorage:", e);
     }
   }
 }
