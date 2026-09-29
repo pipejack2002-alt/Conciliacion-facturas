@@ -197,6 +197,10 @@ export function conciliarBancos(
           if (Math.abs(montoBanco - montoLibro) <= 0.05) {
             matchedExtractoIds.add(bItem.id);
             matchedLibroIndices.add(i);
+            const desc = (bItem.descripcion || "").toLowerCase();
+            const esGmf = /gmf|4x1000|gravamen|impuesto.*gobierno/i.test(desc);
+            const esComision = /comisi[oó]n|cuota.*manejo|chequera|tarifa|costo.*transferencia|cobro/i.test(desc);
+            const esRendimiento = /rendimiento|inter[eé]s.*abono|intereses.*liquidados/i.test(desc);
             rows.push({
               id: `match_${bItem.id}_${i}`,
               estado: "conciliado",
@@ -207,9 +211,9 @@ export function conciliarBancos(
               montoBanco,
               montoLibros: montoLibro,
               diferencia: 0,
-              esGmf: false,
-              esComision: false,
-              esRendimiento: false,
+              esGmf,
+              esComision,
+              esRendimiento,
               itemBanco: bItem,
               itemLibros: lItem,
               nota: "Conciliado por referencia de documento/cheque y valor exacto.",
@@ -240,6 +244,10 @@ export function conciliarBancos(
         if (isNaN(diffDays) || diffDays <= 7) {
           matchedExtractoIds.add(bItem.id);
           matchedLibroIndices.add(i);
+          const desc = (bItem.descripcion || "").toLowerCase();
+          const esGmf = /gmf|4x1000|gravamen|impuesto.*gobierno/i.test(desc);
+          const esComision = /comisi[oó]n|cuota.*manejo|chequera|tarifa|costo.*transferencia|cobro/i.test(desc);
+          const esRendimiento = /rendimiento|inter[eé]s.*abono|intereses.*liquidados/i.test(desc);
           rows.push({
             id: `match_val_${bItem.id}_${i}`,
             estado: "conciliado",
@@ -250,9 +258,9 @@ export function conciliarBancos(
             montoBanco,
             montoLibros: montoLibro,
             diferencia: 0,
-            esGmf: false,
-            esComision: false,
-            esRendimiento: false,
+            esGmf,
+            esComision,
+            esRendimiento,
             itemBanco: bItem,
             itemLibros: lItem,
             nota: `Conciliado por valor idéntico dentro de la ventana de compensación.`,
@@ -492,5 +500,73 @@ export function conciliarBancos(
     summary,
     cuentasBancosDetectadas,
     cuentasDetalle,
+  };
+}
+
+export interface BankConceptBreakdown {
+  total: number;
+  registrado: number;
+  pendiente: number;
+  count: number;
+  items: BankConciliacionRow[];
+}
+
+export interface BankExecutiveBreakdown {
+  gmf: BankConceptBreakdown;
+  comisiones: BankConceptBreakdown;
+  rendimientos: BankConceptBreakdown;
+  lotesAch: {
+    total: number;
+    countLotes: number;
+    countComprobantes: number;
+    items: BankConciliacionRow[];
+  };
+}
+
+export function getBankExecutiveBreakdown(rows: BankConciliacionRow[]): BankExecutiveBreakdown {
+  const gmfRows = rows.filter((r) => r.esGmf);
+  const comisionRows = rows.filter((r) => r.esComision);
+  const rendimientoRows = rows.filter((r) => r.esRendimiento);
+  const loteRows = rows.filter((r) => r.itemsLibrosLote && r.itemsLibrosLote.length > 0);
+
+  const calcBreakdown = (items: BankConciliacionRow[]): BankConceptBreakdown => {
+    let registrado = 0;
+    let pendiente = 0;
+    let total = 0;
+    for (const r of items) {
+      const val = r.montoBanco > 0 ? r.montoBanco : r.montoLibros;
+      total += val;
+      if (r.estado === "conciliado") {
+        registrado += val;
+      } else {
+        pendiente += val;
+      }
+    }
+    return {
+      total,
+      registrado,
+      pendiente,
+      count: items.length,
+      items,
+    };
+  };
+
+  let lotesTotal = 0;
+  let lotesCompCount = 0;
+  for (const r of loteRows) {
+    lotesTotal += r.montoBanco;
+    lotesCompCount += r.itemsLibrosLote?.length || 0;
+  }
+
+  return {
+    gmf: calcBreakdown(gmfRows),
+    comisiones: calcBreakdown(comisionRows),
+    rendimientos: calcBreakdown(rendimientoRows),
+    lotesAch: {
+      total: lotesTotal,
+      countLotes: loteRows.length,
+      countComprobantes: lotesCompCount,
+      items: loteRows,
+    },
   };
 }
