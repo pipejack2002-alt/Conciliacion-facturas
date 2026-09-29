@@ -34,6 +34,7 @@ import { readWorkbook, parseMovSheet } from "@/lib/parse-excel";
 import type { MovLine } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import * as XLSX from "xlsx";
+import { ConciliacionUniversalBancosView } from "./conciliacion-universal-bancos";
 
 // Extracto de demostración inicial preconfigurado
 const DEMO_EXTRACTO: BankExtractItem[] = [
@@ -46,6 +47,9 @@ const DEMO_EXTRACTO: BankExtractItem[] = [
 ];
 
 export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) {
+  // Selector de Modo: Homologados (Caja Social, Credicorp, Banistmo) vs Universal (Cualquier Banco)
+  const [modoVista, setModoVista] = useState<"homologado" | "universal">("homologado");
+
   // Estado de extracto bancario cargado
   const [extractoMeta, setExtractoMeta] = useState<ParsedBankExtractResult | null>(null);
   const [extractoItems, setExtractoItems] = useState<BankExtractItem[]>(DEMO_EXTRACTO);
@@ -362,8 +366,66 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
     XLSX.writeFile(wb, `conciliacion-bancaria-${extractoMeta?.bancoId || "banco"}.xlsx`);
   }
 
+  if (modoVista === "universal") {
+    return (
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 py-2 sm:px-6 lg:px-8 animate-in fade-in duration-200">
+        {/* Selector de Modo: Homologado vs Universal */}
+        <div className="flex flex-wrap items-center justify-between gap-3 p-2 bg-bg-surface border border-line rounded-2xl shadow-2xs">
+          <div className="flex items-center gap-1.5 p-1 bg-bg-subtle rounded-xl">
+            <button
+              type="button"
+              onClick={() => setModoVista("homologado")}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-ink-muted hover:text-ink transition cursor-pointer"
+            >
+              <Landmark className="size-3.5" />
+              <span>Bancos Homologados (Caja Social / Credicorp / Banistmo)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setModoVista("universal")}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-teal text-white shadow-xs transition cursor-pointer"
+            >
+              <Sparkles className="size-3.5" />
+              <span>Conciliador Universal (Cualquier Banco · Excel / CSV / PDF)</span>
+            </button>
+          </div>
+          <span className="text-[11px] text-ink-muted hidden md:inline-block pr-2">
+            Mapeo inteligente y adaptable a cualquier estructura de extracto bancario
+          </span>
+        </div>
+
+        <ConciliacionUniversalBancosView movLines={effectiveMovLines} />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 py-2 sm:px-6 lg:px-8 animate-in fade-in duration-200">
+      {/* Selector de Modo: Homologado vs Universal */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-2 bg-bg-surface border border-line rounded-2xl shadow-2xs">
+        <div className="flex items-center gap-1.5 p-1 bg-bg-subtle rounded-xl">
+          <button
+            type="button"
+            onClick={() => setModoVista("homologado")}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-teal text-white shadow-xs transition cursor-pointer"
+          >
+            <Landmark className="size-3.5" />
+            <span>Bancos Homologados (Caja Social / Credicorp / Banistmo)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setModoVista("universal")}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-ink-muted hover:text-ink transition cursor-pointer"
+          >
+            <Sparkles className="size-3.5" />
+            <span>Conciliador Universal (Cualquier Banco · Excel / CSV / PDF)</span>
+          </button>
+        </div>
+        <span className="text-[11px] text-ink-muted hidden md:inline-block pr-2">
+          Modelos pre-validados con extracción automática para cuentas colombianas e internacionales
+        </span>
+      </div>
+
       {/* Banner Principal de Conciliación Bancaria */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-line bg-gradient-to-r from-bg-surface via-bg-surface to-teal-soft/25 p-5 shadow-xs">
         <div>
