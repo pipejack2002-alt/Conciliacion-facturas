@@ -16,6 +16,10 @@ import {
   Award,
   Sparkles,
   Keyboard,
+  ArrowUp,
+  ArrowDown,
+  Filter,
+  RotateCcw,
 } from "lucide-react";
 import { BadgeEstado } from "./badge-estado";
 import { DeltaBanner, ReplaceBar } from "./audit-chrome";
@@ -39,7 +43,7 @@ import { ConciliationProgress } from "./conciliation-progress";
 import { DocTable } from "./board/doc-table";
 import { DetailDrawer } from "./board/detail-drawer";
 import { CruceBanner } from "./board/cruce-banner";
-import { Empty } from "./board/board-utils";
+import { Empty, shortTipo } from "./board/board-utils";
 import { exportCsv } from "@/lib/export-csv";
 
 const TABS: { id: TabId; label: string }[] = [
