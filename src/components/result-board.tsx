@@ -29,6 +29,8 @@ import { daysAgo, formatDate, formatMoney, formatMoneyExact } from "@/lib/format
 import { ESTADO_LABEL, inCola } from "@/lib/conciliar";
 import { exportAuditoriaXlsx } from "@/lib/export-excel";
 import { exportSiigoTemplateXlsx } from "@/lib/export-siigo";
+import { exportWorldOfficeTemplateXlsx } from "@/lib/export-worldoffice";
+import { exportHelisaTemplateXlsx } from "@/lib/export-helisa";
 import { HistoryModal } from "./history-modal";
 import { TaxSummaryModal } from "./tax-summary-modal";
 import { ExecutiveReportModal } from "./executive-report-modal";
@@ -54,7 +56,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "solo_siigo", label: "Solo libros" },
 ];
 
-type MaterialidadFilter = "todos" | "altos" | "con_sugerencia" | "sin_revisar";
+type MaterialidadFilter = "todos" | "altos" | "con_sugerencia" | "riesgo_fiscal" | "sin_revisar";
 
 const RANK: Record<string, number> = {
   duplicado: 0,
@@ -175,6 +177,7 @@ export function ResultBoard() {
       const amt = r.estado === "solo_siigo" ? r.totalSiigo : r.totalDian;
       if (materialidad === "altos" && amt < 5000000) return false;
       if (materialidad === "con_sugerencia" && !getTaxInsight(r)) return false;
+      if (materialidad === "riesgo_fiscal" && getTaxInsight(r)?.tipo !== "riesgo_fiscal_radian") return false;
       if (materialidad === "sin_revisar" && reviewOf(reviews, r)?.done) return false;
 
       // Filtros específicos por columna ("El filtríco")
@@ -445,6 +448,46 @@ export function ResultBoard() {
             </button>
           </div>
 
+          {/* Menú de Plantillas de Causación Contable para ERPs */}
+          <div className="relative inline-flex items-center rounded-lg border border-teal/40 bg-teal-soft/40 p-0.5 text-xs shadow-2xs">
+            <span className="inline-flex items-center px-2 py-1 font-bold text-teal-deep text-[11px]">
+              Causar en ERP:
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                exportSiigoTemplateXlsx(result.rows, result.company, result.periodLabel);
+                flash("Plantilla de causación para Siigo descargada con éxito");
+              }}
+              className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-semibold text-teal hover:bg-bg-surface hover:text-teal-deep transition shadow-2xs cursor-pointer"
+              title="Exportar archivo de causación masiva para Siigo (P)"
+            >
+              Siigo
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                exportWorldOfficeTemplateXlsx(result.rows, result.company, result.periodLabel);
+                flash("Plantilla de causación para World Office descargada con éxito");
+              }}
+              className="inline-flex h-7 items-center gap-1 rounded-md border-l border-teal/20 px-2 text-[11px] font-semibold text-teal hover:bg-bg-surface hover:text-teal-deep transition shadow-2xs cursor-pointer"
+              title="Exportar archivo de causación masiva para World Office (FC)"
+            >
+              World Office
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                exportHelisaTemplateXlsx(result.rows, result.company, result.periodLabel);
+                flash("Plantilla de causación para Helisa descargada con éxito");
+              }}
+              className="inline-flex h-7 items-center gap-1 rounded-md border-l border-teal/20 px-2 text-[11px] font-semibold text-teal hover:bg-bg-surface hover:text-teal-deep transition shadow-2xs cursor-pointer"
+              title="Exportar archivo de causación masiva para Helisa (01)"
+            >
+              Helisa
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={reset}
@@ -565,13 +608,27 @@ export function ResultBoard() {
                 type="button"
                 onClick={() => setMaterialidad("con_sugerencia")}
                 className={cn(
-                  "inline-flex items-center gap-1 rounded px-2 py-1 font-medium transition",
+                  "inline-flex items-center gap-1 rounded px-2 py-1 font-medium transition cursor-pointer",
                   materialidad === "con_sugerencia" ? "bg-teal text-bg-elevated font-semibold" : "text-ink-muted hover:text-ink",
                 )}
                 title="Filtrar partidas con causas tributarias detectadas (Retefuente, IVA, Redondeo)"
               >
                 <Sparkles className="size-3 text-amber-500" />
                 Con Sugerencia
+              </button>
+              <button
+                type="button"
+                onClick={() => setMaterialidad("riesgo_fiscal")}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded px-2 py-1 font-medium transition cursor-pointer",
+                  materialidad === "riesgo_fiscal"
+                    ? "bg-rose-600 text-white font-semibold"
+                    : "text-rose-700 hover:text-rose-900 bg-rose-50/70 hover:bg-rose-100/70 border border-rose-200/80",
+                )}
+                title="Filtrar facturas a crédito en riesgo por Art. 771-2 E.T. (sin acuses de recibo RADIAN)"
+              >
+                <AlertTriangle className="size-3 text-current" />
+                Riesgo Art. 771-2
               </button>
               <button
                 type="button"
@@ -796,6 +853,60 @@ export function ResultBoard() {
       </div>
 
       {tab === "cruce_nc" && result.cruzes.length ? <CruceBanner cruzes={result.cruzes} /> : null}
+
+      {/* Banner Especial de Causación Masiva a ERPs en Pestaña 'Por Registrar' */}
+      {tab === "pendiente" && result.totals.pendientesRecibidos > 0 && (
+        <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-teal/40 bg-teal-soft/40 p-4 shadow-2xs animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-teal text-white shrink-0 shadow-xs">
+              <Download className="size-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-ink flex items-center gap-1.5">
+                <span>Causación Masiva en 1 Clic para tu ERP</span>
+                <span className="rounded bg-teal/20 px-1.5 py-0.5 text-[10px] font-bold text-teal-deep">
+                  {result.totals.pendientesRecibidos} facturas pendientes
+                </span>
+              </h4>
+              <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
+                Descarga la plantilla con asientos de partida doble (gasto + IVA descontable vs. proveedores) para causar estas facturas en segundos:
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                exportSiigoTemplateXlsx(result.rows, result.company, result.periodLabel);
+                flash("Plantilla de importación Siigo descargada");
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-teal/40 bg-bg-surface px-3 py-1.5 text-xs font-semibold text-teal hover:bg-teal hover:text-white transition shadow-2xs cursor-pointer"
+            >
+              <span>📘 Siigo</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                exportWorldOfficeTemplateXlsx(result.rows, result.company, result.periodLabel);
+                flash("Plantilla de importación World Office descargada");
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-teal/40 bg-bg-surface px-3 py-1.5 text-xs font-semibold text-teal hover:bg-teal hover:text-white transition shadow-2xs cursor-pointer"
+            >
+              <span>📗 World Office</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                exportHelisaTemplateXlsx(result.rows, result.company, result.periodLabel);
+                flash("Plantilla de importación Helisa descargada");
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-teal/40 bg-bg-surface px-3 py-1.5 text-xs font-semibold text-teal hover:bg-teal hover:text-white transition shadow-2xs cursor-pointer"
+            >
+              <span>📙 Helisa</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {groups ? (
         <div className="mt-4 space-y-3">
@@ -1812,11 +1923,17 @@ function DocTable({
                           ? "bg-sky-100 text-sky-950 border-sky-400"
                           : insight.tipo === "comision_bancaria"
                           ? "bg-emerald-100 text-emerald-950 border-emerald-400"
+                          : insight.tipo === "riesgo_fiscal_radian"
+                          ? "bg-rose-100 text-rose-950 border-rose-300 font-extrabold"
                           : "bg-teal-100 text-teal-950 border-teal-400",
                       )}
                       title={insight.detalle}
                     >
-                      <Sparkles className="size-2.5 shrink-0 text-current" />
+                      {insight.tipo === "riesgo_fiscal_radian" ? (
+                        <AlertTriangle className="size-2.5 shrink-0 text-rose-600" />
+                      ) : (
+                        <Sparkles className="size-2.5 shrink-0 text-current" />
+                      )}
                       {insight.etiqueta}
                     </span>
                   )}
@@ -2057,12 +2174,18 @@ function DetailDrawer({
                 ? "border-sky-300 bg-sky-50/90 text-sky-950"
                 : insight.tipo === "comision_bancaria"
                 ? "border-emerald-300 bg-emerald-50/90 text-emerald-950"
+                : insight.tipo === "riesgo_fiscal_radian"
+                ? "border-rose-300 bg-rose-50/95 text-rose-950 ring-1 ring-rose-200"
                 : "border-amber-300 bg-amber-50/90 text-amber-950",
             )}
           >
             <div className="flex items-center gap-1.5 font-bold mb-1.5 text-sm">
-              <Sparkles className="size-4 shrink-0 text-current" />
-              Sugerencia Tributaria: {insight.etiqueta}
+              {insight.tipo === "riesgo_fiscal_radian" ? (
+                <AlertTriangle className="size-4 shrink-0 text-rose-600" />
+              ) : (
+                <Sparkles className="size-4 shrink-0 text-current" />
+              )}
+              {insight.tipo === "riesgo_fiscal_radian" ? "Alerta Fiscal Preventiva:" : "Sugerencia Tributaria:"} {insight.etiqueta}
             </div>
             <p className="leading-relaxed opacity-95 text-xs">{insight.detalle}</p>
           </div>

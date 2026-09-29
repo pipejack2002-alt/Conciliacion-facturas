@@ -2,16 +2,102 @@ import type { ConciliacionRow } from "./types.ts";
 import { formatMoney } from "./format.ts";
 
 export interface TaxInsight {
-  tipo: "redondeo" | "retefuente" | "iva" | "reteiva" | "reteica" | "posible_duplicado" | "trm_diferencia" | "comision_bancaria";
+  tipo:
+    | "redondeo"
+    | "retefuente"
+    | "iva"
+    | "reteiva"
+    | "reteica"
+    | "posible_duplicado"
+    | "trm_diferencia"
+    | "comision_bancaria"
+    | "riesgo_fiscal_radian";
   etiqueta: string;
   detalle: string;
   tarifa?: string;
   probabilidad: "alta" | "media";
+  montoEnRiesgo?: number;
+}
+
+/**
+ * Determina si una operación o factura electrónica corresponde a una compra de CONTADO
+ * (pago inmediato, contado comercial, caja menor, peajes, combustible, mostrador, etc.).
+ *
+ * MARCO NORMATIVO DIAN (COLOMBIA):
+ * - Art. 771-2 del Estatuto Tributario
+ * - Art. 616-1 del Estatuto Tributario
+ * - Resolución DIAN 000085 de 2022
+ *
+ * REGLA FUNDAMENTAL:
+ * Las facturas de CONTADO NO requieren acuses de recibo ni eventos en el sistema RADIAN
+ * para ser soporte válido de costos, deducciones en el impuesto sobre la renta e impuestos
+ * descontables en IVA.
+ * Los eventos de acuse de recibo aplican EXCLUSIVAMENTE a las operaciones a CRÉDITO o con plazo.
+ */
+export function isContado(row: ConciliacionRow): boolean {
+  // 1. Campo explícito formaPago (del reporte oficial DIAN o ERP contable)
+  if (row.formaPago) {
+    const fp = row.formaPago.toLowerCase().trim();
+    // DIAN Código 1 = Contado; 2 = Crédito
+    if (
+      fp.includes("contado") ||
+      fp === "1" ||
+      fp.includes("inmediato") ||
+      fp.includes("cash") ||
+      fp.includes("efectivo")
+    ) {
+      return true;
+    }
+    if (fp.includes("crédito") || fp.includes("credito") || fp === "2" || fp.includes("plazo")) {
+      return false;
+    }
+  }
+
+  // 2. Alerta o descripción explícita de contado / pago inmediato
+  const alerta = (row.alerta || "").toLowerCase();
+  const tipo = (row.tipo || "").toLowerCase();
+  if (
+    alerta.includes("contado") ||
+    alerta.includes("pago inmediato") ||
+    tipo.includes("contado") ||
+    alerta.includes("caja menor")
+  ) {
+    return true;
+  }
+
+  // Si la alerta o tipo menciona explícitamente crédito o plazo, no es contado
+  if (alerta.includes("crédito") || alerta.includes("credito") || alerta.includes("plazo")) {
+    return false;
+  }
+
+  // 3. Proveedores que por su naturaleza comercial operan de contado / caja menor / peajes / combustible
+  const contraparte = (row.nombreContraparte || "").toLowerCase();
+  const esComercioContado =
+    /coviandina|autopista|invias|concesion|peaje|terpel|primax|biomax|texaco|estacion.*servicio|combustible|distracom|zeuss|gasolin|exito|cencosud|jumbo|carulla|d1\b|ara\b|olimpica|alkosto|makro|homecenter|sodimac|panamericana|farmatodo|cruz\s*verde|drogueria|crepes|restaurante|cafeteria|mcdonald|el\s*corral|starbucks|avianca|latam|uber|cabify|taxis/i.test(
+      contraparte
+    );
+  if (esComercioContado) {
+    return true;
+  }
+
+  // 4. Si los movimientos contables registrados en libros tocan directamente cuentas de caja (1105) o bancos (1110)
+  // sin pasar por proveedores/cuentas por pagar (2205 / 2335)
+  if (row.hits && row.hits.length > 0) {
+    const cuentas = row.hits.map((h) => h.cuenta);
+    const tocaCajaOBanco = cuentas.some((c) => c.startsWith("1105") || c.startsWith("1110") || c.startsWith("1120"));
+    const tocaProveedores = cuentas.some((c) => c.startsWith("2205") || c.startsWith("2335"));
+    if (tocaCajaOBanco && !tocaProveedores) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
  * Analiza una fila para identificar si corresponde a deducciones tributarias (Retefuente, IVA, ReteICA),
- * redondeo, ajuste por TRM de moneda extranjera o comisiones bancarias pendientes de causar en L.
+ * redondeo, ajuste por TRM de moneda extranjera, comisiones bancarias pendientes de causar en L,
+ * o riesgo fiscal por falta de eventos de acuse de recibo según el Art. 771-2 del Estatuto Tributario.
  */
 export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
   // A. Detección de ajuste por TRM / Moneda extranjera (e.g. Seguros Bolívar)
@@ -82,6 +168,30 @@ export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
         etiqueta: "Materiales / Ferretería",
         detalle: `Compra de materiales o insumos de ferretería (${formatMoney(row.totalDian)}). Verificar si la factura está en trámite de legalización o pendiente de radicar.`,
         probabilidad: "alta",
+      };
+    }
+
+    // 5. Exclusión de Facturas de CONTADO (Regla de Oro Tributaria)
+    // Conforme al Art. 771-2 y Art. 616-1 del E.T. y Res. 000085 de la DIAN:
+    // A las facturas de contado o pago inmediato NO se les exige la emisión de eventos RADIAN.
+    if (isContado(row)) {
+      return {
+        tipo: "redondeo",
+        etiqueta: "Operación de Contado (Sin Eventos)",
+        detalle: `Factura cancelada de contado o pago inmediato (${formatMoney(row.totalDian)}). Conforme al Art. 771-2 del E.T. y Res. 000085 DIAN, NO requiere acuses de recibo ni eventos RADIAN; es costo deducible e IVA descontable de forma directa.`,
+        probabilidad: "alta",
+      };
+    }
+
+    // 6. Semáforo de Riesgo Fiscal DIAN (Art. 771-2 del Estatuto Tributario y Eventos RADIAN)
+    // Aplica EXCLUSIVAMENTE a facturas comerciales a CRÉDITO o con plazo pendientes sin acuses
+    if (row.totalDian > 0 && (/factura/i.test(row.tipo) || /cr[eé]dito/i.test(row.alerta))) {
+      return {
+        tipo: "riesgo_fiscal_radian",
+        etiqueta: "Riesgo Art. 771-2 E.T. (Sin Acuses)",
+        detalle: `Factura a crédito sin evento de recibo registrado: en riesgo de desconocimiento de costo en Renta e IVA descontable (${formatMoney(row.totalDian)}). Según el Art. 771-2 del E.T. y Resolución DIAN 000085, las facturas a crédito requieren los 3 acuses de recibo en DIAN para ser deducibles.`,
+        probabilidad: "alta",
+        montoEnRiesgo: row.totalDian,
       };
     }
   }

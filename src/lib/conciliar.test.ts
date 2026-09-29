@@ -268,6 +268,65 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
     assert.ok(insightSinIva);
     assert.strictEqual(insightSinIva.tipo, "iva");
     assert.strictEqual(insightSinIva.tarifa, "19%");
+
+    // Caso 4: Semáforo de Riesgo Fiscal RADIAN / Art. 771-2 E.T. (Factura comercial a crédito sin acuses)
+    const rowRiesgoRadian = {
+      ...rowRedondeo,
+      estado: "pendiente" as const,
+      totalDian: 8500000,
+      totalSiigo: 0,
+      diferencia: 8500000,
+      nombreContraparte: "DISTRIBUIDORA INDUSTRIAL S.A.S.",
+    };
+    const insightRadian = getTaxInsight(rowRiesgoRadian);
+    assert.ok(insightRadian);
+    assert.strictEqual(insightRadian.tipo, "riesgo_fiscal_radian");
+    assert.ok(insightRadian.detalle.includes("Art. 771-2"));
+
+    // Caso 5: Exclusión de facturas de CONTADO (Art. 771-2 E.T. y Res. 000085 DIAN)
+    // Factura con forma de pago explícita "Contado" o código "1"
+    const rowContadoExplicito = {
+      ...rowRedondeo,
+      estado: "pendiente" as const,
+      totalDian: 3200000,
+      totalSiigo: 0,
+      diferencia: 3200000,
+      formaPago: "Contado",
+      nombreContraparte: "SUMINISTROS Y TECNOLOGÍA S.A.S.",
+    };
+    const insightContado = getTaxInsight(rowContadoExplicito);
+    assert.ok(insightContado);
+    assert.notStrictEqual(insightContado.tipo, "riesgo_fiscal_radian");
+    assert.strictEqual(insightContado.etiqueta, "Operación de Contado (Sin Eventos)");
+    assert.ok(insightContado.detalle.includes("NO requiere acuses"));
+
+    // Caso 6: Proveedor intrínseco de combustible / caja menor
+    const rowCombustible = {
+      ...rowRedondeo,
+      estado: "pendiente" as const,
+      totalDian: 450000,
+      totalSiigo: 0,
+      diferencia: 450000,
+      nombreContraparte: "ORGANIZACION TERPEL S.A.",
+    };
+    const insightCombustible = getTaxInsight(rowCombustible);
+    assert.ok(insightCombustible);
+    assert.notStrictEqual(insightCombustible.tipo, "riesgo_fiscal_radian");
+    assert.strictEqual(insightCombustible.etiqueta, "Gasto de Combustible");
+
+    // Caso 7: Proveedor intrínseco de retail/mostrador de contado (Exito, D1, Ara, Cruz Verde)
+    const rowRetail = {
+      ...rowRedondeo,
+      estado: "pendiente" as const,
+      totalDian: 210000,
+      totalSiigo: 0,
+      diferencia: 210000,
+      nombreContraparte: "ALMACENES EXITO S.A.",
+    };
+    const insightRetail = getTaxInsight(rowRetail);
+    assert.ok(insightRetail);
+    assert.notStrictEqual(insightRetail.tipo, "riesgo_fiscal_radian");
+    assert.strictEqual(insightRetail.etiqueta, "Operación de Contado (Sin Eventos)");
   });
 
   it("debe dejar como pendiente (por registrar) facturas cuando en libros solo hay ajustes de rendimientos (PUC 12)", () => {

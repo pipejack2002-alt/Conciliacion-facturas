@@ -15,6 +15,8 @@ export type DianDoc = {
   total: number;
   estadoDian: string;
   grupo: string;
+  formaPago?: string;
+  medioPago?: string;
 };
 
 export type MovLine = {
@@ -127,6 +129,7 @@ export type ConciliacionRow = {
   prioridad: "audit" | "secundario";
   linked: LinkedDoc[];
   alerta: string;
+  formaPago?: string;
 };
 
 export type OrphanMov = {

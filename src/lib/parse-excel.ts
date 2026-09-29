@@ -217,6 +217,7 @@ export function extractDianDocsFromRows(rows: (string | number | Date | null)[][
   const iTot = col(map, ["total"]);
   const iEst = col(map, ["estado"]);
   const iGr = col(map, ["grupo"]);
+  const iFp = col(map, ["forma de pago", "forma pago", "metodo de pago", "metodo pago", "medio de pago"]);
 
   const out: DianDoc[] = [];
   for (let r = headerIndex + 1; r < rows.length; r++) {
@@ -239,6 +240,7 @@ export function extractDianDocsFromRows(rows: (string | number | Date | null)[][
       total: iTot != null ? cellNum(row[iTot]) : 0,
       estadoDian: iEst != null ? cellStr(row[iEst]) : "",
       grupo: iGr != null ? cellStr(row[iGr]) : "",
+      formaPago: iFp != null ? cellStr(row[iFp]) : "",
     });
   }
   return out;

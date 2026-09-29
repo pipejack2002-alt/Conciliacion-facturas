@@ -698,6 +698,7 @@ export function conciliar(
       prioridad,
       linked: [],
       alerta,
+      formaPago: doc.formaPago || "",
     });
   });
 
