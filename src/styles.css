@@ -5,29 +5,29 @@
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
 
-  --color-bg: #f8fafc;
+  --color-bg: #f1f5f9;
   --color-bg-surface: #ffffff;
   --color-bg-elevated: #ffffff;
-  --color-bg-subtle: #f1f5f9;
+  --color-bg-subtle: #e2e8f0;
   
-  --color-ink: #0f172a;
-  --color-ink-muted: #475569;
-  --color-ink-subtle: #94a3b8;
+  --color-ink: #090d16;
+  --color-ink-muted: #334155;
+  --color-ink-subtle: #64748b;
 
-  --color-line: #e2e8f0;
-  --color-line-strong: #cbd5e1;
+  --color-line: #cbd5e1;
+  --color-line-strong: #94a3b8;
 
   --color-teal: #0f766e;
   --color-teal-soft: #ccfbf1;
   --color-teal-deep: #115e59;
 
-  --color-ok: #16a34a;
-  --color-ok-bg: #f0fdf4;
-  --color-warn: #d97706;
+  --color-ok: #15803d;
+  --color-ok-bg: #ecfdf5;
+  --color-warn: #b45309;
   --color-warn-bg: #fffbeb;
-  --color-danger: #dc2626;
+  --color-danger: #b91c1c;
   --color-danger-bg: #fef2f2;
-  --color-info: #2563eb;
+  --color-info: #1d4ed8;
   --color-info-bg: #eff6ff;
 
   --radius-sm: 6px;
@@ -38,17 +38,17 @@
 
 @layer base {
   html.dark {
-    --color-bg: #0b1120;
+    --color-bg: #090e17;
     --color-bg-surface: #0f172a;
     --color-bg-elevated: #1e293b;
-    --color-bg-subtle: #1e293b;
+    --color-bg-subtle: #192337;
     
     --color-ink: #f8fafc;
     --color-ink-muted: #94a3b8;
     --color-ink-subtle: #64748b;
 
-    --color-line: #334155;
-    --color-line-strong: #475569;
+    --color-line: #1e293b;
+    --color-line-strong: #334155;
 
     --color-teal: #2dd4bf;
     --color-teal-soft: rgba(45, 212, 191, 0.15);
@@ -118,3 +118,17 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
+
+@utility card-elevated {
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-line);
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.03);
+}
+
+@utility card-interactive {
+  background-color: var(--color-bg-surface);
+  border: 1.5px solid var(--color-line);
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.04);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+

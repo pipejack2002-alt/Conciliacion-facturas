@@ -111,27 +111,27 @@ export function KpiRow({
             type="button"
             onClick={() => onSelectTab(k.tab)}
             className={cn(
-              "group relative flex flex-col justify-between rounded-xl border p-4 text-left transition-all duration-200 cursor-pointer overflow-hidden",
+              "group relative flex flex-col justify-between rounded-2xl border-2 p-4 text-left transition-all duration-200 cursor-pointer overflow-hidden shadow-xs",
               isActive
-                ? "border-teal bg-teal-soft/20 shadow-sm ring-2 ring-teal/30 -translate-y-0.5"
+                ? "border-teal-600 bg-teal-50/70 dark:bg-teal-950/40 shadow-sm ring-2 ring-teal-500/30 -translate-y-0.5"
                 : k.alert
-                  ? "border-danger/30 bg-bg-elevated hover:border-danger/60 hover:bg-danger-bg/20 hover:-translate-y-0.5 hover:shadow-xs"
-                  : "border-line bg-bg-elevated hover:border-teal/40 hover:bg-bg-subtle/40 hover:-translate-y-0.5 hover:shadow-xs",
+                  ? "border-red-300 dark:border-red-800 bg-white dark:bg-slate-900 hover:border-red-500 hover:bg-red-50/30 dark:hover:bg-red-950/20 hover:-translate-y-0.5 hover:shadow-sm"
+                  : "border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-teal-500/70 hover:bg-teal-50/20 dark:hover:bg-teal-950/20 hover:-translate-y-0.5 hover:shadow-sm",
             )}
           >
             {/* Header del KPI con Icono */}
             <div className="flex items-center justify-between gap-1">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-ink-subtle group-hover:text-ink-muted transition-colors">
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400 group-hover:text-slate-950 dark:group-hover:text-white transition-colors">
                 {k.label}
               </span>
               <Icon
                 className={cn(
-                  "size-3.5 transition-colors",
+                  "size-4 transition-colors",
                   isActive
                     ? "text-teal"
                     : k.alert
-                      ? "text-danger"
-                      : "text-ink-subtle group-hover:text-ink-muted",
+                      ? "text-red-600 dark:text-red-400"
+                      : "text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200",
                 )}
               />
             </div>
@@ -139,25 +139,25 @@ export function KpiRow({
             {/* Valor Principal */}
             <div
               className={cn(
-                "mt-2 font-display text-2xl font-bold tabular-nums tracking-tight",
+                "mt-2 font-display text-2xl sm:text-3xl font-black tabular-nums tracking-tight",
                 isActive
-                  ? "text-teal-deep"
+                  ? "text-teal-950 dark:text-teal-300"
                   : k.alert
-                    ? "text-danger"
-                    : "text-ink",
+                    ? "text-red-700 dark:text-red-400"
+                    : "text-slate-950 dark:text-white",
               )}
             >
               {k.value}
             </div>
 
             {/* Subtítulo / Monto */}
-            <div className="mt-1 text-xs text-ink-muted truncate" title={k.hint}>
+            <div className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400 truncate" title={k.hint}>
               {k.hint}
             </div>
 
             {/* Active Glow Accent Bar */}
             {isActive && (
-              <span className="absolute inset-x-0 bottom-0 h-0.5 bg-teal" />
+              <span className="absolute inset-x-0 bottom-0 h-1 bg-teal" />
             )}
           </button>
         );

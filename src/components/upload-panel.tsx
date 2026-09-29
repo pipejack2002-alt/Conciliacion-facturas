@@ -192,19 +192,29 @@ export function UploadPanel() {
   const isReadyToReconcile = Boolean(dianFile && movFile && !busy);
 
   return (
-    <div className="mx-auto max-w-4xl px-4 pb-16 pt-2 sm:pt-4">
+    <div className="mx-auto max-w-4xl px-4 pb-16 pt-2 sm:pt-4 relative">
+      {/* Glow de Fondo Fintech */}
+      <div className="pointer-events-none absolute -top-16 left-1/2 -translate-x-1/2 w-[700px] h-[280px] bg-gradient-to-b from-teal-500/10 via-emerald-500/5 to-transparent blur-3xl -z-10" />
+
       {/* Hero Header Corporativo */}
-      <div className="text-center max-w-2xl mx-auto mb-8 space-y-3">
-        <div className="inline-flex items-center gap-2 rounded-full bg-teal-soft/80 border border-teal/30 px-3.5 py-1 text-xs font-bold text-teal-deep shadow-xs">
-          <Sparkles className="size-3.5 text-teal" />
-          <span>Motor de Auditoría y Cruce de Facturas DIAN 2026</span>
+      <div className="text-center max-w-2xl mx-auto mb-8 space-y-3.5">
+        <div className="inline-flex items-center gap-2.5 rounded-full bg-white dark:bg-slate-900 border-2 border-emerald-500/40 px-4 py-1.5 text-xs font-black text-emerald-950 dark:text-emerald-300 shadow-sm">
+          <span className="relative flex size-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex size-2 rounded-full bg-emerald-600 dark:bg-emerald-400" />
+          </span>
+          <Sparkles className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+          <span className="tracking-wide uppercase text-[11px]">Motor de Auditoría y Cruce de Facturas DIAN 2026</span>
         </div>
 
-        <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-ink">
-          Conciliador de Facturas DIAN <span className="text-teal">vs. Libros Contables</span>
+        <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-slate-950 dark:text-white leading-[1.15]">
+          Conciliador de Facturas DIAN{" "}
+          <span className="bg-gradient-to-r from-teal-700 via-teal-600 to-emerald-600 dark:from-teal-400 dark:to-emerald-400 bg-clip-text text-transparent">
+            vs. Libros Contables
+          </span>
         </h1>
 
-        <p className="text-xs sm:text-sm text-ink-muted leading-relaxed">
+        <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed font-normal">
           Cruce automático e instantáneo de facturación electrónica. Identifique facturas no causadas, omisiones, duplicados, diferencias en IVA y cruces con notas crédito en segundos.
         </p>
 
@@ -213,35 +223,39 @@ export function UploadPanel() {
           <button
             type="button"
             onClick={() => setShowGuia(true)}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal hover:text-teal-deep bg-teal-soft/40 hover:bg-teal-soft/70 px-3 py-1.5 rounded-lg border border-teal/20 transition"
+            className="inline-flex items-center gap-2 text-xs font-bold text-teal-800 dark:text-teal-300 hover:text-teal-950 dark:hover:text-white bg-white dark:bg-slate-900 px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 hover:border-teal-500 shadow-2xs hover:shadow-xs transition cursor-pointer"
           >
-            <HelpCircle className="size-3.5" />
+            <HelpCircle className="size-4 text-teal" />
             <span>¿Cómo exportar y conciliar? Ver Guía Rápida</span>
           </button>
         </div>
       </div>
 
       {/* Stepper interactivo de 3 pasos */}
-      <div className="mb-8 grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="mb-8 grid grid-cols-1 sm:grid-cols-3 gap-3.5">
         <div
           className={cn(
-            "p-3 rounded-xl border transition flex items-center gap-3",
+            "p-3.5 rounded-2xl border-2 transition-all flex items-center gap-3.5 shadow-xs",
             dianFile
-              ? "bg-ok-bg/50 border-ok/30 text-ok"
-              : "bg-bg-surface border-line text-ink-muted"
+              ? "bg-emerald-50/80 border-emerald-400/80 dark:bg-emerald-950/40 dark:border-emerald-700 text-emerald-950 dark:text-emerald-200"
+              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300"
           )}
         >
           <div
             className={cn(
-              "size-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0",
-              dianFile ? "bg-ok text-white" : "bg-teal-soft text-teal-deep"
+              "size-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-2xs",
+              dianFile
+                ? "bg-emerald-600 text-white"
+                : "bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700"
             )}
           >
-            {dianFile ? <CheckCircle2 className="size-4" /> : "1"}
+            {dianFile ? <CheckCircle2 className="size-5" /> : "1"}
           </div>
           <div className="text-xs leading-tight">
-            <span className="font-bold text-ink block">Reporte DIAN</span>
-            <span className="text-ink-subtle">
+            <span className="font-extrabold text-slate-950 dark:text-white block text-sm">
+              Reporte DIAN
+            </span>
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
               {dianFile ? "Archivo cargado" : "Documentos recibidos (.xlsx)"}
             </span>
           </div>
@@ -249,49 +263,55 @@ export function UploadPanel() {
 
         <div
           className={cn(
-            "p-3 rounded-xl border transition flex items-center gap-3",
+            "p-3.5 rounded-2xl border-2 transition-all flex items-center gap-3.5 shadow-xs",
             movFile
-              ? "bg-ok-bg/50 border-ok/30 text-ok"
-              : "bg-bg-surface border-line text-ink-muted"
+              ? "bg-emerald-50/80 border-emerald-400/80 dark:bg-emerald-950/40 dark:border-emerald-700 text-emerald-950 dark:text-emerald-200"
+              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300"
           )}
         >
           <div
             className={cn(
-              "size-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0",
-              movFile ? "bg-ok text-white" : "bg-teal-soft text-teal-deep"
+              "size-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-2xs",
+              movFile
+                ? "bg-emerald-600 text-white"
+                : "bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700"
             )}
           >
-            {movFile ? <CheckCircle2 className="size-4" /> : "2"}
+            {movFile ? <CheckCircle2 className="size-5" /> : "2"}
           </div>
           <div className="text-xs leading-tight">
-            <span className="font-bold text-ink block">Movimiento Contable</span>
-            <span className="text-ink-subtle">
-              {movFile ? "Archivo cargado" : "Libro auxiliar (.xlsx)"}
+            <span className="font-extrabold text-slate-950 dark:text-white block text-sm">
+              Movimiento Contable
+            </span>
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+              {movFile ? "Archivo cargado" : "Libro auxiliar ERP (.xlsx)"}
             </span>
           </div>
         </div>
 
         <div
           className={cn(
-            "p-3 rounded-xl border transition flex items-center gap-3",
+            "p-3.5 rounded-2xl border-2 transition-all flex items-center gap-3.5 shadow-xs",
             isReadyToReconcile
-              ? "bg-teal-soft/60 border-teal/40 text-teal-deep"
-              : "bg-bg-surface border-line text-ink-muted"
+              ? "bg-teal-50 border-teal-500/80 dark:bg-teal-950/40 dark:border-teal-600 text-teal-950 dark:text-teal-200"
+              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300"
           )}
         >
           <div
             className={cn(
-              "size-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0",
+              "size-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-2xs",
               isReadyToReconcile
                 ? "bg-teal text-white animate-pulse"
-                : "bg-bg-subtle text-ink-subtle"
+                : "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700"
             )}
           >
-            <Zap className="size-3.5" />
+            <Zap className="size-4" />
           </div>
           <div className="text-xs leading-tight">
-            <span className="font-bold text-ink block">Cruce Instantáneo</span>
-            <span className="text-ink-subtle">
+            <span className="font-extrabold text-slate-950 dark:text-white block text-sm">
+              Cruce Instantáneo
+            </span>
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
               {isReadyToReconcile ? "Listo para conciliar" : "Auditoría en 2 seg"}
             </span>
           </div>
@@ -299,7 +319,7 @@ export function UploadPanel() {
       </div>
 
       {/* Tarjetas de Carga Interactivas (Drag & Drop) */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2">
         {/* DropCard 1: DIAN */}
         <InteractiveDropCard
           step="1"
@@ -329,7 +349,7 @@ export function UploadPanel() {
         {/* DropCard 2: Movimiento Contable */}
         <InteractiveDropCard
           step="2"
-          label="Movimiento Contable"
+          label="Movimiento Contable ERP"
           hint="Extracto de Siigo, World Office, Helisa, Alegra, Loggro o Excel"
           badgeText="Libro Auxiliar / Comprobantes (.xlsx)"
           file={movFile}
@@ -352,15 +372,15 @@ export function UploadPanel() {
           }}
           footerContent={
             detectedMovProfile && (
-              <div className="mt-3 w-full flex items-center justify-between gap-2 p-2.5 rounded-xl bg-teal-500/10 border border-teal-500/20 text-xs">
+              <div className="mt-3.5 w-full flex items-center justify-between gap-2 p-3 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-300 dark:border-purple-700 text-xs shadow-2xs">
                 <div className="flex items-center gap-2 min-w-0">
-                  <Sparkles className="size-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                  <Sparkles className="size-4 text-purple-700 dark:text-purple-300 shrink-0" />
                   <div className="truncate">
-                    <span className="text-slate-500 dark:text-slate-400">Software: </span>
-                    <strong className="text-slate-800 dark:text-slate-100 font-bold">
+                    <span className="text-slate-600 dark:text-slate-400 font-medium">Software: </span>
+                    <strong className="text-purple-950 dark:text-purple-100 font-extrabold">
                       {customProfileId ? customProfileId.toUpperCase() : detectedMovProfile.label}
                     </strong>
-                    <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-sm bg-teal-200/60 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200">
+                    <span className="ml-1.5 text-[10px] font-black px-1.5 py-0.5 rounded-md bg-purple-200/80 dark:bg-purple-900 text-purple-900 dark:text-purple-200 border border-purple-300 dark:border-purple-600">
                       {detectedMovProfile.confidence}%
                     </span>
                   </div>
@@ -371,9 +391,9 @@ export function UploadPanel() {
                     e.stopPropagation();
                     setShowMapperModal(true);
                   }}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 dark:text-teal-300 hover:text-teal-800 dark:hover:text-teal-200 bg-white/80 dark:bg-slate-800/80 px-2.5 py-1 rounded-lg border border-teal-500/30 hover:shadow-2xs transition-all cursor-pointer shrink-0"
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-900 dark:text-purple-200 hover:text-purple-950 dark:hover:text-white bg-white dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-purple-300 dark:border-purple-600 hover:shadow-2xs transition-all cursor-pointer shrink-0"
                 >
-                  <SlidersHorizontal className="size-3 text-teal-600" />
+                  <SlidersHorizontal className="size-3 text-purple-700" />
                   <span>Ajustar Mapeo</span>
                 </button>
               </div>
@@ -406,15 +426,16 @@ export function UploadPanel() {
       )}
 
       {/* Barra Principal de Acciones */}
-      <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="mt-8 flex flex-col gap-3.5 sm:flex-row sm:items-center">
         <button
           type="button"
           disabled={!isReadyToReconcile}
           onClick={run}
           className={cn(
-            "flex-1 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-teal px-6 text-sm font-bold text-white shadow-lg shadow-teal/20 transition-all",
-            "hover:bg-teal-deep hover:shadow-xl hover:shadow-teal/30 active:scale-[0.99]",
-            "disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+            "flex-1 inline-flex h-13 items-center justify-center gap-2.5 rounded-2xl text-sm sm:text-base font-black text-white shadow-xl transition-all cursor-pointer select-none",
+            isReadyToReconcile
+              ? "bg-gradient-to-r from-teal-700 via-teal-600 to-emerald-600 hover:from-teal-800 hover:to-emerald-700 shadow-teal-700/30 hover:shadow-teal-700/40 hover:-translate-y-0.5 active:translate-y-0"
+              : "bg-slate-300 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed shadow-none opacity-60"
           )}
         >
           {busy ? (
@@ -424,8 +445,9 @@ export function UploadPanel() {
             </>
           ) : (
             <>
-              <Zap className="size-5" />
+              <Zap className="size-5 text-amber-300 fill-amber-300" />
               <span>Conciliar Facturas DIAN vs Libros</span>
+              <ArrowRight className="size-4.5 opacity-80" />
             </>
           )}
         </button>
@@ -433,12 +455,12 @@ export function UploadPanel() {
         <button
           type="button"
           onClick={() => setShowHistory(true)}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-line bg-bg-surface px-5 text-xs sm:text-sm font-semibold text-ink hover:border-teal hover:text-teal hover:bg-bg-subtle/50 transition shadow-xs"
+          className="inline-flex h-13 items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-5 text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-200 hover:border-teal-500 hover:text-teal-800 dark:hover:text-teal-300 transition-all shadow-xs hover:shadow-sm cursor-pointer"
         >
           <Building2 className="size-4 text-teal" />
           <span>Historial de Empresas</span>
           {historyCount > 0 && (
-            <span className="rounded-full bg-teal/10 px-2 py-0.5 text-[11px] font-bold text-teal">
+            <span className="rounded-full bg-teal-100 dark:bg-teal-900/60 px-2 py-0.5 text-[11px] font-black text-teal-800 dark:text-teal-300 border border-teal-300 dark:border-teal-700">
               {historyCount}
             </span>
           )}
@@ -447,7 +469,7 @@ export function UploadPanel() {
         <button
           type="button"
           onClick={() => setShowGuia(true)}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-line bg-bg-surface px-4 text-xs sm:text-sm font-semibold text-ink hover:border-teal hover:text-teal hover:bg-bg-subtle/50 transition shadow-xs"
+          className="inline-flex h-13 items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-200 hover:border-teal-500 hover:text-teal-800 dark:hover:text-teal-300 transition-all shadow-xs hover:shadow-sm cursor-pointer"
         >
           <HelpCircle className="size-4 text-teal" />
           <span>Guía de Uso</span>
@@ -455,17 +477,19 @@ export function UploadPanel() {
       </div>
 
       {/* Barra de Compatibilidad y Seguridad */}
-      <div className="mt-10 border-t border-line/80 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-ink-muted">
-        <div className="flex items-center gap-2 text-ink-subtle">
-          <Lock className="size-4 text-teal" />
+      <div className="mt-10 border-t-2 border-slate-200/90 dark:border-slate-800 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+        <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300 font-medium">
+          <div className="size-7 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 flex items-center justify-center shrink-0 border border-emerald-300 dark:border-emerald-700">
+            <Lock className="size-3.5" />
+          </div>
           <span>
-            <strong>Privacidad Total:</strong> Procesamiento 100% en tu navegador (Client-Side). Tus datos nunca salen de tu equipo.
+            <strong className="text-slate-950 dark:text-white font-bold">Privacidad Total:</strong> Procesamiento 100% en tu navegador (Client-Side). Tus datos contables nunca salen de tu equipo.
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 text-[11px] font-medium text-ink-subtle bg-bg-subtle px-3 py-1 rounded-lg border border-line/60">
-          <span>Compatible con:</span>
-          <span className="text-ink font-semibold">Siigo · Helisa · World Office · CGUNO · Excel</span>
+        <div className="flex items-center gap-2 text-[11px] font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+          <span className="text-slate-500 dark:text-slate-400">Compatible con:</span>
+          <span className="text-teal font-black">Siigo · Helisa · World Office · CGUNO · Alegra · Excel</span>
         </div>
       </div>
 
@@ -546,59 +570,80 @@ function InteractiveDropCard({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       className={cn(
-        "relative flex min-h-[170px] flex-col justify-between rounded-2xl border-2 border-dashed p-5 transition-all duration-200",
+        "relative flex min-h-[220px] flex-col justify-between rounded-3xl border-2 p-6 transition-all duration-200 shadow-sm",
         isDragging
-          ? "border-teal bg-teal-soft/40 shadow-lg scale-[1.01]"
+          ? "border-teal-500 bg-teal-50/60 dark:bg-teal-950/40 shadow-xl scale-[1.01]"
           : file
-            ? "border-teal/40 bg-teal-soft/10 shadow-xs"
-            : "border-line-strong bg-bg-surface hover:border-teal/60 hover:bg-teal-soft/10 hover:shadow-xs"
+            ? "border-emerald-500/80 bg-white dark:bg-slate-900 shadow-md ring-1 ring-emerald-500/20"
+            : "border-slate-300/80 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-teal-500/70 hover:shadow-md"
       )}
     >
-      {/* Contenido Principal / Botón de Carga */}
+      {/* Contenido Principal */}
       <div className="flex w-full flex-col items-start text-left">
-        <div className="flex w-full items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <span className="flex size-6 items-center justify-center rounded-lg bg-teal text-white text-xs font-bold shadow-xs">
-              {step}
+        {/* Cabecera de la Tarjeta */}
+        <div className="flex w-full items-center justify-between mb-3">
+          <div className="flex items-center gap-2.5">
+            <span
+              className={cn(
+                "flex size-7 items-center justify-center rounded-xl text-xs font-black shadow-xs",
+                file
+                  ? "bg-emerald-600 text-white"
+                  : "bg-gradient-to-br from-teal-700 to-emerald-700 text-white"
+              )}
+            >
+              {file ? <CheckCircle2 className="size-4" /> : step}
             </span>
-            <span className="font-bold text-ink text-sm sm:text-base">{label}</span>
+            <span className="font-black text-slate-950 dark:text-white text-base tracking-tight">
+              {label}
+            </span>
           </div>
 
-          <span className="rounded-md bg-bg-subtle border border-line px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-ink-muted">
+          <span
+            className={cn(
+              "rounded-lg px-2.5 py-1 text-[11px] font-black uppercase tracking-wider border shadow-2xs",
+              file
+                ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700"
+                : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+            )}
+          >
             .XLSX
           </span>
         </div>
 
         {file ? (
-          <div className="w-full mt-2 p-3 rounded-xl bg-bg-surface border border-teal/30 shadow-xs flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="size-8 rounded-lg bg-teal/10 text-teal flex items-center justify-center shrink-0">
-                <FileCheck className="size-4.5" />
+          <div className="w-full mt-1 p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/40 border-2 border-emerald-300 dark:border-emerald-700/80 shadow-2xs flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="size-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <FileCheck className="size-5" />
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-bold text-ink truncate">{file.name}</p>
-                <p className="text-[11px] text-ink-subtle">
-                  {formatFileSize(file.size)} · Archivo listo
+                <p className="text-xs sm:text-sm font-black text-slate-950 dark:text-white truncate">
+                  {file.name}
+                </p>
+                <p className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1 mt-0.5">
+                  <span>✓ Archivo verificado</span>
+                  <span>·</span>
+                  <span>{formatFileSize(file.size)}</span>
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
                 onClick={onPick}
                 title="Cambiar archivo"
-                className="p-1.5 rounded-lg text-ink-muted hover:text-teal hover:bg-bg-subtle transition"
+                className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-teal-800 dark:hover:text-teal-200 hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-300 dark:hover:border-slate-700 transition cursor-pointer shadow-2xs"
               >
-                <RefreshCw className="size-3.5" />
+                <RefreshCw className="size-4" />
               </button>
               <button
                 type="button"
                 onClick={onClear}
                 title="Quitar archivo"
-                className="p-1.5 rounded-lg text-ink-muted hover:text-danger hover:bg-danger-bg transition"
+                className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-danger hover:bg-red-50 dark:hover:bg-red-950/40 border border-transparent hover:border-red-200 dark:hover:border-red-800 transition cursor-pointer shadow-2xs"
               >
-                <Trash2 className="size-3.5" />
+                <Trash2 className="size-4" />
               </button>
             </div>
           </div>
@@ -606,35 +651,37 @@ function InteractiveDropCard({
           <button
             type="button"
             onClick={onPick}
-            className="w-full mt-2 flex flex-col items-center justify-center py-4 rounded-xl border border-dashed border-line bg-bg-subtle/40 hover:bg-bg-subtle transition text-center cursor-pointer group"
+            className="w-full mt-1 flex flex-col items-center justify-center py-7 px-4 rounded-2xl border-2 border-dashed border-slate-300 hover:border-teal-600 dark:border-slate-700 dark:hover:border-teal-400 bg-slate-50/70 hover:bg-teal-50/40 dark:bg-slate-800/40 dark:hover:bg-teal-950/30 transition-all text-center cursor-pointer group shadow-2xs hover:shadow-xs"
           >
-            <div className="size-10 rounded-xl bg-teal-soft/80 text-teal flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-              <Upload className="size-5" />
+            <div className="size-12 rounded-2xl bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300 flex items-center justify-center mb-2.5 group-hover:scale-110 group-hover:bg-teal-600 group-hover:text-white transition-all shadow-xs">
+              <Upload className="size-6" />
             </div>
-            <span className="text-xs font-semibold text-ink group-hover:text-teal transition">
+            <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-slate-100 group-hover:text-teal-800 dark:group-hover:text-teal-300 transition-colors">
               Arrastra tu archivo aquí o haz clic para explorar
             </span>
-            <span className="mt-0.5 text-[11px] text-ink-subtle">{hint}</span>
+            <span className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+              {hint}
+            </span>
           </button>
         )}
       </div>
 
       {/* Selector de Hoja si el archivo tiene múltiples pestañas */}
       {file && sheets && sheets.length > 1 && (
-        <div className="mt-3 w-full border-t border-teal/20 pt-2.5">
-          <div className="flex items-center justify-between text-xs text-ink-muted mb-1">
-            <div className="flex items-center gap-1.5 font-medium">
-              <TableProperties className="size-3.5 text-teal" />
-              <span>Hoja de cálculo:</span>
+        <div className="mt-3.5 w-full border-t border-slate-200 dark:border-slate-800 pt-3">
+          <div className="flex items-center justify-between text-xs text-slate-700 dark:text-slate-300 mb-1.5 font-bold">
+            <div className="flex items-center gap-1.5">
+              <TableProperties className="size-4 text-teal" />
+              <span>Hoja de cálculo activa:</span>
             </div>
-            <span className="text-[10px] text-teal font-semibold">
-              {sheets.length} hojas detectadas
+            <span className="text-[11px] text-teal font-extrabold bg-teal-100 dark:bg-teal-950/60 px-2 py-0.5 rounded-md border border-teal-300 dark:border-teal-800">
+              {sheets.length} pestañas
             </span>
           </div>
           <select
             value={selectedSheet}
             onChange={(e) => onSelectSheet?.(e.target.value)}
-            className="h-8 w-full rounded-lg border border-teal/30 bg-bg-surface px-2 text-xs font-semibold text-ink outline-none focus:ring-1 focus:ring-teal"
+            className="h-9 w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-teal-600 transition"
           >
             {sheets.map((s) => (
               <option key={s} value={s}>
