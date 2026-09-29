@@ -111,29 +111,37 @@ export function KpiRow({
             type="button"
             onClick={() => onSelectTab(k.tab)}
             className={cn(
-              "group relative flex flex-col justify-between rounded-2xl border-2 p-4 text-left transition-all duration-200 cursor-pointer overflow-hidden shadow-xs",
+              "group relative flex flex-col justify-between rounded-2xl border-2 p-3.5 sm:p-4 text-left transition-all duration-200 cursor-pointer overflow-hidden shadow-xs",
               isActive
-                ? "border-teal-600 bg-teal-50/70 dark:bg-teal-950/40 shadow-sm ring-2 ring-teal-500/30 -translate-y-0.5"
+                ? "border-teal bg-teal-soft/40 shadow-sm ring-2 ring-teal/30 -translate-y-0.5"
                 : k.alert
-                  ? "border-red-300 dark:border-red-800 bg-white dark:bg-slate-900 hover:border-red-500 hover:bg-red-50/30 dark:hover:bg-red-950/20 hover:-translate-y-0.5 hover:shadow-sm"
-                  : "border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-teal-500/70 hover:bg-teal-50/20 dark:hover:bg-teal-950/20 hover:-translate-y-0.5 hover:shadow-sm",
+                  ? "border-danger/40 bg-bg-surface hover:border-danger hover:bg-danger-bg/40 hover:-translate-y-0.5 hover:shadow-sm"
+                  : "border-line bg-bg-surface hover:border-teal/50 hover:bg-teal-soft/20 hover:-translate-y-0.5 hover:shadow-sm",
             )}
           >
-            {/* Header del KPI con Icono */}
+            {/* Header del KPI con Icono y Alerta */}
             <div className="flex items-center justify-between gap-1">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400 group-hover:text-slate-950 dark:group-hover:text-white transition-colors">
+              <span className="text-[11px] font-black uppercase tracking-wider text-ink-muted group-hover:text-ink transition-colors">
                 {k.label}
               </span>
-              <Icon
-                className={cn(
-                  "size-4 transition-colors",
-                  isActive
-                    ? "text-teal"
-                    : k.alert
-                      ? "text-red-600 dark:text-red-400"
-                      : "text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200",
+              <div className="relative">
+                {k.alert && (
+                  <span className="absolute -top-0.5 -right-0.5 flex size-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-75" />
+                    <span className="relative inline-flex size-2 rounded-full bg-danger" />
+                  </span>
                 )}
-              />
+                <Icon
+                  className={cn(
+                    "size-4 transition-colors",
+                    isActive
+                      ? "text-teal"
+                      : k.alert
+                        ? "text-danger"
+                        : "text-ink-subtle group-hover:text-ink-muted",
+                  )}
+                />
+              </div>
             </div>
 
             {/* Valor Principal */}
@@ -141,17 +149,30 @@ export function KpiRow({
               className={cn(
                 "mt-2 font-display text-2xl sm:text-3xl font-black tabular-nums tracking-tight",
                 isActive
-                  ? "text-teal-950 dark:text-teal-300"
+                  ? "text-teal-deep dark:text-teal"
                   : k.alert
-                    ? "text-red-700 dark:text-red-400"
-                    : "text-slate-950 dark:text-white",
+                    ? "text-danger"
+                    : "text-ink",
               )}
             >
               {k.value}
             </div>
 
+            {/* Mini Barra de Progreso en Recibidos OK */}
+            {k.tab === "conciliado" && (
+              <div className="mt-1.5 w-full bg-line rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-ok h-full rounded-full transition-all duration-700"
+                  style={{ width: `${Math.min(100, Math.max(0, t.pctRecibidos))}%` }}
+                />
+              </div>
+            )}
+
             {/* Subtítulo / Monto */}
-            <div className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400 truncate" title={k.hint}>
+            <div
+              className="mt-1 text-xs font-semibold text-ink-muted truncate"
+              title={k.hint}
+            >
               {k.hint}
             </div>
 

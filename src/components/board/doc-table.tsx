@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { ArrowUp, ArrowDown, AlertTriangle, Sparkles, Copy } from "lucide-react";
 import { BadgeEstado } from "../badge-estado";
 import { reviewOf, useConciliacion, type Review } from "@/lib/store";
@@ -8,6 +8,10 @@ import type { ConciliacionRow, EstadoConciliacion } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { ColumnHeader } from "./column-header";
 import { CopyButton, getInitials } from "./board-utils";
+import { TablePagination } from "./table-pagination";
+import { BatchActionsBar } from "./batch-actions-bar";
+import { HighlightedText } from "./highlighted-text";
+import { exportAuditoriaXlsx } from "@/lib/export-excel";
 
 export function DocTable({
   rows,
@@ -30,6 +34,54 @@ export function DocTable({
   const columnFilters = useConciliacion((s) => s.columnFilters);
   const setColumnFilter = useConciliacion((s) => s.setColumnFilter);
   const clearColumnFilter = useConciliacion((s) => s.clearColumnFilter);
+  const markValidated = useConciliacion((s) => s.markValidated);
+  const flash = useConciliacion((s) => s.flash);
+  const result = useConciliacion((s) => s.result);
+  const query = useConciliacion((s) => s.query);
+
+  // Paginación de alto rendimiento para grandes volúmenes de facturas
+  const [pageSize, setPageSize] = useState<number>(compact ? 0 : 50);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Selección múltiple para acciones masivas (Batch Actions)
+  const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(new Set());
+
+  // Reset de página y selección al cambiar datos o filtros
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedBatchIds(new Set());
+  }, [rows]);
+
+  const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(rows.length / pageSize));
+
+  const paginatedRows = useMemo(() => {
+    if (pageSize === 0 || compact) return rows;
+    const start = (currentPage - 1) * pageSize;
+    return rows.slice(start, start + pageSize);
+  }, [rows, currentPage, pageSize, compact]);
+
+  const selectedRowsList = useMemo(() => {
+    return rows.filter((r) => selectedBatchIds.has(r.id));
+  }, [rows, selectedBatchIds]);
+
+  function handleBatchMark(action: "validada" | "omitir") {
+    if (selectedRowsList.length === 0) return;
+    selectedRowsList.forEach((r) => {
+      markValidated(r, action);
+    });
+    flash(
+      action === "validada"
+        ? `✅ ${selectedRowsList.length} documento${selectedRowsList.length === 1 ? "" : "s"} marcado${selectedRowsList.length === 1 ? "" : "s"} como validado${selectedRowsList.length === 1 ? "" : "s"}.`
+        : `Marcas removidas en ${selectedRowsList.length} documento${selectedRowsList.length === 1 ? "" : "s"}.`
+    );
+    setSelectedBatchIds(new Set());
+  }
+
+  function handleBatchExport() {
+    if (!result || selectedRowsList.length === 0) return;
+    exportAuditoriaXlsx(selectedRowsList, result, "seleccionadas", reviews);
+    flash(`Descargando ${selectedRowsList.length} registro${selectedRowsList.length === 1 ? "" : "s"} seleccionado${selectedRowsList.length === 1 ? "" : "s"} en Excel...`);
+  }
 
   const stateCounts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -51,23 +103,44 @@ export function DocTable({
   ];
 
   return (
-    <table className="w-full min-w-[820px] text-left text-sm table-auto">
-      <colgroup>
-        <col className="w-[15%] min-w-[125px]" />
-        <col className="w-[13%] min-w-[110px]" />
-        <col className="w-[32%] min-w-[190px]" />
-        <col className="w-[10%] min-w-[85px]" />
-        <col className="w-[9%] min-w-[80px]" />
-        <col className="w-[11%] min-w-[110px]" />
-        <col className="w-[10%] min-w-[110px]" />
-      </colgroup>
-      {!compact ? (
-        <thead className="sticky top-0 z-10 border-b border-line bg-bg-surface/95 backdrop-blur text-[11px] sm:text-xs uppercase tracking-wider text-ink-subtle shadow-xs">
-          <tr>
-            <ColumnHeader
-              columnKey="estado"
-              title="ESTADO"
-              className="w-[15%] min-w-[125px]"
+    <div className="relative">
+      <table className="w-full min-w-[820px] text-left text-sm table-auto">
+        <colgroup>
+          {!compact && <col className="w-[36px]" />}
+          <col className="w-[15%] min-w-[125px]" />
+          <col className="w-[13%] min-w-[110px]" />
+          <col className="w-[31%] min-w-[185px]" />
+          <col className="w-[9%] min-w-[80px]" />
+          <col className="w-[8%] min-w-[75px]" />
+          <col className="w-[11%] min-w-[105px]" />
+          <col className="w-[10%] min-w-[105px]" />
+        </colgroup>
+        {!compact ? (
+          <thead className="sticky top-0 z-10 border-b border-line bg-bg-surface/95 backdrop-blur text-[11px] sm:text-xs uppercase tracking-wider text-ink-subtle shadow-xs">
+            <tr>
+              {!compact && (
+                <th className="w-[36px] px-2 py-3 text-center">
+                  <input
+                    type="checkbox"
+                    checked={paginatedRows.length > 0 && paginatedRows.every((r) => selectedBatchIds.has(r.id))}
+                    onChange={(e) => {
+                      const next = new Set(selectedBatchIds);
+                      if (e.target.checked) {
+                        paginatedRows.forEach((r) => next.add(r.id));
+                      } else {
+                        paginatedRows.forEach((r) => next.delete(r.id));
+                      }
+                      setSelectedBatchIds(next);
+                    }}
+                    className="size-3.5 rounded border-line text-teal focus:ring-teal cursor-pointer accent-teal"
+                    title="Seleccionar todas las visibles en esta página"
+                  />
+                </th>
+              )}
+              <ColumnHeader
+                columnKey="estado"
+                title="ESTADO"
+                className="w-[15%] min-w-[125px]"
               renderFilter={(close) => (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-line pb-2">
@@ -680,7 +753,7 @@ export function DocTable({
         </thead>
       ) : null}
       <tbody>
-        {rows.map((r) => {
+        {paginatedRows.map((r) => {
           const dias = daysAgo(r.fecha);
           const done = reviewOf(reviews, r)?.done;
           const action = reviewOf(reviews, r)?.action;
@@ -700,6 +773,21 @@ export function DocTable({
                 done && "opacity-55",
               )}
             >
+              {!compact && (
+                <td className="w-[36px] px-2 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selectedBatchIds.has(r.id)}
+                    onChange={(e) => {
+                      const next = new Set(selectedBatchIds);
+                      if (e.target.checked) next.add(r.id);
+                      else next.delete(r.id);
+                      setSelectedBatchIds(next);
+                    }}
+                    className="size-3.5 rounded border-line text-teal focus:ring-teal cursor-pointer accent-teal"
+                  />
+                </td>
+              )}
               <td className="px-2.5 py-2 min-w-[125px]">
                 <div className="flex flex-col items-start gap-1">
                   <div className="flex items-center gap-1 flex-wrap">
@@ -742,9 +830,11 @@ export function DocTable({
               </td>
               <td className="px-2.5 py-2 min-w-[110px] whitespace-nowrap">
                 <div className="flex items-center gap-1.5 whitespace-nowrap">
-                  <span className="font-bold tabular-nums select-text text-ink text-xs sm:text-sm tracking-tight">
-                    {r.numero || "—"}
-                  </span>
+                  <HighlightedText
+                    text={r.numero || "—"}
+                    query={query}
+                    className="font-bold tabular-nums select-text text-ink text-xs sm:text-sm tracking-tight"
+                  />
                   {r.numero && (
                     <CopyButton
                       text={r.numero}
@@ -765,7 +855,7 @@ export function DocTable({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <div className="max-w-[200px] sm:max-w-[260px] truncate font-semibold text-ink text-xs select-text" title={r.nombreContraparte}>
-                        {r.nombreContraparte || "—"}
+                        <HighlightedText text={r.nombreContraparte || "—"} query={query} />
                       </div>
                       {r.nombreContraparte && (
                         <CopyButton
@@ -779,7 +869,11 @@ export function DocTable({
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="font-mono text-[11px] text-ink-subtle font-medium select-text">{r.nitContraparte}</span>
+                      <HighlightedText
+                        text={r.nitContraparte}
+                        query={query}
+                        className="font-mono text-[11px] text-ink-subtle font-medium select-text"
+                      />
                       {r.nitContraparte && (
                         <CopyButton
                           text={r.nitContraparte}
@@ -858,7 +952,7 @@ export function DocTable({
       {footer ? (
         <tfoot className="border-t border-line bg-bg-subtle/60 text-xs font-medium text-ink-muted">
           <tr>
-            <td colSpan={5} className="px-3 py-2.5 text-right">
+            <td colSpan={!compact ? 6 : 5} className="px-3 py-2.5 text-right">
               Total DIAN visible
             </td>
             <td className="px-3 py-2.5 text-right font-mono font-semibold text-ink whitespace-nowrap">
@@ -869,5 +963,29 @@ export function DocTable({
         </tfoot>
       ) : null}
     </table>
+
+    {!compact && (
+      <TablePagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        pageSize={pageSize}
+        totalItems={rows.length}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={(newSize) => {
+          setPageSize(newSize);
+          setCurrentPage(1);
+        }}
+      />
+    )}
+
+    {!compact && (
+      <BatchActionsBar
+        selectedRows={selectedRowsList}
+        onMarkValidated={handleBatchMark}
+        onExportSelected={handleBatchExport}
+        onClearSelection={() => setSelectedBatchIds(new Set())}
+      />
+    )}
+  </div>
   );
 }

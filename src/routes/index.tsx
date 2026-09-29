@@ -36,7 +36,7 @@ function ConciliadorApp() {
   return (
     <div className="min-h-screen bg-bg text-ink flex flex-col selection:bg-teal-soft selection:text-teal-deep">
       {/* Header Corporativo Ejecutivo */}
-      <header className="sticky top-0 z-30 border-b border-slate-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md px-4 py-3 sm:px-6 lg:px-8 shadow-xs">
+      <header className="sticky top-0 z-30 border-b border-line bg-bg-surface/95 backdrop-blur-md px-4 py-3 sm:px-6 lg:px-8 shadow-xs">
         <div className="mx-auto flex w-full max-w-[1600px] flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           {/* Logo y Nombre de la Suite */}
           <div className="flex items-center gap-3">
@@ -45,29 +45,29 @@ function ConciliadorApp() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-black text-sm sm:text-base tracking-tight text-slate-950 dark:text-white">
+                <span className="font-black text-sm sm:text-base tracking-tight text-ink">
                   Suite Financiera DIAN & Bancos
                 </span>
-                <span className="rounded-md bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-700/80 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-900 dark:text-emerald-300">
+                <span className="rounded-md bg-teal-soft border border-teal/30 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-teal">
                   TributoApp
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium hidden sm:block">
+              <p className="text-[11px] text-ink-muted font-medium hidden sm:block">
                 Conciliación DIAN, Business Intelligence y Conciliación Bancaria NIIF
               </p>
             </div>
           </div>
 
           {/* Selector de Módulos (Tabs Principales de la Suite) */}
-          <div className="flex items-center gap-1 rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-slate-100/90 dark:bg-slate-800/80 p-1 shadow-2xs">
+          <div className="flex items-center gap-1 rounded-xl border border-line bg-bg-subtle/80 p-1 shadow-2xs">
             <button
               type="button"
               onClick={() => setActiveModule("dian")}
               className={cn(
                 "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer select-none",
                 activeModule === "dian"
-                  ? "bg-teal-700 dark:bg-teal-600 text-white shadow-xs font-black"
-                  : "text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700"
+                  ? "bg-teal text-white shadow-xs font-black"
+                  : "text-ink-muted hover:text-ink hover:bg-bg-surface"
               )}
             >
               <FileCheck className="size-3.5" />
@@ -80,8 +80,8 @@ function ConciliadorApp() {
               className={cn(
                 "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer select-none",
                 activeModule === "dashboard_bi"
-                  ? "bg-teal-700 dark:bg-teal-600 text-white shadow-xs font-black"
-                  : "text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700"
+                  ? "bg-teal text-white shadow-xs font-black"
+                  : "text-ink-muted hover:text-ink hover:bg-bg-surface"
               )}
             >
               <BarChart3 className="size-3.5" />
@@ -94,8 +94,8 @@ function ConciliadorApp() {
               className={cn(
                 "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer select-none",
                 activeModule === "bancos"
-                  ? "bg-teal-700 dark:bg-teal-600 text-white shadow-xs font-black"
-                  : "text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700"
+                  ? "bg-teal text-white shadow-xs font-black"
+                  : "text-ink-muted hover:text-ink hover:bg-bg-surface"
               )}
             >
               <Landmark className="size-3.5" />
