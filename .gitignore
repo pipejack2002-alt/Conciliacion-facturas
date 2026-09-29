@@ -34,5 +34,6 @@ Thumbs.db
 *.xlsx
 *.xls
 *.csv
+*.pdf
 attachments/
 public/samples/

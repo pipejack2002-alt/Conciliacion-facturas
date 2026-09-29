@@ -32,6 +32,7 @@ export interface BankConciliacionRow {
   esRendimiento: boolean;
   itemBanco?: BankExtractItem;
   itemLibros?: MovLine;
+  itemsLibrosLote?: MovLine[];
   nota: string;
 }
 
@@ -50,29 +51,116 @@ export interface BankConciliacionSummary {
   totalConciliados: number;
 }
 
+export interface DetectedBankAccount {
+  cuenta: string;
+  cuentaNombre: string;
+  totalMovimientos: number;
+  saldoInicial?: number;
+  totalDebitos: number;
+  totalCreditos: number;
+  saldoFinal: number;
+}
+
 export interface BankConciliacionResult {
   rows: BankConciliacionRow[];
   summary: BankConciliacionSummary;
   cuentasBancosDetectadas: string[];
+  cuentasDetalle?: DetectedBankAccount[];
+}
+
+/**
+ * Detecta y agrupa todas las cuentas contables de tesorería, bancos e inversiones/fondos
+ * (Clase 11 y Clase 12 como 1250 Fondos de Inversión / FICs / Carteras Colectivas tipo Credicorp)
+ */
+export function getAvailableBankAccounts(mov: MovLine[]): DetectedBankAccount[] {
+  const map = new Map<string, {
+    cuenta: string;
+    cuentaNombre: string;
+    totalMovimientos: number;
+    totalDebitos: number;
+    totalCreditos: number;
+    saldoInicial?: number;
+  }>();
+
+  for (const line of mov) {
+    const c = line.cuenta.trim();
+    const nom = (line.cuentaNombre || "").trim();
+
+    // Filtro estricto: Cuentas de activo de tesorería (Clase 11) o inversiones/fondos de liquidez (Clase 1250, 1205)
+    // O cuentas cuyo nombre mencione banco, caja, bcsc, colmena, credicorp, correval, banistmo, fonval, fiducia
+    const isTreasury =
+      c.startsWith("11") ||
+      c.startsWith("1250") ||
+      c.startsWith("1205") ||
+      (c.startsWith("1") && /banco|bcsc|colmena|caja|credicorp|correval|banistmo|fonval|fiducia|fic\b|cartera colectiva/i.test(nom));
+
+    if (!isTreasury) continue;
+
+    if (!map.has(c)) {
+      map.set(c, {
+        cuenta: c,
+        cuentaNombre: nom || c,
+        totalMovimientos: 0,
+        totalDebitos: 0,
+        totalCreditos: 0,
+      });
+    }
+
+    const acc = map.get(c)!;
+    acc.totalMovimientos++;
+    acc.totalDebitos += line.debito;
+    acc.totalCreditos += line.credito;
+    if (nom && nom.length > acc.cuentaNombre.length) {
+      acc.cuentaNombre = nom;
+    }
+  }
+
+  return Array.from(map.values())
+    .map((a) => ({
+      ...a,
+      saldoFinal: (a.saldoInicial || 0) + a.totalDebitos - a.totalCreditos,
+    }))
+    .sort((a, b) => a.cuenta.localeCompare(b.cuenta));
 }
 
 /**
  * Filtra los movimientos contables del ERP correspondientes a cuentas de bancos y tesorería
- * (Clase 11, típicamente 1110 Bancos, 1120 Cuentas de Ahorro, 1105 Caja General).
+ * (Clase 11, típicamente 1110 Bancos, 1120 Cuentas de Ahorro, 1105 Caja General, 1115 Remesas,
+ * y Clase 1250 Fondos de Inversión Colectiva / Carteras Colectivas / FICs).
  */
 export function extractLibroBancos(mov: MovLine[], cuentaFiltro?: string): MovLine[] {
+  if (cuentaFiltro && cuentaFiltro !== "todas") {
+    const cleanFiltro = cuentaFiltro.trim();
+    return mov.filter((m) => {
+      const c = m.cuenta.trim();
+      return c === cleanFiltro || c.startsWith(cleanFiltro);
+    });
+  }
+
   return mov.filter((m) => {
     const c = m.cuenta.trim();
-    if (cuentaFiltro) return c.startsWith(cuentaFiltro);
-    return c.startsWith("1110") || c.startsWith("1120") || c.startsWith("1105");
+    const nom = (m.cuentaNombre || "").trim();
+    return (
+      c.startsWith("11") ||
+      c.startsWith("1250") ||
+      c.startsWith("1205") ||
+      (c.startsWith("1") && /banco|bcsc|colmena|caja|credicorp|correval|banistmo|fonval|fiducia/i.test(nom))
+    );
   });
 }
 
 /**
- * Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuenta 11)
+ * Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuenta 11 / Fondos)
  * Aplica la regla contable espejo:
  * - Débito en Banco (Retiro) <=> Crédito en Libros (Disminución de Banco)
  * - Crédito en Banco (Abono)  <=> Débito en Libros (Aumento de Banco)
+ *
+ * Incluye:
+ * 1. Cruce exacto por documento / referencia y valor
+ * 2. Cruce exacto por valor y ventana de compensación
+ * 3. Cruce en Lotes / Pagos Agrupados ACH (1 a N y N a 1)
+ * 4. Identificación de notas bancarias (4x1000 GMF, comisiones, rendimientos)
+ * 5. Determinación de partidas en tránsito
  */
 export function conciliarBancos(
   extracto: BankExtractItem[],
@@ -84,12 +172,13 @@ export function conciliarBancos(
   const matchedLibroIndices = new Set<number>();
   const rows: BankConciliacionRow[] = [];
 
-  // 1. Detección de cuentas bancarias en libros
+  // Detección de cuentas bancarias
   const cuentasSet = new Set<string>();
   for (const l of libros) {
-    if (l.cuenta.startsWith("11")) cuentasSet.add(l.cuenta);
+    if (l.cuenta) cuentasSet.add(l.cuenta);
   }
   const cuentasBancosDetectadas = Array.from(cuentasSet);
+  const cuentasDetalle = getAvailableBankAccounts(libros);
 
   // FASE 1: Cruce exacto por Referencia / Cheque y Valor
   for (const bItem of extracto) {
@@ -105,7 +194,7 @@ export function conciliarBancos(
 
         const libroRefClean = (lItem.referencia || lItem.cruce || lItem.comprobante).replace(/\D/g, "");
         if (libroRefClean.includes(refClean) || refClean.includes(libroRefClean)) {
-          if (Math.abs(montoBanco - montoLibro) <= 1) {
+          if (Math.abs(montoBanco - montoLibro) <= 0.05) {
             matchedExtractoIds.add(bItem.id);
             matchedLibroIndices.add(i);
             rows.push({
@@ -113,7 +202,7 @@ export function conciliarBancos(
               estado: "conciliado",
               fecha: bItem.fecha,
               descripcion: `${bItem.descripcion} ↔ ${lItem.descripcion || lItem.nombre}`,
-              referencia: bItem.referencia || lItem.referencia || "Match directo",
+              referencia: bItem.referencia || lItem.referencia || lItem.comprobante || "Match directo",
               tipo: isRetiro ? "retiro" : "consignacion",
               montoBanco,
               montoLibros: montoLibro,
@@ -123,7 +212,7 @@ export function conciliarBancos(
               esRendimiento: false,
               itemBanco: bItem,
               itemLibros: lItem,
-              nota: "Conciliado por referencia de cheque/documento y valor exacto.",
+              nota: "Conciliado por referencia de documento/cheque y valor exacto.",
             });
             break;
           }
@@ -132,7 +221,7 @@ export function conciliarBancos(
     }
   }
 
-  // FASE 2: Cruce por Valor Exacto y Fecha cercana (±5 días)
+  // FASE 2: Cruce por Valor Exacto y Fecha cercana (±7 días)
   for (const bItem of extracto) {
     if (matchedExtractoIds.has(bItem.id)) continue;
     const isRetiro = bItem.debito > 0;
@@ -143,8 +232,7 @@ export function conciliarBancos(
       const lItem = libros[i];
       const montoLibro = isRetiro ? lItem.credito : lItem.debito;
 
-      if (Math.abs(montoBanco - montoLibro) <= 1) {
-        // Verificar proximidad de fechas si ambas son válidas
+      if (Math.abs(montoBanco - montoLibro) <= 0.05) {
         const bTime = new Date(bItem.fecha).getTime();
         const lTime = new Date(lItem.fecha).getTime();
         const diffDays = Math.abs(bTime - lTime) / (1000 * 60 * 60 * 24);
@@ -157,7 +245,7 @@ export function conciliarBancos(
             estado: "conciliado",
             fecha: bItem.fecha,
             descripcion: `${bItem.descripcion} ↔ ${lItem.descripcion || lItem.nombre}`,
-            referencia: bItem.referencia || lItem.referencia || "Valor exacto",
+            referencia: bItem.referencia || lItem.referencia || lItem.comprobante || "Valor exacto",
             tipo: isRetiro ? "retiro" : "consignacion",
             montoBanco,
             montoLibros: montoLibro,
@@ -167,7 +255,7 @@ export function conciliarBancos(
             esRendimiento: false,
             itemBanco: bItem,
             itemLibros: lItem,
-            nota: `Conciliado por valor idéntico ($${montoBanco.toLocaleString("es-CO")}) dentro de la ventana de compensación.`,
+            nota: `Conciliado por valor idéntico dentro de la ventana de compensación.`,
           });
           break;
         }
@@ -175,7 +263,111 @@ export function conciliarBancos(
     }
   }
 
-  // FASE 3: Partidas que están en el Extracto del Banco pero NO en Libros
+  // FASE 3: Cruce en Lotes / Pagos Agrupados ACH (1 débito en banco = N comprobantes en libros)
+  // Muy frecuente en pagos de nómina o proveedores procesados por lotes ACH bancarios
+  for (const bItem of extracto) {
+    if (matchedExtractoIds.has(bItem.id)) continue;
+    const isRetiro = bItem.debito > 0;
+    const montoBanco = isRetiro ? bItem.debito : bItem.credito;
+    const bTime = new Date(bItem.fecha).getTime();
+
+    // Buscar comprobantes en libros sin conciliar dentro de una ventana de ±4 días
+    const candidates = libros
+      .map((l, idx) => ({ ...l, originalIdx: idx }))
+      .filter((l) => {
+        if (matchedLibroIndices.has(l.originalIdx)) return false;
+        const val = isRetiro ? l.credito : l.debito;
+        if (val <= 0) return false;
+        const lTime = new Date(l.fecha).getTime();
+        const diffDays = Math.abs(bTime - lTime) / (1000 * 60 * 60 * 24);
+        return isNaN(diffDays) || diffDays <= 4;
+      });
+
+    if (candidates.length < 2) continue;
+
+    // Verificar si la suma de todos los candidatos de esa fecha cuadra exactamente
+    const sumAll = candidates.reduce((s, c) => s + (isRetiro ? c.credito : c.debito), 0);
+    if (Math.abs(sumAll - montoBanco) <= 0.05) {
+      matchedExtractoIds.add(bItem.id);
+      candidates.forEach((c) => matchedLibroIndices.add(c.originalIdx));
+
+      const vouchersStr = candidates.map((c) => c.comprobante).filter(Boolean).slice(0, 4).join(", ");
+      rows.push({
+        id: `match_lote_${bItem.id}`,
+        estado: "conciliado",
+        fecha: bItem.fecha,
+        descripcion: `${bItem.descripcion} ↔ Lote de ${candidates.length} comprobantes (${vouchersStr}${candidates.length > 4 ? "..." : ""})`,
+        referencia: bItem.referencia || "Lote ACH",
+        tipo: isRetiro ? "retiro" : "consignacion",
+        montoBanco,
+        montoLibros: sumAll,
+        diferencia: 0,
+        esGmf: false,
+        esComision: false,
+        esRendimiento: false,
+        itemBanco: bItem,
+        itemsLibrosLote: candidates,
+        nota: `Conciliado en Lote ACH / Pago agrupado (1 movimiento en extracto = ${candidates.length} registros en libros).`,
+      });
+      continue;
+    }
+
+    // Si hay más candidatos (ej. múltiples lotes en el mismo día), buscar subconjunto exacto
+    let foundSubset: number[] | null = null;
+    for (let size = 2; size <= Math.min(candidates.length, 12); size++) {
+      function findSubset(
+        start: number,
+        remainingCount: number,
+        currentSum: number,
+        currentIndices: number[]
+      ): number[] | null {
+        if (remainingCount === 0) {
+          if (Math.abs(currentSum - montoBanco) <= 0.05) return currentIndices;
+          return null;
+        }
+        for (let i = start; i <= candidates.length - remainingCount; i++) {
+          const val = isRetiro ? candidates[i].credito : candidates[i].debito;
+          const res = findSubset(i + 1, remainingCount - 1, currentSum + val, [
+            ...currentIndices,
+            candidates[i].originalIdx,
+          ]);
+          if (res) return res;
+        }
+        return null;
+      }
+
+      foundSubset = findSubset(0, size, 0, []);
+      if (foundSubset) break;
+    }
+
+    if (foundSubset) {
+      matchedExtractoIds.add(bItem.id);
+      foundSubset.forEach((idx) => matchedLibroIndices.add(idx));
+
+      const matchedCandidates = libros.filter((_, idx) => foundSubset!.includes(idx));
+      const vouchersStr = matchedCandidates.map((c) => c.comprobante).filter(Boolean).slice(0, 4).join(", ");
+
+      rows.push({
+        id: `match_subset_${bItem.id}`,
+        estado: "conciliado",
+        fecha: bItem.fecha,
+        descripcion: `${bItem.descripcion} ↔ Lote de ${foundSubset.length} comprobantes (${vouchersStr}${foundSubset.length > 4 ? "..." : ""})`,
+        referencia: bItem.referencia || "Lote ACH",
+        tipo: isRetiro ? "retiro" : "consignacion",
+        montoBanco,
+        montoLibros: montoBanco,
+        diferencia: 0,
+        esGmf: false,
+        esComision: false,
+        esRendimiento: false,
+        itemBanco: bItem,
+        itemsLibrosLote: matchedCandidates,
+        nota: `Conciliado en Lote ACH / Pago agrupado (1 débito en extracto = ${foundSubset.length} comprobantes en libros).`,
+      });
+    }
+  }
+
+  // FASE 4: Partidas que están en el Extracto del Banco pero NO en Libros
   for (const bItem of extracto) {
     if (matchedExtractoIds.has(bItem.id)) continue;
     const isRetiro = bItem.debito > 0;
@@ -209,7 +401,7 @@ export function conciliarBancos(
     });
   }
 
-  // FASE 4: Partidas que están en Libros pero NO en el Extracto Bancario
+  // FASE 5: Partidas que están en Libros pero NO en el Extracto Bancario
   for (let i = 0; i < libros.length; i++) {
     if (matchedLibroIndices.has(i)) continue;
     const lItem = libros[i];
@@ -255,7 +447,6 @@ export function conciliarBancos(
     }
   }
 
-  // Cálculo de saldos
   const totalDebitosExtracto = extracto.reduce((a, b) => a + b.debito, 0);
   const totalCreditosExtracto = extracto.reduce((a, b) => a + b.credito, 0);
   const saldoFinalExtracto = saldoInicialExtracto + totalCreditosExtracto - totalDebitosExtracto;
@@ -300,5 +491,6 @@ export function conciliarBancos(
     rows,
     summary,
     cuentasBancosDetectadas,
+    cuentasDetalle,
   };
 }

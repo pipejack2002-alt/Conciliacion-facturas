@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { conciliarBancos, extractLibroBancos, type BankExtractItem } from "./conciliar-bancos.ts";
+import {
+  conciliarBancos,
+  extractLibroBancos,
+  getAvailableBankAccounts,
+  type BankExtractItem,
+} from "./conciliar-bancos.ts";
 import type { MovLine } from "./types.ts";
 
 describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuenta 11)", () => {
@@ -160,4 +165,108 @@ describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuen
     assert.strictEqual(bancos.length, 2);
     assert.ok(bancos.every((b) => b.cuenta.startsWith("11")));
   });
+
+  it("debe conciliar lotes ACH de 1 débito bancario contra N comprobantes individuales de libros", () => {
+    const extracto: BankExtractItem[] = [
+      {
+        id: "lote-ach-1",
+        fecha: "2026-08-04",
+        descripcion: "DEBITO AUTORIZADO POR ACH LOTE 0001",
+        referencia: "0001",
+        debito: 2500000,
+        credito: 0,
+      },
+    ];
+
+    const libros: MovLine[] = [
+      {
+        cuenta: "11100501",
+        cuentaNombre: "BANCO COLMENA BCSC",
+        comprobante: "G 002 101",
+        fecha: "2026-08-04",
+        nit: "100",
+        nombre: "EMPLEADO 1",
+        descripcion: "PAGO NOMINA",
+        cruce: "",
+        referencia: "",
+        debito: 0,
+        credito: 1000000,
+        observacion: "",
+      },
+      {
+        cuenta: "11100501",
+        cuentaNombre: "BANCO COLMENA BCSC",
+        comprobante: "G 002 102",
+        fecha: "2026-08-04",
+        nit: "101",
+        nombre: "EMPLEADO 2",
+        descripcion: "PAGO NOMINA",
+        cruce: "",
+        referencia: "",
+        debito: 0,
+        credito: 1500000,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliarBancos(extracto, libros, 5000000, 5000000);
+    assert.strictEqual(res.summary.totalConciliados, 1);
+    assert.strictEqual(res.summary.cuadrado, true);
+    assert.strictEqual(res.summary.diferenciaCuadre, 0);
+    assert.ok(res.rows[0].nota.includes("Lote ACH"));
+    assert.strictEqual(res.rows[0].itemsLibrosLote?.length, 2);
+  });
+
+  it("debe detectar cuentas de bancos y de fondos de inversión / carteras colectivas (Clase 1250)", () => {
+    const mov: MovLine[] = [
+      {
+        cuenta: "11100512",
+        cuentaNombre: "BANCO COLMENA BCSC",
+        comprobante: "G 01",
+        fecha: "2026-08-01",
+        nit: "1",
+        nombre: "A",
+        descripcion: "",
+        cruce: "",
+        debito: 100,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CREDICORP CAPITAL - FONVAL",
+        comprobante: "R 01",
+        fecha: "2026-08-01",
+        nit: "2",
+        nombre: "B",
+        descripcion: "",
+        cruce: "",
+        debito: 500,
+        credito: 200,
+        observacion: "",
+      },
+      {
+        cuenta: "41350501",
+        cuentaNombre: "VENTAS COMERCIALES",
+        comprobante: "F 01",
+        fecha: "2026-08-01",
+        nit: "3",
+        nombre: "C",
+        descripcion: "",
+        cruce: "",
+        debito: 0,
+        credito: 400,
+        observacion: "",
+      },
+    ];
+
+    const bancos = extractLibroBancos(mov);
+    assert.strictEqual(bancos.length, 2);
+
+    const cuentas = getAvailableBankAccounts(mov);
+    assert.strictEqual(cuentas.length, 2);
+    assert.strictEqual(cuentas[0].cuenta, "11100512");
+    assert.strictEqual(cuentas[1].cuenta, "12503511");
+  });
 });
+
