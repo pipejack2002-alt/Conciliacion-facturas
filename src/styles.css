@@ -37,6 +37,33 @@
 }
 
 @layer base {
+  html.dark {
+    --color-bg: #0b1120;
+    --color-bg-surface: #0f172a;
+    --color-bg-elevated: #1e293b;
+    --color-bg-subtle: #1e293b;
+    
+    --color-ink: #f8fafc;
+    --color-ink-muted: #94a3b8;
+    --color-ink-subtle: #64748b;
+
+    --color-line: #334155;
+    --color-line-strong: #475569;
+
+    --color-teal: #2dd4bf;
+    --color-teal-soft: rgba(45, 212, 191, 0.15);
+    --color-teal-deep: #14b8a6;
+
+    --color-ok: #4ade80;
+    --color-ok-bg: rgba(74, 222, 128, 0.15);
+    --color-warn: #fbbf24;
+    --color-warn-bg: rgba(251, 191, 36, 0.15);
+    --color-danger: #f87171;
+    --color-danger-bg: rgba(248, 113, 113, 0.15);
+    --color-info: #60a5fa;
+    --color-info-bg: rgba(96, 165, 250, 0.15);
+  }
+
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
