@@ -3,7 +3,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "Conciliador de Facturas DIAN vs Libros Contables | TributoApp";
+const APP_NAME = "Conciliador Fiscal & Bancario | TributoApp";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -14,7 +14,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "Auditoría y conciliación automática entre facturación electrónica DIAN y libros contables / auxiliares.",
+          "Cruce inteligente y auditoría automática entre facturación electrónica DIAN, libros auxiliares ERP y bancos.",
       },
       { name: "theme-color", content: "#0f766e" },
     ],

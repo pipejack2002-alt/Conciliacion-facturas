@@ -9,6 +9,7 @@ import { useConciliacion } from "@/lib/store";
 import { TributoAuthGuardian, TributoUserBadge } from "@/components/tributo-auth-guardian";
 import { ToastHost } from "@/components/audit-chrome";
 import { ShieldCheck, FileCheck, BarChart3, Landmark } from "lucide-react";
+import { AppLogo } from "@/components/app-logo";
 import { cn } from "@/lib/cn";
 
 export const Route = createFileRoute("/")({ component: ProtectedConciliadorApp });
@@ -38,22 +39,20 @@ function ConciliadorApp() {
       {/* Header Corporativo Ejecutivo */}
       <header className="sticky top-0 z-30 border-b border-line bg-bg-surface/95 backdrop-blur-md px-4 py-3 sm:px-6 lg:px-8 shadow-xs">
         <div className="mx-auto flex w-full max-w-[1600px] flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          {/* Logo y Nombre de la Suite */}
+          {/* Logo y Nombre del Conciliador */}
           <div className="flex items-center gap-3">
-            <div className="flex size-9.5 items-center justify-center rounded-xl bg-gradient-to-br from-teal-700 to-emerald-700 text-white shadow-xs">
-              <ShieldCheck className="size-5.5" />
-            </div>
+            <AppLogo className="size-9 shrink-0 shadow-xs" />
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-black text-sm sm:text-base tracking-tight text-ink">
-                  Suite Financiera DIAN & Bancos
+                  Conciliador Fiscal & Bancario
                 </span>
                 <span className="rounded-md bg-teal-soft border border-teal/30 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-teal">
                   TributoApp
                 </span>
               </div>
               <p className="text-[11px] text-ink-muted font-medium hidden sm:block">
-                Conciliación DIAN, Business Intelligence y Conciliación Bancaria NIIF
+                Cruce Inteligente de Facturas DIAN, Libros ERP y Bancos
               </p>
             </div>
           </div>
@@ -155,13 +154,13 @@ function ConciliadorApp() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-line bg-bg-surface/50 py-4 px-4 sm:px-6 lg:px-8 text-center text-xs text-ink-muted">
-        <div className="mx-auto w-full max-w-[1600px] flex flex-col sm:flex-row items-center justify-between gap-2">
+      <footer className="border-t border-line bg-bg-surface/50 py-3.5 px-4 sm:px-6 lg:px-8 text-xs text-ink-muted">
+        <div className="mx-auto w-full max-w-[1600px] flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
           <span>
-            © {new Date().getFullYear()} TributoApp S.A.S. · Suite Financiera y Tributaria DIAN Colombia
+            © {new Date().getFullYear()} TributoApp S.A.S. · Conciliador Fiscal & Bancario
           </span>
           <span className="text-[11px] text-ink-subtle">
-            Compatible con Siigo, Helisa, World Office, CGUNO, Bancolombia, Davivienda y extractos bancarios
+            Procesamiento seguro 100% en el navegador (Client-Side TLS 1.3)
           </span>
         </div>
       </footer>
