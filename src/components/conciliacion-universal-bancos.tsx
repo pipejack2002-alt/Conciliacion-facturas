@@ -20,6 +20,7 @@ import {
   Info,
   Layers,
   ChevronDown,
+  Trash2,
 } from "lucide-react";
 import { formatMoney, formatMoneyExact, formatDate } from "@/lib/format";
 import {
@@ -103,6 +104,18 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
 
   function handleSaldoBlur() {
     setSaldoInputStr(formatMoneyExact(saldoInicialExtracto).replace("$", "").trim());
+  }
+
+  function handleVaciarUniversal() {
+    setExtractPreview(null);
+    setCustomExtractItems(null);
+    setExtractFileName("");
+    setColumnConfig(null);
+    setCustomMovLines([]);
+    setCustomMovFileName("");
+    setSaldoInicialExtracto(0);
+    setSaldoInicialLibros(0);
+    setSaldoInputStr("0,00");
   }
 
   // Fila expandida para auditoría detallada de comprobantes / lotes ACH
@@ -347,6 +360,18 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {(effectiveExtractItems.length > 0 || (customMovLines && customMovLines.length > 0)) && (
+              <button
+                type="button"
+                onClick={handleVaciarUniversal}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-danger/30 bg-danger-bg px-3.5 py-2 text-xs font-semibold text-danger hover:bg-danger hover:text-white transition cursor-pointer shadow-2xs"
+                title="Vaciar extracto y movimientos cargados para dejar la plantilla en blanco"
+              >
+                <Trash2 className="size-3.5" />
+                <span>Vaciar Datos</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={exportarConciliacionUniversal}

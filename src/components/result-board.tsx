@@ -20,6 +20,7 @@ import {
   ArrowDown,
   Filter,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { BadgeEstado } from "./badge-estado";
 import { DeltaBanner, ReplaceBar } from "./audit-chrome";
@@ -495,9 +496,11 @@ export function ResultBoard() {
           <button
             type="button"
             onClick={reset}
-            className="inline-flex h-9 items-center rounded-lg px-2.5 text-xs font-medium text-ink-muted hover:text-ink"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-danger/30 bg-danger-bg px-3 text-xs font-semibold text-danger hover:bg-danger hover:text-white transition shadow-2xs cursor-pointer"
+            title="Vaciar todos los datos de la conciliación y volver a cargar"
           >
-            Nueva auditoría
+            <Trash2 className="size-3.5" />
+            <span>Vaciar Datos</span>
           </button>
         </div>
       </div>

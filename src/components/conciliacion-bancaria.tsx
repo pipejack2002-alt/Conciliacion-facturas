@@ -19,6 +19,7 @@ import {
   TrendingUp,
   Clock,
   Info,
+  Trash2,
 } from "lucide-react";
 import { formatMoney, formatMoneyExact, formatDate } from "@/lib/format";
 import {
@@ -56,6 +57,9 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
   // Selector de Modo: Homologados (Caja Social, Credicorp, Banistmo) vs Universal (Cualquier Banco)
   const [modoVista, setModoVista] = useState<"homologado" | "universal">("homologado");
 
+  // Control de modo demo vs plantilla en blanco
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
+
   // Estado de extracto bancario cargado
   const [extractoMeta, setExtractoMeta] = useState<ParsedBankExtractResult | null>(null);
   const [extractoItems, setExtractoItems] = useState<BankExtractItem[]>(DEMO_EXTRACTO);
@@ -67,6 +71,30 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
   const [customMovLines, setCustomMovLines] = useState<MovLine[] | null>(null);
   const [customMovFileName, setCustomMovFileName] = useState<string>("");
   const [isMovLoading, setIsMovLoading] = useState<boolean>(false);
+
+  function handleVaciarBancos() {
+    setIsDemoMode(false);
+    setExtractoItems([]);
+    setExtractoMeta(null);
+    setExtractoFileName("");
+    setCustomMovLines([]);
+    setCustomMovFileName("");
+    setSaldoInicialExtracto(0);
+    setSaldoInicialLibros(0);
+    setSaldoInputStr("0,00");
+  }
+
+  function handleCargarDemo() {
+    setIsDemoMode(true);
+    setExtractoItems(DEMO_EXTRACTO);
+    setExtractoMeta(null);
+    setExtractoFileName("Extracto de Demostración");
+    setCustomMovLines(null);
+    setCustomMovFileName("");
+    setSaldoInicialExtracto(15000000);
+    setSaldoInicialLibros(15000000);
+    setSaldoInputStr(formatMoneyExact(15000000).replace("$", "").trim());
+  }
 
   // Movimientos contables efectivos
   const effectiveMovLines = useMemo(() => {
@@ -199,9 +227,10 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
     );
   }, [effectiveMovLines, cuentaSeleccionada]);
 
-  // Libros efectivos: si no hay libros en sesión, proveer demostración
+  // Libros efectivos: si no hay libros en sesión, proveer demostración si isDemoMode está activo
   const librosEfectivos = useMemo(() => {
     if (librosBancos.length > 0) return librosBancos;
+    if (!isDemoMode) return [];
     return [
       {
         cuenta: "11100501",
@@ -256,7 +285,7 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
         observacion: "",
       },
     ];
-  }, [librosBancos]);
+  }, [librosBancos, isDemoMode]);
 
   // Ejecución del motor de conciliación bancaria
   const concilResult: BankConciliacionResult = useMemo(() => {
@@ -329,6 +358,7 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
           setSaldoInicialLibros(parsed.saldoInicial);
         }
       }
+      setIsDemoMode(false);
     } catch (err: any) {
       console.error("Error al procesar extracto bancario:", err);
       alert(
@@ -354,6 +384,7 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
 
       if (parsed.length > 0) {
         setCustomMovLines(parsed);
+        setIsDemoMode(false);
       } else {
         alert("No se detectaron movimientos contables en el archivo Excel seleccionado.");
       }
@@ -493,10 +524,35 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {(extractoItems.length > 0 || effectiveMovLines.length > 0) && (
+            <button
+              type="button"
+              onClick={handleVaciarBancos}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-danger/30 bg-danger-bg px-3.5 py-2 text-xs font-semibold text-danger hover:bg-danger hover:text-white transition cursor-pointer shadow-2xs"
+              title="Vaciar extracto y movimientos cargados para dejar la plantilla en blanco"
+            >
+              <Trash2 className="size-3.5" />
+              <span>Vaciar Datos</span>
+            </button>
+          )}
+
+          {!isDemoMode && extractoItems.length === 0 && (
+            <button
+              type="button"
+              onClick={handleCargarDemo}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-bg-surface px-3.5 py-2 text-xs font-semibold text-ink hover:border-teal hover:text-teal transition cursor-pointer shadow-2xs"
+              title="Cargar datos de ejemplo de extracto y contabilidad para demostración"
+            >
+              <Sparkles className="size-3.5 text-teal" />
+              <span>Cargar Ejemplo</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={exportarConciliacionBancaria}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-teal px-3.5 py-2 text-xs font-semibold text-white hover:bg-teal-deep transition cursor-pointer shadow-xs"
+            disabled={concilResult.rows.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-teal px-3.5 py-2 text-xs font-semibold text-white hover:bg-teal-deep transition cursor-pointer shadow-xs disabled:opacity-50"
           >
             <Download className="size-3.5" />
             <span>Exportar Conciliación a Excel</span>
@@ -1072,8 +1128,26 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
             <tbody className="divide-y divide-line/60">
               {rowsFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-xs text-ink-muted">
-                    No se encontraron partidas con los filtros seleccionados.
+                  <td colSpan={8} className="px-4 py-12 text-center text-xs text-ink-muted">
+                    {extractoItems.length === 0 && effectiveMovLines.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center gap-3">
+                        <Landmark className="size-8 text-teal opacity-60" />
+                        <p className="font-bold text-ink text-sm">Plantilla en blanco lista para conciliar</p>
+                        <p className="text-ink-muted max-w-md">
+                          Sube tu extracto bancario (PDF o Excel) y tu auxiliar de movimientos contables arriba para conciliar en segundos.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleCargarDemo}
+                          className="mt-1 inline-flex items-center gap-1.5 rounded-xl border border-teal/40 bg-teal-soft px-3.5 py-1.5 text-xs font-bold text-teal hover:bg-teal hover:text-white transition cursor-pointer"
+                        >
+                          <Sparkles className="size-3.5" />
+                          <span>Cargar datos de demostración</span>
+                        </button>
+                      </div>
+                    ) : (
+                      "No se encontraron partidas con los filtros seleccionados."
+                    )}
                   </td>
                 </tr>
               ) : (

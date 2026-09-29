@@ -26,14 +26,17 @@ import {
   FileSpreadsheet,
   Award,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { formatMoney, formatMoneyExact, formatDate } from "@/lib/format";
 import type { ConciliacionResult, ConciliacionRow } from "@/lib/types";
+import { useConciliacion } from "@/lib/store";
 import { cn } from "@/lib/cn";
 
 const COLORS_PIE = ["#0f766e", "#3b82f6", "#64748b", "#f59e0b", "#8b5cf6"];
 
 export function DashboardBi({ result }: { result: ConciliacionResult }) {
+  const reset = useConciliacion((s) => s.reset);
   const [periodoFiltro, setPeriodoFiltro] = useState<"todos" | "altos">("todos");
 
   // 1. Filtrar filas relevantes de compras recibidas
@@ -181,6 +184,18 @@ export function DashboardBi({ result }: { result: ConciliacionResult }) {
           <p className="mt-1 text-xs sm:text-sm text-ink-muted">
             Análisis volumétrico de facturación electrónica, concentración de proveedores y control de IVA descontable.
           </p>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={reset}
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-danger/30 bg-danger-bg px-3.5 text-xs font-semibold text-danger hover:bg-danger hover:text-white transition shadow-2xs cursor-pointer"
+            title="Vaciar datos y volver a cargar archivos"
+          >
+            <Trash2 className="size-3.5" />
+            <span>Vaciar Datos</span>
+          </button>
         </div>
       </div>
 
