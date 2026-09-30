@@ -4,6 +4,8 @@ import {
   conciliarBancos,
   extractLibroBancos,
   getAvailableBankAccounts,
+  getBankExecutiveBreakdown,
+  classifyMovementConcept,
   type BankExtractItem,
 } from "./conciliar-bancos.ts";
 import type { MovLine } from "./types.ts";
@@ -267,6 +269,43 @@ describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuen
     assert.strictEqual(cuentas.length, 2);
     assert.strictEqual(cuentas[0].cuenta, "11100512");
     assert.strictEqual(cuentas[1].cuenta, "12503511");
+  });
+
+  it("debe clasificar GMF y Comisiones de forma mutuamente excluyente sin inflar comisiones", () => {
+    // Caso real Credicorp: cargos de GMF que empiezan con 'COBRO GM ... COBRO DE GMF'
+    const descGmf = "COBRO GM 10653 COBRO DE GMF SOBRE $25.000.000,00";
+    const resGmf = classifyMovementConcept(descGmf);
+    assert.strictEqual(resGmf.esGmf, true, "Debe ser GMF");
+    assert.strictEqual(resGmf.esComision, false, "NUNCA debe ser comisión");
+    assert.strictEqual(resGmf.esRendimiento, false);
+
+    // Caso de comisión bancaria legítima con IVA
+    const descCom = "COBRO OP BANCARIA TRANSF Y/O CHQ CON IVA";
+    const resCom = classifyMovementConcept(descCom);
+    assert.strictEqual(resCom.esGmf, false);
+    assert.strictEqual(resCom.esComision, true, "Debe ser comisión bancaria");
+    assert.strictEqual(resCom.esRendimiento, false);
+
+    // Conciliación con ambos ítems y verificación de desglose analítico
+    const extracto: BankExtractItem[] = [
+      { id: "e1", fecha: "2026-08-06", descripcion: descGmf, referencia: "", debito: 100000, credito: 0 },
+      { id: "e2", fecha: "2026-08-24", descripcion: descCom, referencia: "1-1-47311-2", debito: 149254.56, credito: 0 },
+      { id: "e3", fecha: "2026-08-28", descripcion: "AJUSTE TP 3420 TRASLADO DE FONDOS", referencia: "TP 3420", debito: 28000000, credito: 0 },
+      { id: "e4", fecha: "2026-08-31", descripcion: "RENDIMIENTOS", referencia: "1-1-47311-2", debito: 0, credito: 1953109.18 },
+    ];
+
+    const conc = conciliarBancos(extracto, []);
+    assert.strictEqual(conc.summary.notasDebitoGmf, 100000);
+    assert.strictEqual(conc.summary.notasDebitoComisiones, 149254.56);
+    assert.strictEqual(conc.summary.notasDebitoOperativas, 28000000);
+    assert.strictEqual(conc.summary.notasDebitoNoRegistradas, 100000 + 149254.56 + 28000000);
+    assert.strictEqual(conc.summary.notasCreditoRendimientos, 1953109.18);
+
+    const exec = getBankExecutiveBreakdown(conc.rows);
+    assert.strictEqual(exec.gmf.count, 1);
+    assert.strictEqual(exec.gmf.total, 100000);
+    assert.strictEqual(exec.comisiones.count, 1, "Solo debe haber 1 comisión, no inflada por GMF");
+    assert.strictEqual(exec.comisiones.total, 149254.56);
   });
 });
 

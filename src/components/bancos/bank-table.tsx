@@ -11,10 +11,24 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { formatMoneyExact, formatDate } from "@/lib/format";
 import type { BankConciliacionRow } from "@/lib/conciliar-bancos";
 import { cn } from "@/lib/cn";
+
+export type BankSortField =
+  | "estado"
+  | "fecha"
+  | "descripcion"
+  | "referencia"
+  | "montoBanco"
+  | "montoLibros"
+  | "diagnostico";
+
+export type BankSortDirection = "asc" | "desc";
 
 interface BankTableProps {
   rows: BankConciliacionRow[];
@@ -85,18 +99,87 @@ export const BankTable = memo(function BankTable({
     return list;
   }, [rows, tabFilter, debouncedQuery]);
 
-  // Reset de página al cambiar filtros
+  // Estado de ordenamiento
+  const [sortField, setSortField] = useState<BankSortField>("fecha");
+  const [sortDirection, setSortDirection] = useState<BankSortDirection>("desc");
+
+  const handleToggleSort = (field: BankSortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      // Para montos, ordenar desc por defecto; para texto o fecha, asc o desc intuitivo
+      setSortDirection(field === "montoBanco" || field === "montoLibros" ? "desc" : "asc");
+    }
+  };
+
+  const handleSelectSort = (field: BankSortField) => {
+    setSortField(field);
+    setSortDirection(field === "montoBanco" || field === "montoLibros" ? "desc" : "asc");
+  };
+
+  // Ordenamiento de filas filtradas
+  const sortedRows = useMemo(() => {
+    const list = [...filteredRows];
+    list.sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "estado": {
+          const rank = (row: BankConciliacionRow) => {
+            if (row.estado === "nota_debito_banco") return 1;
+            if (row.estado === "nota_credito_banco") return 2;
+            if (row.estado === "partida_en_transito_libros") return 3;
+            return 4;
+          };
+          cmp = rank(a) - rank(b);
+          break;
+        }
+        case "fecha": {
+          const fA = a.fecha || "";
+          const fB = b.fecha || "";
+          cmp = fA.localeCompare(fB);
+          break;
+        }
+        case "descripcion": {
+          cmp = (a.descripcion || "").localeCompare(b.descripcion || "", "es", { sensitivity: "base" });
+          break;
+        }
+        case "referencia": {
+          cmp = (a.referencia || "").localeCompare(b.referencia || "", "es", { numeric: true, sensitivity: "base" });
+          break;
+        }
+        case "montoBanco": {
+          cmp = (a.montoBanco || 0) - (b.montoBanco || 0);
+          break;
+        }
+        case "montoLibros": {
+          cmp = (a.montoLibros || 0) - (b.montoLibros || 0);
+          break;
+        }
+        case "diagnostico": {
+          cmp = (a.nota || "").localeCompare(b.nota || "", "es", { sensitivity: "base" });
+          break;
+        }
+        default:
+          cmp = 0;
+      }
+      return sortDirection === "asc" ? cmp : -cmp;
+    });
+    return list;
+  }, [filteredRows, sortField, sortDirection]);
+
+  // Reset de página al cambiar filtros u ordenamiento
   useEffect(() => {
     setCurrentPage(1);
-  }, [tabFilter, debouncedQuery, pageSize]);
+  }, [tabFilter, debouncedQuery, pageSize, sortField, sortDirection]);
 
-  // Paginado de datos
-  const totalPages = pageSize === 0 ? 1 : Math.ceil(filteredRows.length / pageSize) || 1;
+  // Paginado de datos ordenados
+  const totalPages = pageSize === 0 ? 1 : Math.ceil(sortedRows.length / pageSize) || 1;
   const pagedRows = useMemo(() => {
-    if (pageSize === 0) return filteredRows;
+    if (pageSize === 0) return sortedRows;
     const start = (currentPage - 1) * pageSize;
-    return filteredRows.slice(start, start + pageSize);
-  }, [filteredRows, currentPage, pageSize]);
+    return sortedRows.slice(start, start + pageSize);
+  }, [sortedRows, currentPage, pageSize]);
 
   return (
     <div className="space-y-3">
@@ -140,14 +223,52 @@ export const BankTable = memo(function BankTable({
         </div>
       </div>
 
-      {/* Controles de Paginación Superior y Conteo */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-ink-muted">
+      {/* Controles de Paginación Superior, Ordenamiento y Conteo */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1 text-xs text-ink-muted">
         <div className="flex items-center gap-2">
           <span>
-            Mostrando <strong>{filteredRows.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}</strong> -{" "}
-            <strong>{pageSize === 0 ? filteredRows.length : Math.min(currentPage * pageSize, filteredRows.length)}</strong> de{" "}
-            <strong>{filteredRows.length}</strong> partidas
+            Mostrando <strong>{sortedRows.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}</strong> -{" "}
+            <strong>{pageSize === 0 ? sortedRows.length : Math.min(currentPage * pageSize, sortedRows.length)}</strong> de{" "}
+            <strong>{sortedRows.length}</strong> partidas
           </span>
+        </div>
+
+        {/* Selector de ordenamiento interactivo */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[11px] font-semibold text-ink-muted flex items-center gap-1">
+            <ArrowUpDown className="size-3 text-teal" /> Organizar por:
+          </span>
+          <select
+            value={sortField}
+            onChange={(e) => handleSelectSort(e.target.value as BankSortField)}
+            className="rounded-lg border border-line bg-bg-surface px-2.5 py-1 text-xs font-semibold text-ink focus:outline-teal shadow-2xs cursor-pointer"
+          >
+            <option value="fecha">Fecha</option>
+            <option value="estado">Estado (Prioridad contable)</option>
+            <option value="montoBanco">Monto Extracto</option>
+            <option value="montoLibros">Monto Libros</option>
+            <option value="descripcion">Descripción / Concepto</option>
+            <option value="referencia">Referencia / Comprobante</option>
+            <option value="diagnostico">Diagnóstico Contable</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => setSortDirection((d) => (d === "asc" ? "desc" : "asc"))}
+            className="inline-flex items-center gap-1 rounded-lg border border-line bg-bg-surface hover:bg-bg-subtle px-2 py-1 text-xs font-bold text-ink cursor-pointer transition shadow-2xs"
+            title={`Alternar dirección de orden (actual: ${sortDirection === "asc" ? "Ascendente" : "Descendente"})`}
+          >
+            {sortDirection === "asc" ? (
+              <>
+                <ArrowUp className="size-3 text-teal font-black" />
+                <span className="text-[10px] font-extrabold uppercase">Asc</span>
+              </>
+            ) : (
+              <>
+                <ArrowDown className="size-3 text-teal font-black" />
+                <span className="text-[10px] font-extrabold uppercase">Desc</span>
+              </>
+            )}
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -196,15 +317,134 @@ export const BankTable = memo(function BankTable({
       <div className="rounded-2xl border border-line bg-bg-surface overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs table-auto">
-            <thead className="border-b border-line bg-bg-subtle/80 uppercase tracking-wider text-ink-subtle font-semibold">
+            <thead className="border-b border-line bg-bg-subtle/80 uppercase tracking-wider text-ink-subtle font-semibold select-none">
               <tr>
-                <th className="px-3.5 py-3">Estado</th>
-                <th className="px-3.5 py-3">Fecha</th>
-                <th className="px-3.5 py-3">Descripción / Concepto</th>
-                <th className="px-3.5 py-3">Referencia</th>
-                <th className="px-3.5 py-3 text-right">Monto Extracto</th>
-                <th className="px-3.5 py-3 text-right">Monto Libros</th>
-                <th className="px-3.5 py-3">Diagnóstico Contable</th>
+                <th
+                  onClick={() => handleToggleSort("estado")}
+                  className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                  title="Clic para ordenar por Estado"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Estado</span>
+                    {sortField === "estado" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="size-3.5 text-teal" />
+                      ) : (
+                        <ArrowDown className="size-3.5 text-teal" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleToggleSort("fecha")}
+                  className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                  title="Clic para ordenar por Fecha"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Fecha</span>
+                    {sortField === "fecha" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="size-3.5 text-teal" />
+                      ) : (
+                        <ArrowDown className="size-3.5 text-teal" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleToggleSort("descripcion")}
+                  className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                  title="Clic para ordenar por Descripción"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Descripción / Concepto</span>
+                    {sortField === "descripcion" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="size-3.5 text-teal" />
+                      ) : (
+                        <ArrowDown className="size-3.5 text-teal" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleToggleSort("referencia")}
+                  className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                  title="Clic para ordenar por Referencia / Documento"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Referencia</span>
+                    {sortField === "referencia" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="size-3.5 text-teal" />
+                      ) : (
+                        <ArrowDown className="size-3.5 text-teal" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleToggleSort("montoBanco")}
+                  className="px-3.5 py-3 text-right cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                  title="Clic para ordenar por Monto de Extracto"
+                >
+                  <div className="flex items-center justify-end gap-1">
+                    <span>Monto Extracto</span>
+                    {sortField === "montoBanco" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="size-3.5 text-teal" />
+                      ) : (
+                        <ArrowDown className="size-3.5 text-teal" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleToggleSort("montoLibros")}
+                  className="px-3.5 py-3 text-right cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                  title="Clic para ordenar por Monto en Libros"
+                >
+                  <div className="flex items-center justify-end gap-1">
+                    <span>Monto Libros</span>
+                    {sortField === "montoLibros" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="size-3.5 text-teal" />
+                      ) : (
+                        <ArrowDown className="size-3.5 text-teal" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleToggleSort("diagnostico")}
+                  className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                  title="Clic para ordenar por Diagnóstico Contable"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Diagnóstico Contable</span>
+                    {sortField === "diagnostico" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="size-3.5 text-teal" />
+                      ) : (
+                        <ArrowDown className="size-3.5 text-teal" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                    )}
+                  </div>
+                </th>
                 <th className="px-3.5 py-3 text-center">Auditoría / Rastrear</th>
               </tr>
             </thead>

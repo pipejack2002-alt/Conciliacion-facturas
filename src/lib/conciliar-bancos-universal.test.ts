@@ -7,6 +7,7 @@ import {
   normalizeUniversalDate,
 } from "./conciliar-bancos-universal.ts";
 import { getAvailableBankAccounts, extractLibroBancos } from "./conciliar-bancos.ts";
+import type { MovLine } from "./types.ts";
 
 describe("Conciliador Universal de Bancos (Cualquier Banco)", () => {
   it("debe limpiar correctamente montos con formato latino y anglosajón", () => {
@@ -99,14 +100,14 @@ describe("Conciliador Universal de Bancos (Cualquier Banco)", () => {
       },
     ];
 
-    const accounts = getAvailableBankAccounts(movLines);
+    const accounts = getAvailableBankAccounts(movLines as unknown as MovLine[]);
     assert.strictEqual(accounts.length, 4);
     assert.ok(accounts.some((a) => a.cuenta === "101001"));
     assert.ok(accounts.some((a) => a.cuenta === "12503511"));
     assert.ok(accounts.some((a) => a.cuenta === "11100512"));
     assert.ok(accounts.some((a) => a.cuenta === "CUSTOM_BANK_01"));
 
-    const filtered = extractLibroBancos(movLines, "12503511");
+    const filtered = extractLibroBancos(movLines as unknown as MovLine[], "12503511");
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].credito, 165000000);
   });

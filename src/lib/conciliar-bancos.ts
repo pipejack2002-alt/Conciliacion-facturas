@@ -43,6 +43,11 @@ export interface BankConciliacionSummary {
   chequesEnTransito: number;
   notasDebitoNoRegistradas: number;
   notasCreditoNoRegistradas: number;
+  notasDebitoGmf?: number;
+  notasDebitoComisiones?: number;
+  notasDebitoOperativas?: number;
+  notasCreditoRendimientos?: number;
+  notasCreditoOperativas?: number;
   saldoConciliado: number;
   diferenciaCuadre: number;
   cuadrado: boolean;
@@ -187,6 +192,39 @@ export function extractLibroBancos(mov: MovLine[], cuentaFiltro?: string): MovLi
 }
 
 /**
+ * Clasifica de forma estricta y mutuamente excluyente los conceptos de un movimiento bancario:
+ * - GMF (Gravamen a los Movimientos Financieros / 4x1000)
+ * - Rendimientos Financieros (abonos de intereses del banco)
+ * - Comisiones Bancarias (cuotas de manejo, tarifas, chequeras, costos de transferencia / operaciones bancarias con IVA)
+ */
+export function classifyMovementConcept(desc: string): {
+  esGmf: boolean;
+  esComision: boolean;
+  esRendimiento: boolean;
+} {
+  const d = (desc || "").toLowerCase();
+
+  // 1. Detección de GMF (4x1000)
+  const esGmf = /gmf|4x1000|4\s*x\s*1000|gravamen|cobro\s*gm|impuesto.*gobierno/i.test(d);
+
+  // 2. Detección de Rendimientos / Abono de intereses
+  const esRendimiento = /rendimiento|inter[eé]s.*abono|intereses.*liquidados/i.test(d);
+
+  // 3. Detección de Comisiones Bancarias:
+  // IMPORTANTE: Una comisión bancaria NUNCA es GMF ni Rendimiento.
+  // Debe describir expresamente comisiones, cuotas de manejo, chequeras, tarifas bancarias,
+  // costo de transferencia/transaccional, cobro de operación bancaria o IVA financiero asociado.
+  const esComision =
+    !esGmf &&
+    !esRendimiento &&
+    /comisi[oó]n|cuota.*manejo|chequera|tarifa|costo.*transf|costo.*transaccional|cobro.*(?:op|operaci[oó]n|bancar|tarifa|transf|servicio|cuota|mantenimiento)|cargo.*servicio|iva.*(?:comisi[oó]n|cuota|tarifa|bancar)/i.test(
+      d
+    );
+
+  return { esGmf, esComision, esRendimiento };
+}
+
+/**
  * Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuenta 11 / Fondos)
  * Aplica la regla contable espejo:
  * - Débito en Banco (Retiro) <=> Crédito en Libros (Disminución de Banco)
@@ -263,10 +301,7 @@ export function conciliarBancos(
           if (Math.abs(montoBanco - montoLibro) <= 0.05) {
             matchedExtractoIds.add(bItem.id);
             matchedLibroIndices.add(i);
-            const desc = (bItem.descripcion || "").toLowerCase();
-            const esGmf = /gmf|4x1000|gravamen|impuesto.*gobierno/i.test(desc);
-            const esComision = /comisi[oó]n|cuota.*manejo|chequera|tarifa|costo.*transferencia|cobro/i.test(desc);
-            const esRendimiento = /rendimiento|inter[eé]s.*abono|intereses.*liquidados/i.test(desc);
+            const { esGmf, esComision, esRendimiento } = classifyMovementConcept(bItem.descripcion);
             rows.push({
               id: `match_${bItem.id}_${i}`,
               estado: "conciliado",
@@ -499,7 +534,7 @@ export function conciliarBancos(
   // Muy frecuente: el banco descuenta diario o por operación, mientras que el ERP causa 1 comprobante al fin de mes
   // A. GMF Consolidado
   const unassignedGmfItems = extracto.filter(
-    (it) => !matchedExtractoIds.has(it.id) && /gmf|4x1000|gravamen|cobro\s+gm/i.test(it.descripcion)
+    (it) => !matchedExtractoIds.has(it.id) && classifyMovementConcept(it.descripcion).esGmf
   );
   if (unassignedGmfItems.length > 0) {
     const sumGmf = unassignedGmfItems.reduce((s, it) => s + it.debito, 0);
@@ -585,10 +620,7 @@ export function conciliarBancos(
         if (isNaN(diffDays) || diffDays <= 7) {
           matchedExtractoIds.add(bItem.id);
           matchedLibroIndices.add(i);
-          const desc = (bItem.descripcion || "").toLowerCase();
-          const esGmf = /gmf|4x1000|gravamen|impuesto.*gobierno/i.test(desc);
-          const esComision = /comisi[oó]n|cuota.*manejo|chequera|tarifa|costo.*transferencia|cobro/i.test(desc);
-          const esRendimiento = /rendimiento|inter[eé]s.*abono|intereses.*liquidados/i.test(desc);
+          const { esGmf, esComision, esRendimiento } = classifyMovementConcept(bItem.descripcion);
           rows.push({
             id: `match_val_${bItem.id}_${i}`,
             estado: "conciliado",
@@ -617,11 +649,7 @@ export function conciliarBancos(
     if (matchedExtractoIds.has(bItem.id)) continue;
     const isRetiro = bItem.debito > 0;
     const montoBanco = isRetiro ? bItem.debito : bItem.credito;
-    const desc = bItem.descripcion.toLowerCase();
-
-    const esGmf = /gmf|4x1000|gravamen|impuesto.*gobierno/i.test(desc);
-    const esComision = /comisi[oó]n|cuota.*manejo|chequera|tarifa|costo.*transferencia|cobro/i.test(desc);
-    const esRendimiento = /rendimiento|inter[eé]s.*abono|intereses.*liquidados/i.test(desc);
+    const { esGmf, esComision, esRendimiento } = classifyMovementConcept(bItem.descripcion);
 
     let nota = "Movimiento en extracto pendiente de causar en contabilidad.";
     if (esGmf) nota = "Gravamen a los Movimientos Financieros (4x1000) descontado por el banco. Pendiente comprobante de gasto (PUC 511595).";
@@ -657,6 +685,10 @@ export function conciliarBancos(
       ? "Giro, cheque o transferencia contabilizada en libros aún no debitada por el banco (Partida en Tránsito)."
       : "Consignación o ingreso contabilizado en libros en trámite de acreditación bancaria (Consignación en Tránsito).";
 
+    const { esGmf, esComision, esRendimiento } = classifyMovementConcept(
+      lItem.descripcion || lItem.nombre || ""
+    );
+
     rows.push({
       id: `libro_pend_${i}`,
       estado: "partida_en_transito_libros",
@@ -667,9 +699,9 @@ export function conciliarBancos(
       montoBanco: 0,
       montoLibros: montoLibro,
       diferencia: montoLibro,
-      esGmf: false,
-      esComision: false,
-      esRendimiento: false,
+      esGmf,
+      esComision,
+      esRendimiento,
       itemLibros: lItem,
       nota,
     });
@@ -680,6 +712,11 @@ export function conciliarBancos(
   let chequesEnTransito = 0;
   let notasDebitoNoRegistradas = 0;
   let notasCreditoNoRegistradas = 0;
+  let notasDebitoGmf = 0;
+  let notasDebitoComisiones = 0;
+  let notasDebitoOperativas = 0;
+  let notasCreditoRendimientos = 0;
+  let notasCreditoOperativas = 0;
 
   for (const r of rows) {
     if (r.estado === "partida_en_transito_libros") {
@@ -687,8 +724,20 @@ export function conciliarBancos(
       if (r.tipo === "retiro") chequesEnTransito += r.montoLibros;
     } else if (r.estado === "nota_debito_banco") {
       notasDebitoNoRegistradas += r.montoBanco;
+      if (r.esGmf) {
+        notasDebitoGmf += r.montoBanco;
+      } else if (r.esComision) {
+        notasDebitoComisiones += r.montoBanco;
+      } else {
+        notasDebitoOperativas += r.montoBanco;
+      }
     } else if (r.estado === "nota_credito_banco") {
       notasCreditoNoRegistradas += r.montoBanco;
+      if (r.esRendimiento) {
+        notasCreditoRendimientos += r.montoBanco;
+      } else {
+        notasCreditoOperativas += r.montoBanco;
+      }
     }
   }
 
@@ -724,6 +773,11 @@ export function conciliarBancos(
     chequesEnTransito,
     notasDebitoNoRegistradas,
     notasCreditoNoRegistradas,
+    notasDebitoGmf,
+    notasDebitoComisiones,
+    notasDebitoOperativas,
+    notasCreditoRendimientos,
+    notasCreditoOperativas,
     saldoConciliado,
     diferenciaCuadre,
     cuadrado,

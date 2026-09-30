@@ -7,11 +7,13 @@ interface Props {
   open: boolean;
   onClose: () => void;
   result: ConciliacionResult;
+  dianName?: string;
+  movName?: string;
   _dianName?: string;
   _movName?: string;
 }
 
-export function ExecutiveReportModal({ open, onClose, result, _dianName, _movName }: Props) {
+export function ExecutiveReportModal({ open, onClose, result, dianName, movName, _dianName, _movName }: Props) {
   const printAreaRef = useRef<HTMLDivElement>(null);
 
   if (!open) return null;

@@ -165,18 +165,42 @@ export const BankSummaryCards = memo(function BankSummaryCards({
             </span>
           </div>
 
-          <div className="flex justify-between py-1 border-b border-line/60 text-amber-600 dark:text-amber-400">
-            <span>(-) Notas Débito Banco (4×1000 / Comisiones):</span>
-            <span className="font-mono font-bold">
-              -{formatMoneyExact(summary.notasDebitoNoRegistradas)}
-            </span>
+          <div className="py-1 border-b border-line/60 text-amber-600 dark:text-amber-400">
+            <div className="flex justify-between">
+              <span title="Cargos y retiros efectuados por el banco que aún no se han registrado en libros contables (incluye GMF, comisiones bancarias y traslados/pagos pendientes)">
+                (-) Notas Débito Banco (Cargos no en Libros):
+              </span>
+              <span className="font-mono font-bold">
+                -{formatMoneyExact(summary.notasDebitoNoRegistradas)}
+              </span>
+            </div>
+            {summary.notasDebitoNoRegistradas > 0 && (
+              <div className="flex flex-wrap items-center gap-x-2 text-[10px] text-ink-muted mt-0.5 font-normal">
+                <span>GMF 4×1000: <strong className="text-amber-700 dark:text-amber-300 font-mono">{formatMoneyExact(summary.notasDebitoGmf || 0)}</strong></span>
+                <span>•</span>
+                <span>Comisiones: <strong className="text-blue-700 dark:text-blue-300 font-mono">{formatMoneyExact(summary.notasDebitoComisiones || 0)}</strong></span>
+                <span>•</span>
+                <span>Pagos/Otros: <strong className="text-ink font-mono">{formatMoneyExact(summary.notasDebitoOperativas || 0)}</strong></span>
+              </div>
+            )}
           </div>
 
-          <div className="flex justify-between py-1 border-b border-line/60 text-blue-600 dark:text-blue-400">
-            <span>(+) Notas Crédito Banco (Rendimientos):</span>
-            <span className="font-mono font-bold">
-              +{formatMoneyExact(summary.notasCreditoNoRegistradas)}
-            </span>
+          <div className="py-1 border-b border-line/60 text-blue-600 dark:text-blue-400">
+            <div className="flex justify-between">
+              <span title="Abonos e ingresos registrados por el banco pendientes de causar en libros contables (incluye rendimientos y consignaciones pendientes)">
+                (+) Notas Crédito Banco (Abonos no en Libros):
+              </span>
+              <span className="font-mono font-bold">
+                +{formatMoneyExact(summary.notasCreditoNoRegistradas)}
+              </span>
+            </div>
+            {summary.notasCreditoNoRegistradas > 0 && (
+              <div className="flex flex-wrap items-center gap-x-2 text-[10px] text-ink-muted mt-0.5 font-normal">
+                <span>Rendimientos: <strong className="text-teal font-mono">{formatMoneyExact(summary.notasCreditoRendimientos || 0)}</strong></span>
+                <span>•</span>
+                <span>Otros Abonos: <strong className="text-ink font-mono">{formatMoneyExact(summary.notasCreditoOperativas || 0)}</strong></span>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-between py-1 border-b border-teal/40 bg-teal-soft/20 px-2 rounded font-semibold text-teal-deep dark:text-teal">

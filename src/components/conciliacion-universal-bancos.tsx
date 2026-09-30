@@ -20,6 +20,9 @@ import {
   Layers,
   ChevronDown,
   Trash2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { formatMoney, formatMoneyExact, formatDate } from "@/lib/format";
 import {
@@ -29,6 +32,7 @@ import {
   getBankExecutiveBreakdown,
   type BankExtractItem,
   type BankConciliacionResult,
+  type BankConciliacionRow,
   type DetectedBankAccount,
 } from "@/lib/conciliar-bancos";
 import {
@@ -375,6 +379,70 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
 
     return list;
   }, [concilResult.rows, tabFilter, searchQuery]);
+
+  // Estado de ordenamiento
+  const [sortField, setSortField] = useState<
+    "estado" | "fecha" | "descripcion" | "referencia" | "montoBanco" | "montoLibros" | "diagnostico"
+  >("fecha");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+
+  const handleToggleSort = (
+    field: "estado" | "fecha" | "descripcion" | "referencia" | "montoBanco" | "montoLibros" | "diagnostico"
+  ) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection(field === "montoBanco" || field === "montoLibros" ? "desc" : "asc");
+    }
+  };
+
+  const rowsOrdenadas = useMemo(() => {
+    const list = [...rowsFiltradas];
+    list.sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "estado": {
+          const rank = (row: BankConciliacionRow) => {
+            if (row.estado === "nota_debito_banco") return 1;
+            if (row.estado === "nota_credito_banco") return 2;
+            if (row.estado === "partida_en_transito_libros") return 3;
+            return 4;
+          };
+          cmp = rank(a) - rank(b);
+          break;
+        }
+        case "fecha": {
+          cmp = (a.fecha || "").localeCompare(b.fecha || "");
+          break;
+        }
+        case "descripcion": {
+          cmp = (a.descripcion || "").localeCompare(b.descripcion || "", "es", { sensitivity: "base" });
+          break;
+        }
+        case "referencia": {
+          cmp = (a.referencia || "").localeCompare(b.referencia || "", "es", { numeric: true, sensitivity: "base" });
+          break;
+        }
+        case "montoBanco": {
+          cmp = (a.montoBanco || 0) - (b.montoBanco || 0);
+          break;
+        }
+        case "montoLibros": {
+          cmp = (a.montoLibros || 0) - (b.montoLibros || 0);
+          break;
+        }
+        case "diagnostico": {
+          cmp = (a.nota || "").localeCompare(b.nota || "", "es", { sensitivity: "base" });
+          break;
+        }
+        default:
+          cmp = 0;
+      }
+      return sortDirection === "asc" ? cmp : -cmp;
+    });
+    return list;
+  }, [rowsFiltradas, sortField, sortDirection]);
 
   // Exportar Estado Oficial de Conciliación Universal a Excel
   function exportarConciliacionUniversal() {
@@ -959,18 +1027,42 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                   </span>
                 </div>
 
-                <div className="flex justify-between py-1 border-b border-line/60 text-amber-600 dark:text-amber-400">
-                  <span>(-) Notas Débito Banco (4x1000 / Comisiones):</span>
-                  <span className="font-mono font-bold">
-                    -{formatMoneyExact(concilResult.summary.notasDebitoNoRegistradas)}
-                  </span>
+                <div className="py-1 border-b border-line/60 text-amber-600 dark:text-amber-400">
+                  <div className="flex justify-between">
+                    <span title="Cargos y retiros efectuados por el banco que aún no se han registrado en libros contables">
+                      (-) Notas Débito Banco (Cargos no en Libros):
+                    </span>
+                    <span className="font-mono font-bold">
+                      -{formatMoneyExact(concilResult.summary.notasDebitoNoRegistradas)}
+                    </span>
+                  </div>
+                  {concilResult.summary.notasDebitoNoRegistradas > 0 && (
+                    <div className="flex flex-wrap items-center gap-x-2 text-[10px] text-ink-muted mt-0.5 font-normal">
+                      <span>GMF 4×1000: <strong className="text-amber-700 dark:text-amber-300 font-mono">{formatMoneyExact(concilResult.summary.notasDebitoGmf || 0)}</strong></span>
+                      <span>•</span>
+                      <span>Comisiones: <strong className="text-blue-700 dark:text-blue-300 font-mono">{formatMoneyExact(concilResult.summary.notasDebitoComisiones || 0)}</strong></span>
+                      <span>•</span>
+                      <span>Pagos/Otros: <strong className="text-ink font-mono">{formatMoneyExact(concilResult.summary.notasDebitoOperativas || 0)}</strong></span>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex justify-between py-1 border-b border-line/60 text-blue-600 dark:text-blue-400">
-                  <span>(+) Notas Crédito Banco (Rendimientos):</span>
-                  <span className="font-mono font-bold">
-                    +{formatMoneyExact(concilResult.summary.notasCreditoNoRegistradas)}
-                  </span>
+                <div className="py-1 border-b border-line/60 text-blue-600 dark:text-blue-400">
+                  <div className="flex justify-between">
+                    <span title="Abonos e ingresos registrados por el banco pendientes de causar en libros contables">
+                      (+) Notas Crédito Banco (Abonos no en Libros):
+                    </span>
+                    <span className="font-mono font-bold">
+                      +{formatMoneyExact(concilResult.summary.notasCreditoNoRegistradas)}
+                    </span>
+                  </div>
+                  {concilResult.summary.notasCreditoNoRegistradas > 0 && (
+                    <div className="flex flex-wrap items-center gap-x-2 text-[10px] text-ink-muted mt-0.5 font-normal">
+                      <span>Rendimientos: <strong className="text-teal font-mono">{formatMoneyExact(concilResult.summary.notasCreditoRendimientos || 0)}</strong></span>
+                      <span>•</span>
+                      <span>Otros Abonos: <strong className="text-ink font-mono">{formatMoneyExact(concilResult.summary.notasCreditoOperativas || 0)}</strong></span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-between py-1 border-b border-teal/40 bg-teal-soft/20 px-2 rounded font-semibold text-teal-deep dark:text-teal">
@@ -1163,15 +1255,59 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
             ))}
           </div>
 
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-ink-muted" />
-            <input
-              type="text"
-              placeholder="Buscar por detalle, valor..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-line bg-bg-surface pl-8 pr-3 py-1.5 text-xs text-ink focus:outline-teal shadow-2xs"
-            />
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Selector de ordenamiento rápido */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-ink-muted flex items-center gap-1">
+                <ArrowUpDown className="size-3 text-teal" /> Organizar:
+              </span>
+              <select
+                value={sortField}
+                onChange={(e) => {
+                  const val = e.target.value as typeof sortField;
+                  setSortField(val);
+                  setSortDirection(val === "montoBanco" || val === "montoLibros" ? "desc" : "asc");
+                }}
+                className="rounded-lg border border-line bg-bg-surface px-2.5 py-1 text-xs font-semibold text-ink focus:outline-teal shadow-2xs cursor-pointer"
+              >
+                <option value="fecha">Fecha</option>
+                <option value="estado">Estado</option>
+                <option value="montoBanco">Monto Extracto</option>
+                <option value="montoLibros">Monto Libros</option>
+                <option value="descripcion">Descripción</option>
+                <option value="referencia">Referencia</option>
+                <option value="diagnostico">Diagnóstico</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => setSortDirection((d) => (d === "asc" ? "desc" : "asc"))}
+                className="inline-flex items-center gap-1 rounded-lg border border-line bg-bg-surface hover:bg-bg-subtle px-2 py-1 text-xs font-bold text-ink cursor-pointer transition shadow-2xs"
+                title={`Alternar dirección (actual: ${sortDirection === "asc" ? "Ascendente" : "Descendente"})`}
+              >
+                {sortDirection === "asc" ? (
+                  <>
+                    <ArrowUp className="size-3 text-teal font-black" />
+                    <span className="text-[10px] font-extrabold uppercase">Asc</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowDown className="size-3 text-teal font-black" />
+                    <span className="text-[10px] font-extrabold uppercase">Desc</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="relative w-full sm:w-56">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-ink-muted" />
+              <input
+                type="text"
+                placeholder="Buscar por detalle, valor..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-xl border border-line bg-bg-surface pl-8 pr-3 py-1.5 text-xs text-ink focus:outline-teal shadow-2xs"
+              />
+            </div>
           </div>
         </div>
       )}
@@ -1181,27 +1317,146 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
         <div className="rounded-2xl border border-line bg-bg-surface overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs table-auto">
-              <thead className="border-b border-line bg-bg-subtle/80 uppercase tracking-wider text-ink-subtle font-semibold">
+              <thead className="border-b border-line bg-bg-subtle/80 uppercase tracking-wider text-ink-subtle font-semibold select-none">
                 <tr>
-                  <th className="px-3.5 py-3">Estado</th>
-                  <th className="px-3.5 py-3">Fecha</th>
-                  <th className="px-3.5 py-3">Descripción / Concepto</th>
-                  <th className="px-3.5 py-3">Referencia / Doc</th>
-                  <th className="px-3.5 py-3 text-right">Monto Extracto</th>
-                  <th className="px-3.5 py-3 text-right">Monto Libros</th>
-                  <th className="px-3.5 py-3">Diagnóstico Contable</th>
+                  <th
+                    onClick={() => handleToggleSort("estado")}
+                    className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                    title="Ordenar por Estado"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Estado</span>
+                      {sortField === "estado" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="size-3.5 text-teal" />
+                        ) : (
+                          <ArrowDown className="size-3.5 text-teal" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleToggleSort("fecha")}
+                    className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                    title="Ordenar por Fecha"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Fecha</span>
+                      {sortField === "fecha" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="size-3.5 text-teal" />
+                        ) : (
+                          <ArrowDown className="size-3.5 text-teal" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleToggleSort("descripcion")}
+                    className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                    title="Ordenar por Descripción"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Descripción / Concepto</span>
+                      {sortField === "descripcion" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="size-3.5 text-teal" />
+                        ) : (
+                          <ArrowDown className="size-3.5 text-teal" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleToggleSort("referencia")}
+                    className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                    title="Ordenar por Referencia / Documento"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Referencia / Doc</span>
+                      {sortField === "referencia" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="size-3.5 text-teal" />
+                        ) : (
+                          <ArrowDown className="size-3.5 text-teal" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleToggleSort("montoBanco")}
+                    className="px-3.5 py-3 text-right cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                    title="Ordenar por Monto de Extracto"
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      <span>Monto Extracto</span>
+                      {sortField === "montoBanco" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="size-3.5 text-teal" />
+                        ) : (
+                          <ArrowDown className="size-3.5 text-teal" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleToggleSort("montoLibros")}
+                    className="px-3.5 py-3 text-right cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                    title="Ordenar por Monto en Libros"
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      <span>Monto Libros</span>
+                      {sortField === "montoLibros" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="size-3.5 text-teal" />
+                        ) : (
+                          <ArrowDown className="size-3.5 text-teal" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleToggleSort("diagnostico")}
+                    className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                    title="Ordenar por Diagnóstico Contable"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Diagnóstico Contable</span>
+                      {sortField === "diagnostico" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="size-3.5 text-teal" />
+                        ) : (
+                          <ArrowDown className="size-3.5 text-teal" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                      )}
+                    </div>
+                  </th>
                   <th className="px-3.5 py-3 text-center">Auditoría / Rastrear</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line/60">
-                {rowsFiltradas.length === 0 ? (
+                {rowsOrdenadas.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-xs text-ink-muted">
                       No se encontraron partidas con los filtros seleccionados.
                     </td>
                   </tr>
                 ) : (
-                  rowsFiltradas.map((r) => {
+                  rowsOrdenadas.map((r) => {
                     const isExpanded = expandedRowId === r.id;
                     return (
                       <Fragment key={r.id}>

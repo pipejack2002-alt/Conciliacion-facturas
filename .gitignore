@@ -37,3 +37,12 @@ Thumbs.db
 *.pdf
 attachments/
 public/samples/
+
+# Temporary diagnostic scripts
+check_batches.mjs
+dump_cs_p3.mjs
+dump_pdf.mjs
+inspect.mjs
+inspect_accounts.mjs
+inspect_banks.mjs
+test_breakdown.mjs

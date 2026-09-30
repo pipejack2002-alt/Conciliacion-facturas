@@ -547,7 +547,8 @@ interface InteractiveDropCardProps {
   step: string;
   label: string;
   hint: string;
-  _badgeText: string;
+  badgeText?: string;
+  _badgeText?: string;
   file: File | null;
   sheets?: string[];
   selectedSheet?: string;
