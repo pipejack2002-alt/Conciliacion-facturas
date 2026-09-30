@@ -298,7 +298,7 @@ export const BankTable = memo(function BankTable({
                         <td className="px-3.5 py-2.5 font-mono text-ink-muted whitespace-nowrap">
                           {formatDate(r.fecha)}
                         </td>
-                        <td className="px-3.5 py-2.5 font-medium text-ink max-w-[320px] truncate" title={r.descripcion}>
+                        <td className="px-3.5 py-2.5 font-medium text-ink max-w-80 truncate" title={r.descripcion}>
                           {r.esGmf && (
                             <span className="mr-1.5 inline-block text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300">
                               GMF 4x1000
@@ -419,7 +419,7 @@ export const BankTable = memo(function BankTable({
                                             <span className="font-semibold">{c.nombre || "—"}</span>
                                             {c.nit && <span className="text-[10px] text-ink-subtle block font-mono">NIT: {c.nit}</span>}
                                           </td>
-                                          <td className="px-3 py-2 text-ink-muted max-w-[260px] truncate" title={c.descripcion}>
+                                          <td className="px-3 py-2 text-ink-muted max-w-65 truncate" title={c.descripcion}>
                                             {c.descripcion}
                                           </td>
                                           <td className="px-3 py-2 font-mono text-ink-subtle">

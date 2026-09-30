@@ -425,7 +425,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
   return (
     <div className="space-y-6">
       {/* Banner de Conciliación Universal */}
-      <div className="rounded-2xl border border-line bg-gradient-to-r from-bg-surface via-bg-surface to-teal-soft/20 p-5 shadow-xs">
+      <div className="rounded-2xl border border-line bg-linear-to-r from-bg-surface via-bg-surface to-teal-soft/20 p-5 shadow-xs">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -840,8 +840,8 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
               className={cn(
                 "lg:col-span-4 rounded-2xl border-2 p-5 shadow-xs flex flex-col justify-between transition-all",
                 concilResult.summary.cuadrado
-                  ? "border-emerald-500/70 bg-gradient-to-br from-emerald-50/90 via-white to-emerald-50/40 dark:from-emerald-950/60 dark:via-bg-surface dark:to-emerald-950/20 text-ink"
-                  : "border-amber-500/70 bg-gradient-to-br from-amber-50/90 via-white to-amber-50/40 dark:from-amber-950/60 dark:via-bg-surface dark:to-amber-950/20 text-ink"
+                  ? "border-emerald-500/70 bg-linear-to-br from-emerald-50/90 via-white to-emerald-50/40 dark:from-emerald-950/60 dark:via-bg-surface dark:to-emerald-950/20 text-ink"
+                  : "border-amber-500/70 bg-linear-to-br from-amber-50/90 via-white to-amber-50/40 dark:from-amber-950/60 dark:via-bg-surface dark:to-amber-950/20 text-ink"
               )}
             >
               <div>
@@ -1250,7 +1250,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                           <td className="px-3.5 py-2.5 font-mono text-ink-muted whitespace-nowrap">
                             {formatDate(r.fecha)}
                           </td>
-                          <td className="px-3.5 py-2.5 font-medium text-ink max-w-[320px] truncate" title={r.descripcion}>
+                          <td className="px-3.5 py-2.5 font-medium text-ink max-w-80 truncate" title={r.descripcion}>
                             {r.esGmf && (
                               <span className="mr-1.5 inline-block text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300">
                                 GMF 4x1000
@@ -1267,7 +1267,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                           <td className="px-3.5 py-2.5 font-mono font-semibold text-right text-ink whitespace-nowrap">
                             {r.montoLibros > 0 ? formatMoneyExact(r.montoLibros) : "—"}
                           </td>
-                          <td className="px-3.5 py-2.5 text-ink-muted leading-tight max-w-[360px]">
+                          <td className="px-3.5 py-2.5 text-ink-muted leading-tight max-w-90">
                             {r.nota}
                           </td>
                           <td className="px-3.5 py-2.5 text-center whitespace-nowrap">
@@ -1371,7 +1371,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                                               <span className="font-semibold">{c.nombre || "—"}</span>
                                               {c.nit && <span className="text-[10px] text-ink-subtle block font-mono">NIT: {c.nit}</span>}
                                             </td>
-                                            <td className="px-3 py-2 text-ink-muted max-w-[260px] truncate" title={c.descripcion}>
+                                            <td className="px-3 py-2 text-ink-muted max-w-65 truncate" title={c.descripcion}>
                                               {c.descripcion}
                                             </td>
                                             <td className="px-3 py-2 font-mono text-ink-subtle">
