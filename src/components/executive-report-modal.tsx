@@ -1,17 +1,17 @@
 import { useRef } from "react";
-import { X, Printer, Building2, CheckCircle2, AlertTriangle, ShieldCheck, FileCheck, Award, FileText } from "lucide-react";
+import { X, Printer, CheckCircle2, AlertTriangle, ShieldCheck, FileCheck, Award, FileText } from "lucide-react";
 import { formatMoney } from "@/lib/format";
-import type { ConciliacionResult, ConciliacionRow } from "@/lib/types";
+import type { ConciliacionResult } from "@/lib/types";
 
 interface Props {
   open: boolean;
   onClose: () => void;
   result: ConciliacionResult;
-  dianName?: string;
-  movName?: string;
+  _dianName?: string;
+  _movName?: string;
 }
 
-export function ExecutiveReportModal({ open, onClose, result, dianName, movName }: Props) {
+export function ExecutiveReportModal({ open, onClose, result, _dianName, _movName }: Props) {
   const printAreaRef = useRef<HTMLDivElement>(null);
 
   if (!open) return null;

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   ResponsiveContainer,
   PieChart,
@@ -9,7 +9,6 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  Legend,
   AreaChart,
   Area,
   CartesianGrid,
@@ -18,27 +17,21 @@ import {
   TrendingUp,
   PieChart as PieIcon,
   BarChart3,
-  Calendar,
   Building,
   DollarSign,
   Receipt,
-  Download,
-  FileSpreadsheet,
   Award,
-  Sparkles,
   Trash2,
 } from "lucide-react";
-import { formatMoney, formatMoneyExact, formatDate } from "@/lib/format";
-import type { ConciliacionResult, ConciliacionRow } from "@/lib/types";
+import { formatMoney } from "@/lib/format";
+import type { ConciliacionResult } from "@/lib/types";
 import { useConciliacion } from "@/lib/store";
-import { cn } from "@/lib/cn";
 
 const COLORS_PIE = ["#0f766e", "#3b82f6", "#64748b", "#f59e0b", "#8b5cf6"];
 
 export function DashboardBi({ result }: { result: ConciliacionResult }) {
   const reset = useConciliacion((s) => s.reset);
-  const [periodoFiltro, setPeriodoFiltro] = useState<"todos" | "altos">("todos");
-
+  
   // 1. Filtrar filas relevantes de compras recibidas
   const comprasRows = useMemo(() => {
     return result.rows.filter(

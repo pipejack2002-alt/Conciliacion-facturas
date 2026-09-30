@@ -1,14 +1,11 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
   AlertTriangle,
   Building2,
   Check,
-  Copy,
   Download,
   FileCheck,
   FileSpreadsheet,
-  Layers,
-  Percent,
   Printer,
   Search,
   Users,
@@ -22,10 +19,9 @@ import {
   RotateCcw,
   Trash2,
 } from "lucide-react";
-import { BadgeEstado } from "./badge-estado";
 import { DeltaBanner, ReplaceBar } from "./audit-chrome";
-import { reviewOf, useConciliacion, type Review, type TabId, type SortDirection, type SortId } from "@/lib/store";
-import { daysAgo, formatDate, formatMoney, formatMoneyExact } from "@/lib/format";
+import { reviewOf, useConciliacion, type TabId } from "@/lib/store";
+import { daysAgo, formatMoney, formatMoneyExact } from "@/lib/format";
 import { ESTADO_LABEL, inCola } from "@/lib/conciliar";
 import { exportAuditoriaXlsx } from "@/lib/export-excel";
 import { exportSiigoTemplateXlsx } from "@/lib/export-siigo";
@@ -36,8 +32,8 @@ import { TaxSummaryModal } from "./tax-summary-modal";
 import { ExecutiveReportModal } from "./executive-report-modal";
 import { NominaAuditModal } from "./nomina-audit-modal";
 import { ActaConciliacionModal } from "./acta-conciliacion-modal";
-import { getTaxInsight, type TaxInsight } from "@/lib/tax-insights";
-import type { ConciliacionResult, ConciliacionRow, EstadoConciliacion } from "@/lib/types";
+import { getTaxInsight } from "@/lib/tax-insights";
+import type { ConciliacionRow, EstadoConciliacion } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { KpiRow } from "./kpi-row";
 import { ConciliationProgress } from "./conciliation-progress";
@@ -86,7 +82,7 @@ export function ResultBoard() {
   const sortDirection = useConciliacion((s) => s.sortDirection);
   const toggleSort = useConciliacion((s) => s.toggleSort);
   const columnFilters = useConciliacion((s) => s.columnFilters);
-  const setColumnFilter = useConciliacion((s) => s.setColumnFilter);
+  const _setColumnFilter = useConciliacion((s) => s.setColumnFilter);
   const clearColumnFilter = useConciliacion((s) => s.clearColumnFilter);
   const clearAllColumnFilters = useConciliacion((s) => s.clearAllColumnFilters);
   const groupByProveedor = useConciliacion((s) => s.groupByProveedor);

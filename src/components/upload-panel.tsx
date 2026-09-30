@@ -1,12 +1,10 @@
 import { useRef, useState, useEffect } from "react";
 import {
   Building2,
-  FileSpreadsheet,
   Loader2,
   TableProperties,
   Upload,
   Sparkles,
-  ShieldCheck,
   CheckCircle2,
   AlertCircle,
   HelpCircle,
@@ -14,7 +12,6 @@ import {
   ArrowRight,
   RefreshCw,
   Trash2,
-  Layers,
   FileCheck,
   Lock,
   SlidersHorizontal,
@@ -550,7 +547,7 @@ interface InteractiveDropCardProps {
   step: string;
   label: string;
   hint: string;
-  badgeText: string;
+  _badgeText: string;
   file: File | null;
   sheets?: string[];
   selectedSheet?: string;

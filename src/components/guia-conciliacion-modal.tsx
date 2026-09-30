@@ -6,13 +6,8 @@ import {
   Layers,
   Sparkles,
   CheckCircle2,
-  AlertCircle,
-  ExternalLink,
   ShieldCheck,
-  ArrowRight,
-  HelpCircle,
   Building2,
-  FileText,
   Table,
 } from "lucide-react";
 

@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { X, Users, AlertCircle, CheckCircle2, FileSpreadsheet, Printer, DollarSign, Briefcase, Calculator, Building } from "lucide-react";
+import { X, Users, CheckCircle2, FileSpreadsheet, Printer, DollarSign, Briefcase, Calculator, Building } from "lucide-react";
 import * as XLSX from "xlsx";
 import { formatMoney } from "@/lib/format";
 import type { ConciliacionResult, MovLine } from "@/lib/types";
@@ -8,10 +7,10 @@ interface Props {
   open: boolean;
   onClose: () => void;
   result: ConciliacionResult;
-  mov?: MovLine[];
+  _mov?: MovLine[];
 }
 
-export function NominaAuditModal({ open, onClose, result, mov = [] }: Props) {
+export function NominaAuditModal({ open, onClose, result, _mov = [] }: Props) {
   if (!open) return null;
 
   const { company, periodLabel, rows } = result;
@@ -39,7 +38,7 @@ export function NominaAuditModal({ open, onClose, result, mov = [] }: Props) {
     .filter((m) => m.cuenta?.startsWith("5") || m.cuenta?.startsWith("7"))
     .reduce((s, m) => s + (m.debito || 0), 0);
 
-  const totalPasivoNominaLibros = payrollMovs
+  const _totalPasivoNominaLibros = payrollMovs
     .filter((m) => m.cuenta?.startsWith("2"))
     .reduce((s, m) => s + (m.credito || 0), 0);
 
@@ -53,7 +52,7 @@ export function NominaAuditModal({ open, onClose, result, mov = [] }: Props) {
   );
 
   const totalDevengadoDian = nominaDocs.reduce((s, r) => s + r.totalDian, 0);
-  const cantEmpleados = Math.max(1, nominaDocs.length);
+  const _cantEmpleados = Math.max(1, nominaDocs.length);
 
   // Estimated payroll breakdown if pure electronic docs exist or standard baseline estimation
   const baseCalculada = totalDevengadoDian > 0 ? totalDevengadoDian : (totalGastoNominaLibros > 0 ? totalGastoNominaLibros : 28500000);

@@ -1,4 +1,4 @@
-import { X, FileText, CheckCircle2, AlertCircle, Percent, Receipt, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { X, FileText, CheckCircle2, Percent, Receipt, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { formatMoney } from "@/lib/format";
 import type { ConciliacionResult } from "@/lib/types";
 

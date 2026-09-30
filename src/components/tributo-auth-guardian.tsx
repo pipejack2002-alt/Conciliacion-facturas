@@ -13,12 +13,10 @@ import {
 } from "@/lib/tributo-auth";
 import {
   ShieldCheck,
-  ShieldAlert,
   Lock,
   ExternalLink,
   Sparkles,
   KeyRound,
-  CheckCircle2,
   AlertTriangle,
   Loader2,
   FileSpreadsheet,

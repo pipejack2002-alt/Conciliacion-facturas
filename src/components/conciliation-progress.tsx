@@ -1,4 +1,4 @@
-import { CheckCircle2, AlertCircle, Clock, BookOpen, ShieldCheck, Sparkles } from "lucide-react";
+import { AlertCircle, ShieldCheck, Sparkles } from "lucide-react";
 import { formatMoney } from "@/lib/format";
 import type { ConciliacionResult } from "@/lib/types";
 import type { TabId } from "@/lib/store";

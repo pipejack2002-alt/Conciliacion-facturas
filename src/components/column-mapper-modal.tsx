@@ -7,7 +7,6 @@ import {
   Save,
   RotateCcw,
   Sparkles,
-  HelpCircle,
   AlertTriangle,
 } from "lucide-react";
 import type { ColumnKey, ColumnMapping, DetectedProfile, SoftwareProfileId } from "@/lib/types";
