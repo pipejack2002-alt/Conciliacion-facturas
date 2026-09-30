@@ -57,14 +57,14 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
   // Selector de Modo: Homologados (Caja Social, Credicorp, Banistmo) vs Universal (Cualquier Banco)
   const [modoVista, setModoVista] = useState<"homologado" | "universal">("homologado");
 
-  // Control de modo demo vs plantilla en blanco
-  const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
+  // Control de modo demo vs plantilla en blanco (inicia en blanco para no mostrar datos precargados)
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
 
   // Estado de extracto bancario cargado
   const [extractoMeta, setExtractoMeta] = useState<ParsedBankExtractResult | null>(null);
-  const [extractoItems, setExtractoItems] = useState<BankExtractItem[]>(DEMO_EXTRACTO);
+  const [extractoItems, setExtractoItems] = useState<BankExtractItem[]>([]);
   const [selectedSubAccount, setSelectedSubAccount] = useState<string>("default");
-  const [extractoFileName, setExtractoFileName] = useState<string>("Extracto de Demostración");
+  const [extractoFileName, setExtractoFileName] = useState<string>("");
   const [isExtractoLoading, setIsExtractoLoading] = useState<boolean>(false);
 
   // Estado de libros contables (permite usar los de la sesión o cargar un Excel específico de bancos)
@@ -112,12 +112,12 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
   const [cuentaSeleccionada, setCuentaSeleccionada] = useState<string>("todas");
 
   // Saldos iniciales
-  const [saldoInicialExtracto, setSaldoInicialExtracto] = useState<number>(15000000);
-  const [saldoInicialLibros, setSaldoInicialLibros] = useState<number>(15000000);
+  const [saldoInicialExtracto, setSaldoInicialExtracto] = useState<number>(0);
+  const [saldoInicialLibros, setSaldoInicialLibros] = useState<number>(0);
 
   // Manejo formateado con separadores de miles y decimales para el Saldo Inicial
   const [saldoInputStr, setSaldoInputStr] = useState<string>(() =>
-    formatMoneyExact(15000000).replace("$", "").trim()
+    formatMoneyExact(0).replace("$", "").trim()
   );
 
   useEffect(() => {
@@ -505,13 +505,13 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
       </div>
 
       {/* Banner Principal de Conciliación Bancaria */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-line bg-gradient-to-r from-bg-surface via-bg-surface to-teal-soft/25 p-5 shadow-xs">
-        <div>
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 rounded-2xl border border-line bg-gradient-to-r from-bg-surface via-bg-surface to-teal-soft/25 p-4 sm:p-5 shadow-xs">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="rounded-lg bg-teal p-1.5 text-white shadow-xs">
               <Landmark className="size-5" />
             </span>
-            <h1 className="font-display text-xl sm:text-2xl font-bold text-ink">
+            <h1 className="font-display text-lg sm:text-xl font-bold text-ink">
               Módulo de Conciliación Bancaria y Tesorería
             </h1>
             <span className="rounded-full bg-teal-soft px-2.5 py-0.5 text-xs font-bold text-teal">
@@ -523,12 +523,13 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Botones alineados estrictamente uno al lado de otro */}
+        <div className="flex items-center gap-2 shrink-0 flex-nowrap">
           {(extractoItems.length > 0 || effectiveMovLines.length > 0) && (
             <button
               type="button"
               onClick={handleVaciarBancos}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-danger/30 bg-danger-bg px-3.5 py-2 text-xs font-semibold text-danger hover:bg-danger hover:text-white transition cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-danger/30 bg-danger-bg px-3 py-2 text-xs font-semibold text-danger hover:bg-danger hover:text-white transition cursor-pointer shadow-2xs whitespace-nowrap"
               title="Vaciar extracto y movimientos cargados para dejar la plantilla en blanco"
             >
               <Trash2 className="size-3.5" />
@@ -540,7 +541,7 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
             <button
               type="button"
               onClick={handleCargarDemo}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-bg-surface px-3.5 py-2 text-xs font-semibold text-ink hover:border-teal hover:text-teal transition cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-bg-surface px-3 py-2 text-xs font-semibold text-ink hover:border-teal hover:text-teal transition cursor-pointer shadow-2xs whitespace-nowrap"
               title="Cargar datos de ejemplo de extracto y contabilidad para demostración"
             >
               <Sparkles className="size-3.5 text-teal" />
@@ -552,7 +553,7 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
             type="button"
             onClick={exportarConciliacionBancaria}
             disabled={concilResult.rows.length === 0}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-teal px-3.5 py-2 text-xs font-semibold text-white hover:bg-teal-deep transition cursor-pointer shadow-xs disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-teal px-3.5 py-2 text-xs font-semibold text-white hover:bg-teal-deep transition cursor-pointer shadow-xs disabled:opacity-50 whitespace-nowrap"
           >
             <Download className="size-3.5" />
             <span>Exportar Conciliación a Excel</span>
@@ -775,7 +776,9 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
         <div
           className={cn(
             "lg:col-span-4 rounded-2xl border-2 p-5 shadow-xs flex flex-col justify-between transition-all",
-            concilResult.summary.cuadrado
+            extractoItems.length === 0
+              ? "border-line bg-bg-surface text-ink"
+              : concilResult.summary.cuadrado
               ? "border-emerald-500/70 bg-gradient-to-br from-emerald-50/90 via-white to-emerald-50/40 dark:from-emerald-950/60 dark:via-bg-surface dark:to-emerald-950/20 text-ink"
               : "border-amber-500/70 bg-gradient-to-br from-amber-50/90 via-white to-amber-50/40 dark:from-amber-950/60 dark:via-bg-surface dark:to-amber-950/20 text-ink"
           )}
@@ -785,14 +788,20 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
               <span
                 className={cn(
                   "text-[11px] font-black uppercase tracking-wider",
-                  concilResult.summary.cuadrado
+                  extractoItems.length === 0
+                    ? "text-ink-muted"
+                    : concilResult.summary.cuadrado
                     ? "text-emerald-800 dark:text-emerald-400"
                     : "text-amber-800 dark:text-amber-400"
                 )}
               >
                 Resultado de Conciliación
               </span>
-              {concilResult.summary.cuadrado ? (
+              {extractoItems.length === 0 ? (
+                <span className="flex items-center gap-1.5 rounded-full bg-bg-subtle border border-line px-3 py-1 text-xs font-bold text-ink-muted shadow-2xs">
+                  Sin Extracto
+                </span>
+              ) : concilResult.summary.cuadrado ? (
                 <span className="flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-xs font-black text-white shadow-xs">
                   <CheckCircle2 className="size-3.5" />
                   Cuadrado 100%
@@ -809,40 +818,48 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
               <div
                 className={cn(
                   "font-display text-2xl sm:text-3xl font-black tracking-tight",
-                  concilResult.summary.cuadrado
+                  extractoItems.length === 0
+                    ? "text-ink"
+                    : concilResult.summary.cuadrado
                     ? "text-emerald-950 dark:text-emerald-200"
                     : "text-amber-950 dark:text-amber-200"
                 )}
               >
-                {concilResult.summary.cuadrado
+                {extractoItems.length === 0
+                  ? "LISTO PARA CONCILIAR"
+                  : concilResult.summary.cuadrado
                   ? "CUADRADO PERFECTO"
                   : `DIFERENCIA: ${formatMoney(concilResult.summary.diferenciaCuadre)}`}
               </div>
               <p
                 className={cn(
                   "mt-1.5 text-xs font-medium leading-relaxed",
-                  concilResult.summary.cuadrado
+                  extractoItems.length === 0
+                    ? "text-ink-muted"
+                    : concilResult.summary.cuadrado
                     ? "text-emerald-900/90 dark:text-emerald-300"
                     : "text-amber-900/90 dark:text-amber-300"
                 )}
               >
-                {concilResult.summary.cuadrado
+                {extractoItems.length === 0
+                  ? "Carga tu extracto bancario en PDF o Excel arriba para realizar el cruce automático con tus libros auxiliares."
+                  : concilResult.summary.cuadrado
                   ? "El saldo bancario ajustado coincide con el saldo de libros contables al 100% sin partidas huérfanas."
                   : "Existen partidas pendientes por identificar, cheques en tránsito o notas bancarias pendientes de registro."}
               </p>
             </div>
           </div>
 
-          <div className="mt-4 pt-3.5 border-t border-emerald-200/80 dark:border-emerald-800/60 space-y-1.5 text-xs">
+          <div className="mt-4 pt-3.5 border-t border-line space-y-1.5 text-xs">
             <div className="flex items-center justify-between text-ink font-semibold">
               <span>Movimientos Conciliados:</span>
-              <span className="font-mono font-bold text-emerald-900 dark:text-emerald-300 bg-emerald-100/90 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-md">
+              <span className="font-mono font-bold text-ink bg-bg-subtle border border-line px-2 py-0.5 rounded-md">
                 {concilResult.summary.totalConciliados} de {extractoItems.length} en extracto
               </span>
             </div>
             <div className="flex items-center justify-between text-ink font-semibold">
               <span>Registros en Libros Analizados:</span>
-              <span className="font-mono font-bold text-emerald-900 dark:text-emerald-300 bg-emerald-100/90 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-md">
+              <span className="font-mono font-bold text-ink bg-bg-subtle border border-line px-2 py-0.5 rounded-md">
                 {librosEfectivos.length} movimientos
               </span>
             </div>
