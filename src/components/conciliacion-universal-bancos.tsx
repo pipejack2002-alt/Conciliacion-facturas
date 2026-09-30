@@ -1,6 +1,5 @@
 import { useState, useMemo, useRef, useEffect, Fragment } from "react";
 import {
-  Landmark,
   CheckCircle2,
   AlertCircle,
   FileSpreadsheet,
@@ -772,7 +771,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
               <label className="block text-[11px] font-medium text-ink-muted mb-1">Modo de Valores:</label>
               <select
                 value={columnConfig.valorMode}
-                onChange={(e) => handleUpdateColumnMapping({ valorMode: e.target.value as any })}
+                onChange={(e) => handleUpdateColumnMapping({ valorMode: e.target.value as "separate" | "single" })}
                 className="w-full rounded-lg border border-line bg-bg-subtle px-2 py-1.5 text-xs font-semibold text-ink"
               >
                 <option value="separate">Débito y Crédito separados</option>
@@ -961,7 +960,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                 </div>
 
                 <div className="flex justify-between py-1 border-b border-line/60 text-amber-600 dark:text-amber-400">
-                  <span>(-) Notas Débito Banco (4×1000 / Comisiones):</span>
+                  <span>(-) Notas Débito Banco (4x1000 / Comisiones):</span>
                   <span className="font-mono font-bold">
                     -{formatMoneyExact(concilResult.summary.notasDebitoNoRegistradas)}
                   </span>
@@ -994,7 +993,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                     <BadgePercent className="size-4" />
                   </span>
                   <span className="text-xs font-bold text-ink uppercase tracking-wider">
-                    GMF (4×1000)
+                    GMF (4x1000)
                   </span>
                 </div>
                 <span
@@ -1151,7 +1150,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setTabFilter(tab.id as any)}
+                onClick={() => setTabFilter(tab.id as "todas" | "conciliado" | "banco_pend" | "transito")}
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer select-none",
                   tabFilter === tab.id
@@ -1235,7 +1234,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                                 ? r.itemsLibrosLote
                                   ? "Lote ACH"
                                   : r.esGmf
-                                  ? "GMF 4×1000 Conciliado"
+                                  ? "GMF 4x1000 Conciliado"
                                   : r.esRendimiento
                                   ? "Rendimiento Conciliado"
                                   : "Conciliado"
@@ -1254,7 +1253,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                           <td className="px-3.5 py-2.5 font-medium text-ink max-w-[320px] truncate" title={r.descripcion}>
                             {r.esGmf && (
                               <span className="mr-1.5 inline-block text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300">
-                                GMF 4×1000
+                                GMF 4x1000
                               </span>
                             )}
                             {r.descripcion}
@@ -1358,7 +1357,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                                       </thead>
                                       <tbody className="divide-y divide-purple-100 dark:divide-purple-900/30">
                                         {r.itemsLibrosLote.map((c, cIdx) => (
-                                          <tr key={cIdx} className="hover:bg-purple-50/50 dark:hover:bg-purple-950/20 transition">
+                                          <tr key={[c.comprobante, c.fecha, cIdx].filter(Boolean).join("-")} className="hover:bg-purple-50/50 dark:hover:bg-purple-950/20 transition">
                                             <td className="px-3 py-2 font-mono font-bold text-purple-950 dark:text-purple-300">
                                               {c.comprobante || "—"}
                                             </td>

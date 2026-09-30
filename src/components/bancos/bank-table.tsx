@@ -103,16 +103,18 @@ export const BankTable = memo(function BankTable({
       {/* Barra de Filtros de Pestañas y Buscador */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-b border-line pb-3">
         <div className="flex items-center gap-1.5 flex-wrap">
-          {[
-            { id: "todas", label: `Todos (${counts.todas})` },
-            { id: "conciliado", label: `Conciliados (${counts.conciliado})` },
-            { id: "banco_pend", label: `Notas Banco (${counts.banco_pend})` },
-            { id: "transito", label: `En Tránsito (${counts.transito})` },
-          ].map((tab) => (
+          {(
+            [
+              { id: "todas", label: `Todos (${counts.todas})` },
+              { id: "conciliado", label: `Conciliados (${counts.conciliado})` },
+              { id: "banco_pend", label: `Notas Banco (${counts.banco_pend})` },
+              { id: "transito", label: `En Tránsito (${counts.transito})` },
+            ] as const
+          ).map((tab) => (
             <button
               key={tab.id}
               type="button"
-              onClick={() => onSetTabFilter(tab.id as any)}
+              onClick={() => onSetTabFilter(tab.id)}
               className={cn(
                 "rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer select-none",
                 tabFilter === tab.id
@@ -280,7 +282,7 @@ export const BankTable = memo(function BankTable({
                               ? r.itemsLibrosLote
                                 ? `Lote ACH (${r.itemsLibrosLote.length})`
                                 : r.esGmf
-                                ? "GMF 4×1000 Conciliado"
+                                ? "GMF 4x1000 Conciliado"
                                 : r.esRendimiento
                                 ? "Rendimiento Conciliado"
                                 : "Conciliado"
@@ -299,7 +301,7 @@ export const BankTable = memo(function BankTable({
                         <td className="px-3.5 py-2.5 font-medium text-ink max-w-[320px] truncate" title={r.descripcion}>
                           {r.esGmf && (
                             <span className="mr-1.5 inline-block text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300">
-                              GMF 4×1000
+                              GMF 4x1000
                             </span>
                           )}
                           {r.descripcion}
@@ -403,7 +405,7 @@ export const BankTable = memo(function BankTable({
                                     </thead>
                                     <tbody className="divide-y divide-purple-100 dark:divide-purple-900/30">
                                       {r.itemsLibrosLote.map((c, cIdx) => (
-                                        <tr key={cIdx} className="hover:bg-purple-50/50 dark:hover:bg-purple-950/20 transition">
+                                        <tr key={[c.comprobante, c.fecha, cIdx].filter(Boolean).join("-")} className="hover:bg-purple-50/50 dark:hover:bg-purple-950/20 transition">
                                           <td className="px-3 py-2 font-mono font-bold text-purple-950 dark:text-purple-300">
                                             {c.comprobante || "—"}
                                           </td>
