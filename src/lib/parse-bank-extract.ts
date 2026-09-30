@@ -189,22 +189,26 @@ function parseBancoCajaSocial(pages: string[]): ParsedBankExtractResult {
 
         const fecha = normalizeDate(`${monStr} ${dayStr}`, currentYear);
 
-        // Capturar líneas siguientes descriptivas (ej. DEBITO POR LOTE:... o Pago de Seguridad Social)
+        // Capturar líneas siguientes descriptivas (ej. DEBITO POR LOTE:...)
         let fullDesc = descBase;
-        let j = i + 1;
-        while (j < lines.length) {
-          const nextL = lines[j];
-          if (
-            /^[A-Z]{3}\s+\d{1,2}\s+/.test(nextL) ||
-            nextL.startsWith("Pag.") ||
-            nextL.startsWith("Continua") ||
-            nextL.startsWith("BC") ||
-            nextL.startsWith("Fecha Transacción")
-          ) {
-            break;
+        if (/gravamen\s+movs?\s+financieros|gmf\b/i.test(descBase)) {
+          fullDesc = "GRAVAMEN MOVIMIENTOS FINANCIEROS (GMF 4x1000)";
+        } else {
+          let j = i + 1;
+          while (j < lines.length) {
+            const nextL = lines[j];
+            if (
+              /^[A-Z]{3}\s+\d{1,2}\s+/.test(nextL) ||
+              nextL.startsWith("Pag.") ||
+              nextL.startsWith("Continua") ||
+              nextL.startsWith("BC") ||
+              nextL.startsWith("Fecha Transacción")
+            ) {
+              break;
+            }
+            fullDesc += ` ${nextL}`;
+            j++;
           }
-          fullDesc += ` ${nextL}`;
-          j++;
         }
 
         const isDebito = valor < 0; // En extracto Caja Social, negativo es retiro/débito
@@ -242,7 +246,8 @@ function parseBancoCajaSocial(pages: string[]): ParsedBankExtractResult {
 
 /**
  * Extractor especializado para Credicorp Capital
- * Soporta Fondos de Inversión Colectiva (FIC Alta Liquidez) y Cuenta Administradora de Valores
+ * Soporta Fondos de Inversión Colectiva (FIC Alta Liquidez y Vista) y Cuenta Administradora de Valores
+ * Maneja los 2 saldos de inversión y consolida el Portafolio Total.
  */
 function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
   const fullText = pages.join("\n");
@@ -257,6 +262,18 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
 
   const subAccounts: BankSubAccount[] = [];
 
+  // Detección de la tabla resumen de Fondos en Página 4 (o en fullText)
+  // SALDO INICIAL TOTAL INGRESOS TOTAL EGRESOS RENDIMIENTOS RETEFUENTE SALDO FINAL
+  const altaRowMatch = fullText.match(
+    /CREDICORP\s+CAPITAL\s+ALTA\s+LIQUIDEZ\s+\$?([\d.,]+)\s+\$?([\d.,]+)\s+\$?([\d.,]+)\s+\$?([\d.,]+)\s+\$?([\d.,]+)\s+\$?([\d.,]+)/i
+  );
+  const vistaRowMatch = fullText.match(
+    /CREDICORP\s+CAPITAL\s+VISTA\s+\$?([\d.,]+)\s+\$?([\d.,]+)\s+\$?([\d.,]+)\s+\$?([\d.,]+)\s+\$?([\d.,]+)\s+\$?([\d.,]+)/i
+  );
+  const totalRowMatch = fullText.match(
+    /Total\s+\$?([\d.,]+)\s+\$?([\d.,]+)\s+\$?([\d.,]+)\s+\$?([\d.,]+)\s+\$?([\d.,]+)\s+\$?([\d.,]+)/i
+  );
+
   // 1. Cuenta Administradora de Valores
   let adminCta = "";
   const adminItems: BankExtractItem[] = [];
@@ -264,16 +281,41 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
   let adminSaldoFin = 0;
 
   // 2. Fondos de Inversión Colectiva (Alta Liquidez)
-  let ficCta = "";
-  const ficItems: BankExtractItem[] = [];
-  let ficSaldoIni = 0;
-  let ficSaldoFin = 0;
+  let ficAltaCta = "";
+  const ficAltaItems: BankExtractItem[] = [];
+  let ficAltaSaldoIni = altaRowMatch ? cleanMoneyNumber(altaRowMatch[1]) : 0;
+  let ficAltaSaldoFin = altaRowMatch ? cleanMoneyNumber(altaRowMatch[6]) : 0;
+  const ficAltaRend = altaRowMatch ? cleanMoneyNumber(altaRowMatch[4]) : 0;
+  const ficAltaRetefuente = altaRowMatch ? cleanMoneyNumber(altaRowMatch[5]) : 0;
+
+  // 3. Fondos de Inversión Colectiva (Vista)
+  let ficVistaCta = "";
+  const ficVistaItems: BankExtractItem[] = [];
+  let ficVistaSaldoIni = vistaRowMatch ? cleanMoneyNumber(vistaRowMatch[1]) : 0;
+  let ficVistaSaldoFin = vistaRowMatch ? cleanMoneyNumber(vistaRowMatch[6]) : 0;
+  const ficVistaRend = vistaRowMatch ? cleanMoneyNumber(vistaRowMatch[4]) : 0;
+
+  // 4. Totales Portafolio
+  let portafolioSaldoIni = totalRowMatch ? cleanMoneyNumber(totalRowMatch[1]) : ficAltaSaldoIni + ficVistaSaldoIni;
+  let portafolioSaldoFin = totalRowMatch ? cleanMoneyNumber(totalRowMatch[6]) : ficAltaSaldoFin + ficVistaSaldoFin;
+
+  let currentSection: "none" | "admin" | "fic_vista" | "fic_alta" = "none";
 
   for (const page of pages) {
+    if (page.includes("Detalle del portafolio: Cuenta Administradora de Valores")) {
+      currentSection = "admin";
+    } else if (page.includes("CREDICORP CAPITAL VISTA N° DE CUENTA")) {
+      currentSection = "fic_vista";
+    } else if (page.includes("CREDICORP CAPITAL ALTA LIQUIDEZ N° DE CUENTA")) {
+      currentSection = "fic_alta";
+    } else if (page.includes("Información legal")) {
+      currentSection = "none";
+    }
+
     const lines = page.split("\n").map((l) => l.trim()).filter(Boolean);
 
-    // Seccion Cuenta Administradora de Valores (Página que contiene 'Cuenta Administradora de Valores')
-    if (page.includes("Cuenta Administradora de Valores")) {
+    // Sección Cuenta Administradora de Valores
+    if (currentSection === "admin") {
       const ctaM = page.match(/N°\s*DE\s*CUENTA:\s*([\w-]+)/i);
       if (ctaM) adminCta = ctaM[1];
 
@@ -328,8 +370,8 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
               fecha,
               descripcion: desc,
               referencia: ref,
-              debito: egresos, // Egreso = Salida / Débito bancario
-              credito: ingresos, // Ingreso = Entrada / Crédito bancario
+              debito: egresos,
+              credito: ingresos,
               saldo,
             });
           }
@@ -337,25 +379,15 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
       }
     }
 
-    // Seccion Fondos de Inversion Colectiva (Página que contiene 'Fondos de Inversión Colectiva' o 'ALTA LIQUIDEZ' pero NO 'Cuenta Administradora')
-    if (
-      (page.includes("Fondos de Inversión Colectiva") || page.includes("ALTA LIQUIDEZ")) &&
-      !page.includes("Cuenta Administradora de Valores")
-    ) {
+    // Sección FIC Vista (Detalle específico en página 5)
+    if (currentSection === "fic_vista") {
       const ctaM = page.match(/N°\s*DE\s*CUENTA:\s*([\w-]+)/i);
-      if (ctaM) ficCta = ctaM[1];
-
-      const iniM = page.match(/SALDO\s+INICIAL[\s\S]*?Pesos\s+(\$[\d.,]+)/i);
-      if (iniM) ficSaldoIni = cleanMoneyNumber(iniM[1]);
-
-      const finM = page.match(/SALDO\s+FINAL[\s\S]*?Pesos[\s\S]*?(\$[\d.,]+)\s+N\.A\./i);
-      if (finM) ficSaldoFin = cleanMoneyNumber(finM[1]);
+      if (ctaM) ficVistaCta = ctaM[1];
 
       for (let i = 0; i < lines.length; i++) {
         const l = lines[i];
         if (/^\d{2}\/[A-Za-z]{3}\/\d{2}/.test(l)) {
           if (l.includes("SALDO INICIAL") || l.includes("SALDO FINAL")) continue;
-
           let fullL = l;
           let j = i + 1;
           while (
@@ -371,7 +403,58 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
 
           const dollarMatches = [...fullL.matchAll(/\$[\d,.]+/g)];
           if (dollarMatches.length >= 2) {
-            const lastMatches = dollarMatches.slice(-3);
+            const dateEnd = fullL.indexOf(" ");
+            const dateRaw = fullL.slice(0, dateEnd);
+            const descEnd = dollarMatches[0].index;
+            const desc = fullL.slice(dateEnd, descEnd).trim();
+            const ingresos = cleanMoneyNumber(dollarMatches[0][0]);
+            const egresos = dollarMatches.length >= 3 ? cleanMoneyNumber(dollarMatches[1][0]) : 0;
+            const saldo =
+              dollarMatches.length >= 3
+                ? cleanMoneyNumber(dollarMatches[2][0])
+                : cleanMoneyNumber(dollarMatches[1][0]);
+            const fecha = normalizeDate(dateRaw, currentYear);
+
+            ficVistaItems.push({
+              id: `cre_vista_${ficVistaItems.length + 1}`,
+              fecha,
+              descripcion: desc,
+              referencia: ficVistaCta || "VISTA",
+              debito: egresos,
+              credito: ingresos,
+              saldo,
+            });
+          }
+        }
+      }
+    }
+
+    // Sección FIC Alta Liquidez (Detalle específico en páginas 7-9)
+    if (currentSection === "fic_alta") {
+      const ctaM = page.match(/N°\s*DE\s*CUENTA:\s*([\w-]+)/i);
+      if (ctaM) ficAltaCta = ctaM[1];
+
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+        if (/^\d{2}\/[A-Za-z]{3}\/\d{2}/.test(l)) {
+          if (l.includes("SALDO INICIAL") || l.includes("SALDO FINAL")) continue;
+
+          let fullL = l;
+          let j = i + 1;
+          while (
+            j < lines.length &&
+            !/^\d{2}\/[A-Za-z]{3}\/\d{2}/.test(lines[j]) &&
+            !lines[j].startsWith("TIPO") &&
+            !lines[j].startsWith("Página") &&
+            !lines[j].startsWith("MOVIMIENTOS DEL PERIODO")
+          ) {
+            fullL += ` ${lines[j]}`;
+            j++;
+          }
+          i = j - 1;
+
+          const dollarMatches = [...fullL.matchAll(/\$[\d,.]+/g)];
+          if (dollarMatches.length >= 2) {
             const dateEnd = fullL.indexOf(" ");
             const dateRaw = fullL.slice(0, dateEnd);
             const descEnd = dollarMatches[0].index;
@@ -386,11 +469,11 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
 
             const fecha = normalizeDate(dateRaw, currentYear);
 
-            ficItems.push({
-              id: `cre_fic_${ficItems.length + 1}`,
+            ficAltaItems.push({
+              id: `cre_alta_${ficAltaItems.length + 1}`,
               fecha,
               descripcion: desc,
-              referencia: ficCta || "FIC",
+              referencia: ficAltaCta || "FIC ALTA LIQUIDEZ",
               debito: egresos,
               credito: ingresos,
               saldo,
@@ -401,53 +484,100 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
     }
   }
 
-  // Generar además el Portafolio Consolidado (que cruza exactamente con la contabilidad de Fondos/Inversiones 1250)
-  // En el portafolio consolidado, se incluyen todos los movimientos externos (ingresos de clientes, pagos a terceros, GMF, rendimientos)
+  // Si no se capturaron items específicos de vista pero hay rendimientos de vista en la tabla resumen
+  if (ficVistaItems.length === 0 && ficVistaRend > 0) {
+    ficVistaItems.push({
+      id: "cre_vista_rend",
+      fecha: `${currentYear}-08-31`,
+      descripcion: "RENDIMIENTOS FINANCIEROS (CREDICORP CAPITAL VISTA)",
+      referencia: ficVistaCta || "VISTA",
+      debito: 0,
+      credito: ficVistaRend,
+      saldo: ficVistaSaldoFin,
+    });
+  }
+
+  // Generar el Portafolio Consolidado (que cruza exactamente con la contabilidad 1250)
+  // Se excluyen los traslados puente internos entre Administradora y FIC para no duplicar movimientos
   const consolidatedItems: BankExtractItem[] = [];
+
   adminItems.forEach((it) => {
-    if (!it.descripcion.includes("TRASLADO HACIA CREDICORP CAPITAL ALTA LIQUIDEZ")) {
+    if (!/movimiento\s+interno\s+traslado/i.test(it.descripcion)) {
       consolidatedItems.push({ ...it, id: `cons_${it.id}` });
     }
   });
-  ficItems.forEach((it) => {
-    if (!it.descripcion.includes("INCREMENTO POR TRASLADO")) {
+
+  ficAltaItems.forEach((it) => {
+    if (
+      !/traslado\s+a\s+cuenta\s+administradora/i.test(it.descripcion) &&
+      !/incremento\s+por\s+traslado/i.test(it.descripcion)
+    ) {
       consolidatedItems.push({ ...it, id: `cons_${it.id}` });
     }
   });
+
+  // Asegurar que los rendimientos de Vista estén en el portafolio consolidado si no estaban ya
+  if (ficVistaRend > 0 && !consolidatedItems.some((it) => /vista.*rendimiento|rendimiento.*vista/i.test(it.descripcion))) {
+    consolidatedItems.push({
+      id: "cons_rend_vista",
+      fecha: `${currentYear}-08-31`,
+      descripcion: "RENDIMIENTOS FINANCIEROS (CREDICORP CAPITAL VISTA)",
+      referencia: "VISTA",
+      debito: 0,
+      credito: ficVistaRend,
+      saldo: ficVistaSaldoFin,
+    });
+  }
 
   const consDeb = consolidatedItems.reduce((a, b) => a + b.debito, 0);
   const consCred = consolidatedItems.reduce((a, b) => a + b.credito, 0);
-  const consSaldoIni = ficSaldoIni || adminSaldoIni;
-  const consSaldoFin = ficSaldoFin || consSaldoIni + consCred - consDeb;
 
-  const accountDisplay = [ficCta, adminCta].filter(Boolean).join(" / ");
-
+  // 1. Portafolio Consolidado Total (Suma de Alta Liquidez + Vista)
+  const accountDisplay = [ficAltaCta, ficVistaCta, adminCta].filter(Boolean).join(" / ");
   subAccounts.push({
     id: "consolidado",
-    nombre: "Portafolio Consolidado (FONVAL / FICs)",
+    nombre: "Portafolio Consolidado Total (Alta Liquidez + Vista)",
     numeroCuenta: accountDisplay,
-    saldoInicial: consSaldoIni,
-    saldoFinal: consSaldoFin,
+    saldoInicial: portafolioSaldoIni,
+    saldoFinal: portafolioSaldoFin,
     totalDebitos: consDeb,
     totalCreditos: consCred,
     items: consolidatedItems,
   });
 
-  if (ficItems.length > 0 || ficSaldoIni > 0) {
-    const ficDeb = ficItems.reduce((a, b) => a + b.debito, 0);
-    const ficCred = ficItems.reduce((a, b) => a + b.credito, 0);
+  // 2. Subcuenta Credicorp Capital Alta Liquidez
+  if (ficAltaItems.length > 0 || ficAltaSaldoIni > 0) {
+    const altaDeb = ficAltaItems.reduce((a, b) => a + b.debito, 0);
+    const altaCred = ficAltaItems.reduce((a, b) => a + b.credito, 0);
     subAccounts.push({
-      id: "fic",
+      id: "alta_liquidez",
       nombre: "Credicorp Capital Alta Liquidez (FIC)",
-      numeroCuenta: ficCta || "",
-      saldoInicial: ficSaldoIni,
-      saldoFinal: ficSaldoFin || ficSaldoIni + ficCred - ficDeb,
-      totalDebitos: ficDeb,
-      totalCreditos: ficCred,
-      items: ficItems,
+      numeroCuenta: ficAltaCta || "1-1-47311-2",
+      saldoInicial: ficAltaSaldoIni,
+      saldoFinal: ficAltaSaldoFin || ficAltaSaldoIni + altaCred - altaDeb,
+      totalDebitos: altaDeb,
+      totalCreditos: altaCred,
+      items: ficAltaItems,
     });
   }
 
+  // 3. Subcuenta Credicorp Capital Vista
+  if (ficVistaItems.length > 0 || ficVistaSaldoIni > 0) {
+    const vistaDeb = ficVistaItems.reduce((a, b) => a + b.debito, 0);
+    const vistaCred = ficVistaItems.reduce((a, b) => a + b.credito, 0);
+    subAccounts.push({
+      id: "vista",
+      nombre: "Credicorp Capital Vista (FIC)",
+      numeroCuenta: ficVistaCta || "1-1-368-3",
+      saldoInicial: ficVistaSaldoIni,
+      saldoFinal: ficVistaSaldoFin || ficVistaSaldoIni + vistaCred - vistaDeb,
+      totalDebitos: vistaDeb,
+      totalCreditos: vistaCred,
+      items: ficVistaItems,
+    });
+  }
+
+  // 4. Subcuenta Cuenta Administradora de Valores
   if (adminItems.length > 0) {
     const admDeb = adminItems.reduce((a, b) => a + b.debito, 0);
     const admCred = adminItems.reduce((a, b) => a + b.credito, 0);
@@ -468,7 +598,7 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
   return {
     bancoId: "credicorp",
     bancoNombre: "Credicorp Capital Colombia",
-    numeroCuenta: defaultAccount?.numeroCuenta || ficCta || adminCta,
+    numeroCuenta: defaultAccount?.numeroCuenta || ficAltaCta || adminCta,
     periodo,
     saldoInicial: defaultAccount?.saldoInicial || 0,
     saldoFinal: defaultAccount?.saldoFinal || 0,

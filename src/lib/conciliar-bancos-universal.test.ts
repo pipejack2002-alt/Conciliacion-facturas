@@ -6,6 +6,7 @@ import {
   cleanMoneyNumber,
   normalizeUniversalDate,
 } from "./conciliar-bancos-universal.ts";
+import { getAvailableBankAccounts, extractLibroBancos } from "./conciliar-bancos.ts";
 
 describe("Conciliador Universal de Bancos (Cualquier Banco)", () => {
   it("debe limpiar correctamente montos con formato latino y anglosajón", () => {
@@ -60,5 +61,53 @@ describe("Conciliador Universal de Bancos (Cualquier Banco)", () => {
     assert.strictEqual(items.length, 2);
     assert.strictEqual(items[0].credito, 5000000);
     assert.strictEqual(items[1].debito, 400000);
+  });
+
+  it("debe detectar cuentas de cualquier software contable (PUC 11, FICs 1250, NIIF/IFRS 10)", () => {
+    const movLines = [
+      {
+        cuenta: "101001",
+        cuentaNombre: "EFECTIVO EN BANCOS NACIONALES NIIF",
+        comprobante: "EG-100",
+        fecha: "2026-08-01",
+        debito: 0,
+        credito: 500000,
+      },
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL (CREDICORP)",
+        comprobante: "G-9648",
+        fecha: "2026-08-02",
+        debito: 0,
+        credito: 165000000,
+      },
+      {
+        cuenta: "11100512",
+        cuentaNombre: "BANCO CAJA SOCIAL CTA 333",
+        comprobante: "CE-50",
+        fecha: "2026-08-03",
+        debito: 1000000,
+        credito: 0,
+      },
+      {
+        cuenta: "CUSTOM_BANK_01",
+        cuentaNombre: "CUENTA CORRIENTE ESPECIAL",
+        comprobante: "OP-1",
+        fecha: "2026-08-04",
+        debito: 250000,
+        credito: 0,
+      },
+    ];
+
+    const accounts = getAvailableBankAccounts(movLines);
+    assert.strictEqual(accounts.length, 4);
+    assert.ok(accounts.some((a) => a.cuenta === "101001"));
+    assert.ok(accounts.some((a) => a.cuenta === "12503511"));
+    assert.ok(accounts.some((a) => a.cuenta === "11100512"));
+    assert.ok(accounts.some((a) => a.cuenta === "CUSTOM_BANK_01"));
+
+    const filtered = extractLibroBancos(movLines, "12503511");
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].credito, 165000000);
   });
 });

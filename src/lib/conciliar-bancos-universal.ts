@@ -1,6 +1,7 @@
 import { getDocumentProxy, extractText } from "unpdf";
 import * as XLSX from "xlsx";
 import type { BankExtractItem } from "./conciliar-bancos.ts";
+import { parsePdfBankExtract, type BankSubAccount } from "./parse-bank-extract.ts";
 import type { MovLine } from "./types.ts";
 
 export interface UniversalColumnMapping {
@@ -19,11 +20,14 @@ export interface UniversalExtractPreview {
   fileName: string;
   fileType: "pdf" | "excel" | "csv";
   bancoDetectado: string;
+  bancoId?: string;
+  numeroCuenta?: string;
   totalFilas: number;
   headers: string[];
   rawRowsSample: string[][];
   config: UniversalColumnMapping;
   items: BankExtractItem[];
+  cuentasDisponibles?: BankSubAccount[];
   saldoInicial?: number;
   saldoFinal?: number;
   totalDebitos: number;
@@ -442,6 +446,47 @@ export async function processUniversalExtractFile(file: File): Promise<Universal
   const buffer = await file.arrayBuffer();
 
   if (isPdf) {
+    try {
+      const specialized = await parsePdfBankExtract(buffer);
+      if (specialized && specialized.items.length > 0) {
+        return {
+          fileName: file.name,
+          fileType: "pdf",
+          bancoDetectado: specialized.bancoNombre,
+          bancoId: specialized.bancoId,
+          numeroCuenta: specialized.numeroCuenta,
+          totalFilas: specialized.items.length,
+          headers: ["Fecha", "Descripción / Detalle", "Referencia", "Débito / Retiro", "Crédito / Abono", "Saldo"],
+          rawRowsSample: specialized.items.slice(0, 5).map((it) => [
+            it.fecha,
+            it.descripcion,
+            it.referencia || "",
+            String(it.debito),
+            String(it.credito),
+            String(it.saldo || ""),
+          ]),
+          config: {
+            headerRow: 0,
+            fechaCol: 0,
+            descripcionCol: 1,
+            referenciaCol: 2,
+            valorMode: "separate",
+            debitoCol: 3,
+            creditoCol: 4,
+            saldoCol: 5,
+          },
+          items: specialized.items,
+          cuentasDisponibles: specialized.cuentasDisponibles,
+          saldoInicial: specialized.saldoInicial,
+          saldoFinal: specialized.saldoFinal,
+          totalDebitos: specialized.totalDebitos,
+          totalCreditos: specialized.totalCreditos,
+        };
+      }
+    } catch (e) {
+      console.warn("Fallo en parsePdfBankExtract especializado, usando fallback universal:", e);
+    }
+
     return parseUniversalPdfBankExtract(buffer);
   }
 

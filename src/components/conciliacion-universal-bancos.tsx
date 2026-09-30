@@ -43,9 +43,23 @@ import type { MovLine } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import * as XLSX from "xlsx";
 
+const SOFTWARE_NAMES: Record<string, string> = {
+  siigo_pyme: "Siigo Pyme (Desktop)",
+  siigo_nube: "Siigo Nube",
+  world_office: "World Office",
+  helisa: "Helisa (GW/NI)",
+  alegra: "Alegra",
+  sap_b1: "SAP Business One",
+  novasoft: "Novasoft",
+  monad: "Monad",
+  custom: "Universal / Personalizado",
+  auto: "Auto-Detección Inteligente",
+};
+
 export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLine[] }) {
   // Estado del archivo de extracto
   const [extractPreview, setExtractPreview] = useState<UniversalExtractPreview | null>(null);
+  const [selectedSubAccount, setSelectedSubAccount] = useState<string>("consolidado");
   const [customExtractItems, setCustomExtractItems] = useState<BankExtractItem[] | null>(null);
   const [extractFileName, setExtractFileName] = useState<string>("");
   const [isExtractLoading, setIsExtractLoading] = useState<boolean>(false);
@@ -109,6 +123,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
   function handleVaciarUniversal() {
     setExtractPreview(null);
     setCustomExtractItems(null);
+    setSelectedSubAccount("consolidado");
     setExtractFileName("");
     setColumnConfig(null);
     setCustomMovLines([]);
@@ -128,12 +143,76 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
   const fileInputExtractRef = useRef<HTMLInputElement>(null);
   const fileInputMovRef = useRef<HTMLInputElement>(null);
 
-  // Items de extracto activos
+  // Items de extracto activos según subcuenta seleccionada (si aplica)
   const effectiveExtractItems = useMemo<BankExtractItem[]>(() => {
     if (customExtractItems && customExtractItems.length > 0) return customExtractItems;
-    if (extractPreview && extractPreview.items.length > 0) return extractPreview.items;
+    if (extractPreview) {
+      if (extractPreview.cuentasDisponibles && extractPreview.cuentasDisponibles.length > 0) {
+        const sub =
+          extractPreview.cuentasDisponibles.find((c) => c.id === selectedSubAccount) ||
+          extractPreview.cuentasDisponibles[0];
+        return sub.items;
+      }
+      if (extractPreview.items && extractPreview.items.length > 0) return extractPreview.items;
+    }
     return [];
-  }, [customExtractItems, extractPreview]);
+  }, [customExtractItems, extractPreview, selectedSubAccount]);
+
+  // Auto-selección inteligente de cuenta contable según la entidad bancaria detectada
+  useEffect(() => {
+    if (!extractPreview || availableAccounts.length === 0) return;
+
+    const bName = (extractPreview.bancoDetectado || "").toLowerCase();
+    const bId = extractPreview.bancoId || "";
+
+    if (bId === "credicorp" || bName.includes("credicorp") || bName.includes("correval") || bName.includes("fonval")) {
+      const matchCred = availableAccounts.find(
+        (a) => a.cuenta.startsWith("12503511") || /credicorp|correval|fonval|fic/i.test(a.cuentaNombre)
+      );
+      if (matchCred) {
+        setCuentaSeleccionada(matchCred.cuenta);
+        return;
+      }
+    }
+
+    if (bId === "banco_caja_social" || bName.includes("caja social") || bName.includes("bcsc") || bName.includes("colmena")) {
+      const matchBcsc = availableAccounts.find(
+        (a) => a.cuenta.startsWith("11100512") || /bcsc|colmena|caja\s*social/i.test(a.cuentaNombre)
+      );
+      if (matchBcsc) {
+        setCuentaSeleccionada(matchBcsc.cuenta);
+        return;
+      }
+    }
+
+    if (bId === "bancolombia" || bName.includes("bancolombia")) {
+      const matchBan = availableAccounts.find((a) => /bancolombia/i.test(a.cuentaNombre));
+      if (matchBan) {
+        setCuentaSeleccionada(matchBan.cuenta);
+        return;
+      }
+    }
+
+    if (bId === "davivienda" || bName.includes("davivienda")) {
+      const matchDav = availableAccounts.find((a) => /davivienda/i.test(a.cuentaNombre));
+      if (matchDav) {
+        setCuentaSeleccionada(matchDav.cuenta);
+        return;
+      }
+    }
+
+    if (bId === "banistmo" || bName.includes("banistmo")) {
+      const matchBan = availableAccounts.find((a) => /banistmo/i.test(a.cuentaNombre));
+      if (matchBan) {
+        setCuentaSeleccionada(matchBan.cuenta);
+        return;
+      }
+    }
+
+    if (cuentaSeleccionada === "todas" && availableAccounts.length === 1) {
+      setCuentaSeleccionada(availableAccounts[0].cuenta);
+    }
+  }, [extractPreview, availableAccounts, cuentaSeleccionada]);
 
   // Movimientos de libros filtrados
   const librosBancos = useMemo(() => {
@@ -193,7 +272,14 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
       setColumnConfig(preview.config);
       setCustomExtractItems(null);
 
-      if (preview.saldoInicial) {
+      if (preview.cuentasDisponibles && preview.cuentasDisponibles.length > 0) {
+        const defaultSub = preview.cuentasDisponibles[0];
+        setSelectedSubAccount(defaultSub.id);
+        if (defaultSub.saldoInicial !== undefined) {
+          setSaldoInicialExtracto(defaultSub.saldoInicial);
+          setSaldoInicialLibros(defaultSub.saldoInicial);
+        }
+      } else if (preview.saldoInicial) {
         setSaldoInicialExtracto(preview.saldoInicial);
         setSaldoInicialLibros(preview.saldoInicial);
       }
@@ -439,6 +525,43 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                     <span>{showColumnMapper ? "Ocultar Mapeador de Columnas" : "Ajustar Mapeo de Columnas"}</span>
                   </button>
                 )}
+
+                {/* Selector de Subcuentas / Portafolios cuando el extracto maneja múltiples saldos */}
+                {extractPreview.cuentasDisponibles && extractPreview.cuentasDisponibles.length > 0 && (
+                  <div className="mt-2.5 pt-2.5 border-t border-line/60">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[11px] font-bold text-ink flex items-center gap-1.5">
+                        <Layers className="size-3.5 text-teal" />
+                        Subcuenta / Portafolio a Conciliar:
+                      </span>
+                      <span className="text-[10px] text-teal font-semibold">
+                        {extractPreview.cuentasDisponibles.length} portafolios detectados
+                      </span>
+                    </div>
+                    <select
+                      value={selectedSubAccount}
+                      onChange={(e) => {
+                        const newSubId = e.target.value;
+                        setSelectedSubAccount(newSubId);
+                        const chosen = extractPreview.cuentasDisponibles?.find((c) => c.id === newSubId);
+                        if (chosen && chosen.saldoInicial !== undefined) {
+                          setSaldoInicialExtracto(chosen.saldoInicial);
+                          setSaldoInicialLibros(chosen.saldoInicial);
+                        }
+                      }}
+                      className="w-full rounded-lg border border-teal/40 bg-teal-soft/10 px-2.5 py-1.5 text-xs font-bold text-ink focus:outline-teal"
+                    >
+                      {extractPreview.cuentasDisponibles.map((sub) => (
+                        <option key={sub.id} value={sub.id}>
+                          {sub.nombre} ({sub.items.length} movs · Saldo Fin: {formatMoney(sub.saldoFinal)})
+                        </option>
+                      ))}
+                    </select>
+                    <div className="mt-1 text-[10px] text-ink-muted">
+                      * El extracto maneja múltiples saldos y la suma total consolidada para cuadrar con cualquier cuenta.
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -501,6 +624,18 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                 </span>
               )}
             </div>
+
+            {effectiveMovLines.length > 0 && (
+              <div className="flex items-center justify-between gap-1.5 mb-2.5">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-soft/60 px-2.5 py-0.5 text-[11px] font-bold text-teal">
+                  <Sparkles className="size-3" />
+                  Software: {SOFTWARE_NAMES[effectiveMovLines[0]?.origenSoftware || "auto"] || "Auto-Detección Universal"}
+                </span>
+                <span className="text-[10px] text-ink-muted">
+                  {availableAccounts.length} cuentas de tesorería
+                </span>
+              </div>
+            )}
 
             <p className="text-xs text-ink-muted mb-3">
               {movLines && movLines.length > 0 && !customMovLines
@@ -1082,7 +1217,9 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                               className={cn(
                                 "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border",
                                 r.estado === "conciliado"
-                                  ? "bg-emerald-100 text-emerald-950 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                  ? r.esGmf
+                                    ? "bg-amber-100 text-amber-950 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 font-extrabold"
+                                    : "bg-emerald-100 text-emerald-950 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300"
                                   : r.esGmf
                                   ? "bg-amber-100 text-amber-950 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 font-extrabold"
                                   : r.esComision
@@ -1097,6 +1234,10 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                               {r.estado === "conciliado"
                                 ? r.itemsLibrosLote
                                   ? "Lote ACH"
+                                  : r.esGmf
+                                  ? "GMF 4×1000 Conciliado"
+                                  : r.esRendimiento
+                                  ? "Rendimiento Conciliado"
                                   : "Conciliado"
                                 : r.esGmf
                                 ? "GMF 4x1000"
@@ -1111,6 +1252,11 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                             {formatDate(r.fecha)}
                           </td>
                           <td className="px-3.5 py-2.5 font-medium text-ink max-w-[320px] truncate" title={r.descripcion}>
+                            {r.esGmf && (
+                              <span className="mr-1.5 inline-block text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300">
+                                GMF 4×1000
+                              </span>
+                            )}
                             {r.descripcion}
                           </td>
                           <td className="px-3.5 py-2.5 font-mono text-ink-subtle whitespace-nowrap">

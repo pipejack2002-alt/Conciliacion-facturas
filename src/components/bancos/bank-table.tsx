@@ -244,6 +244,8 @@ export const BankTable = memo(function BankTable({
                               r.estado === "conciliado"
                                 ? r.itemsLibrosLote
                                   ? "bg-purple-100 text-purple-950 border-purple-300 dark:bg-purple-950/80 dark:text-purple-200 dark:border-purple-700"
+                                  : r.esGmf
+                                  ? "bg-amber-100 text-amber-950 border-amber-300 dark:bg-amber-950/80 dark:text-amber-200 dark:border-amber-700"
                                   : "bg-emerald-100 text-emerald-950 border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-200 dark:border-emerald-700"
                                 : r.esGmf
                                 ? "bg-amber-100 text-amber-950 border-amber-300 dark:bg-amber-950/80 dark:text-amber-200 dark:border-amber-700 font-extrabold"
@@ -262,6 +264,8 @@ export const BankTable = memo(function BankTable({
                                 r.estado === "conciliado"
                                   ? r.itemsLibrosLote
                                     ? "bg-purple-600 dark:bg-purple-400"
+                                    : r.esGmf
+                                    ? "bg-amber-600 dark:bg-amber-400"
                                     : "bg-emerald-600 dark:bg-emerald-400"
                                   : r.esGmf
                                   ? "bg-amber-600 dark:bg-amber-400"
@@ -275,6 +279,10 @@ export const BankTable = memo(function BankTable({
                             {r.estado === "conciliado"
                               ? r.itemsLibrosLote
                                 ? `Lote ACH (${r.itemsLibrosLote.length})`
+                                : r.esGmf
+                                ? "GMF 4×1000 Conciliado"
+                                : r.esRendimiento
+                                ? "Rendimiento Conciliado"
                                 : "Conciliado"
                               : r.esGmf
                               ? "GMF 4x1000"
@@ -289,6 +297,11 @@ export const BankTable = memo(function BankTable({
                           {formatDate(r.fecha)}
                         </td>
                         <td className="px-3.5 py-2.5 font-medium text-ink max-w-[320px] truncate" title={r.descripcion}>
+                          {r.esGmf && (
+                            <span className="mr-1.5 inline-block text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300">
+                              GMF 4×1000
+                            </span>
+                          )}
                           {r.descripcion}
                         </td>
                         <td className="px-3.5 py-2.5 font-mono text-ink-subtle whitespace-nowrap">

@@ -368,6 +368,9 @@ export function parseRowsToMov(
     // Si no tiene cuenta y no tiene valores contables, es una fila vacía o de adorno
     if (!cuenta && debito === 0 && credito === 0) continue;
 
+    // Omitir filas de totales o resúmenes de cuenta del software (sin comprobante ni fecha)
+    if (!comprobante && !fecha) continue;
+
     // Omitir filas de saldos iniciales (sin débito ni crédito y sin comprobante real o fecha válida)
     if (debito === 0 && credito === 0 && (!comprobante || /^0\s+000/.test(comprobante) || !fecha)) {
       continue;
