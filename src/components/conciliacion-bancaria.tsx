@@ -17,6 +17,7 @@ import { ConciliacionUniversalBancosView } from "./conciliacion-universal-bancos
 import { BankHeaderBanner } from "./bancos/bank-header-banner";
 import { BankUploadCards } from "./bancos/bank-upload-cards";
 import { BankSummaryCards } from "./bancos/bank-summary-cards";
+import { BankPendingMovements } from "./bancos/bank-pending-movements";
 import { BankExecutiveCards } from "./bancos/bank-executive-cards";
 import { BankTable } from "./bancos/bank-table";
 
@@ -470,7 +471,15 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
         onSaldoBlur={handleSaldoBlur}
       />
 
-      {/* 4. Franja Ejecutiva de Conceptos Bancarios */}
+      {/* 4. Movimientos Pendientes de Registro Contable (Partidas Conciliatorias) */}
+      <BankPendingMovements
+        rows={concilResult.rows}
+        summary={concilResult.summary}
+        cuentaContable={cuentaSeleccionada}
+        bancoNombre={extractoMeta?.bancoNombre}
+      />
+
+      {/* 5. Franja Ejecutiva de Conceptos Bancarios */}
       <BankExecutiveCards breakdown={executiveBreakdown} />
 
       {/* 5. Tabla Detallada con Pestañas, Búsqueda Debounced y Paginación */}

@@ -295,6 +295,33 @@ export function conciliarBancos(
   // Filtrar posibles filas de totales o resúmenes de software contable (sin comprobante ni fecha)
   const cleanLibros = libros.filter((l) => Boolean((l.comprobante || "").trim() || (l.fecha || "").trim()));
 
+  if (extracto.length === 0 && cleanLibros.length === 0) {
+    return {
+      rows: [],
+      summary: {
+        saldoExtracto: 0,
+        saldoLibros: 0,
+        consignacionesEnTransito: 0,
+        chequesEnTransito: 0,
+        notasDebitoNoRegistradas: 0,
+        notasCreditoNoRegistradas: 0,
+        notasDebitoGmf: 0,
+        notasDebitoComisiones: 0,
+        notasDebitoOperativas: 0,
+        notasCreditoRendimientos: 0,
+        notasCreditoOperativas: 0,
+        saldoConciliado: 0,
+        diferenciaCuadre: 0,
+        cuadrado: false,
+        soloRendimientos: false,
+        totalItemsBanco: 0,
+        totalItemsLibros: 0,
+        totalConciliados: 0,
+      },
+      cuentasBancosDetectadas: [],
+    };
+  }
+
   // Detección de cuentas bancarias
   const cuentasSet = new Set<string>();
   for (const l of cleanLibros) {
@@ -798,7 +825,9 @@ export function conciliarBancos(
     .filter((_, idx) => idx !== prevRendLineIndex)
     .reduce((a, b) => a + b.debito, 0);
   const totalCreditosLibros = cleanLibros.reduce((a, b) => a + b.credito, 0);
-  const saldoFinalLibros = (saldoInicialLibros || saldoInicialExtracto) + totalDebitosLibros - totalCreditosLibros;
+  const saldoFinalLibros = cleanLibros.length > 0
+    ? (saldoInicialLibros || saldoInicialExtracto) + totalDebitosLibros - totalCreditosLibros
+    : 0;
 
   // Conciliación de Libros a Extracto Bancario (Norma Técnica DIAN / NIIF):
   // Saldo según Libros Contables
@@ -815,7 +844,7 @@ export function conciliarBancos(
     consignacionesEnTransito;
 
   const diferenciaCuadre = Math.abs(saldoConciliado - saldoFinalExtracto);
-  const cuadrado = diferenciaCuadre < 1;
+  const cuadrado = cleanLibros.length > 0 && extracto.length > 0 && diferenciaCuadre < 1;
   const diferenciaExtractoLibros = Math.abs(saldoFinalExtracto - saldoFinalLibros);
   const soloRendimientos =
     cuadrado &&
