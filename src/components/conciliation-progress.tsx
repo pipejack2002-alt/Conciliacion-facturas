@@ -27,7 +27,7 @@ export function ConciliationProgress({ result, currentTab, onSelectTab }: Props)
   const efectividadCompras = Math.round(totals.pctRecibidos * 100);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-gradient-to-b from-bg-surface to-bg-subtle/40 p-4 shadow-sm sm:p-5 transition-all">
+    <div className="overflow-hidden rounded-xl border border-line bg-linear-to-b from-bg-surface to-bg-subtle/40 p-4 shadow-sm sm:p-5 transition-all">
       {/* Top Header con Badge Corporativo */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3">
         <div className="flex items-center gap-2.5">

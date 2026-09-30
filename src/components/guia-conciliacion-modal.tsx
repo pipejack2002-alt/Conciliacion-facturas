@@ -25,7 +25,7 @@ export function GuiaConciliacionModal({ open, onClose }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="relative max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-line bg-bg-surface shadow-2xl flex flex-col">
         {/* Header del Modal */}
-        <div className="flex items-center justify-between border-b border-line px-6 py-4 bg-gradient-to-r from-bg-surface to-bg-subtle/50">
+        <div className="flex items-center justify-between border-b border-line px-6 py-4 bg-linear-to-r from-bg-surface to-bg-subtle/50">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-xl bg-teal text-white shadow-md shadow-teal/30">
               <BookOpen className="size-5" />

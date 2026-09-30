@@ -228,7 +228,7 @@ export function ExecutiveReportModal({ open, onClose, result, _dianName, _movNam
                   {topProveedores.map((p) => (
                     <tr key={p.nit}>
                       <td className="py-2 px-3 font-mono font-medium text-slate-900">{p.nit}</td>
-                      <td className="py-2 px-3 font-medium text-slate-900 truncate max-w-[200px]">{p.nombre}</td>
+                      <td className="py-2 px-3 font-medium text-slate-900 truncate max-w-50">{p.nombre}</td>
                       <td className="py-2 px-3 text-center font-mono">{p.count}</td>
                       <td className="py-2 px-3 text-right font-mono font-bold">{formatMoney(p.totalDian)}</td>
                       <td className="py-2 px-3 text-center">
@@ -278,7 +278,7 @@ export function ExecutiveReportModal({ open, onClose, result, _dianName, _movNam
                       <tr key={r.id}>
                         <td className="py-2 px-3 text-slate-500">{r.fecha}</td>
                         <td className="py-2 px-3 font-bold font-mono text-slate-900">{r.numero}</td>
-                        <td className="py-2 px-3 truncate max-w-[200px]" title={r.nombreContraparte}>{r.nombreContraparte}</td>
+                        <td className="py-2 px-3 truncate max-w-50" title={r.nombreContraparte}>{r.nombreContraparte}</td>
                         <td className="py-2 px-3 font-mono font-semibold text-teal">
                           {r.comprobantes.length ? r.comprobantes.slice(0, 2).join(", ") : r.matchVia || "Causado"}
                         </td>

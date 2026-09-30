@@ -315,7 +315,7 @@ export const BankTable = memo(function BankTable({
                         <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap">
                           {r.montoLibros > 0 ? formatMoneyExact(r.montoLibros) : "—"}
                         </td>
-                        <td className="px-3.5 py-2.5 text-ink-muted leading-tight max-w-[320px]">
+                        <td className="px-3.5 py-2.5 text-ink-muted leading-tight max-w-80">
                           {r.nota}
                         </td>
                         <td className="px-3.5 py-2.5 text-center whitespace-nowrap">

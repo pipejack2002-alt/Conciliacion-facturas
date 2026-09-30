@@ -854,7 +854,7 @@ export function DocTable({
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <div className="max-w-[200px] sm:max-w-[260px] truncate font-semibold text-ink text-xs select-text" title={r.nombreContraparte}>
+                      <div className="max-w-50 sm:max-w-65 truncate font-semibold text-ink text-xs select-text" title={r.nombreContraparte}>
                         <HighlightedText text={r.nombreContraparte || "—"} query={query} />
                       </div>
                       {r.nombreContraparte && (
@@ -883,14 +883,14 @@ export function DocTable({
                       )}
                     </div>
                     {r.linked.length ? (
-                      <div className="mt-0.5 text-[11px] text-info font-medium truncate max-w-[260px]" title={r.linked.map((l) => l.numero).join(", ")}>
+                      <div className="mt-0.5 text-[11px] text-info font-medium truncate max-w-65" title={r.linked.map((l) => l.numero).join(", ")}>
                         {r.estado === "solo_siigo" ? "DIAN: " : "Cruza con: "}
                         {r.linked.map((l) => l.numero).join(", ")}
                       </div>
                     ) : null}
                     {r.alerta ? (
                       <div
-                        className="mt-0.5 line-clamp-2 text-[11px] text-amber-800 font-medium leading-snug select-text max-w-[300px]"
+                        className="mt-0.5 line-clamp-2 text-[11px] text-amber-800 font-medium leading-snug select-text max-w-75"
                         title={r.alerta}
                       >
                         {r.alerta}

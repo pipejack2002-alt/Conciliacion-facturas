@@ -18,6 +18,7 @@
   },
   "[javascriptreact]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
-  }
+  },
+  "problems.decorations.enabled": false,
+  "explorer.decorations.badges": false
 }
-

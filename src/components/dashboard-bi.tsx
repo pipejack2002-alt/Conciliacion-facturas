@@ -161,7 +161,7 @@ export function DashboardBi({ result }: { result: ConciliacionResult }) {
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 py-2 sm:px-6 lg:px-8 animate-in fade-in duration-200">
       {/* Banner Superior Ejecutivo */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-line bg-gradient-to-r from-bg-surface via-bg-surface to-teal-soft/20 p-5 shadow-xs">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-line bg-linear-to-r from-bg-surface via-bg-surface to-teal-soft/20 p-5 shadow-xs">
         <div>
           <div className="flex items-center gap-2">
             <span className="rounded-lg bg-teal p-1.5 text-white shadow-xs">

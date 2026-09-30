@@ -191,7 +191,7 @@ export function UploadPanel() {
   return (
     <div className="mx-auto max-w-4xl px-3 sm:px-4 pb-8 pt-1 sm:pt-2 relative">
       {/* Glow de Fondo */}
-      <div className="pointer-events-none absolute -top-16 left-1/2 -translate-x-1/2 w-[600px] h-[220px] bg-gradient-to-b from-teal-500/10 via-emerald-500/5 to-transparent blur-3xl -z-10" />
+      <div className="pointer-events-none absolute -top-16 left-1/2 -translate-x-1/2 w-[600px] h-[220px] bg-linear-to-b from-teal-500/10 via-emerald-500/5 to-transparent blur-3xl -z-10" />
 
       {/* Hero Header Corporativo */}
       <div className="text-center max-w-2xl mx-auto mb-4 sm:mb-6 space-y-2 sm:space-y-2.5">
@@ -206,7 +206,7 @@ export function UploadPanel() {
 
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-ink leading-tight">
           Conciliador de Facturas DIAN{" "}
-          <span className="bg-gradient-to-r from-teal-700 via-teal-600 to-emerald-600 dark:from-teal-400 dark:to-emerald-400 bg-clip-text text-transparent">
+          <span className="bg-linear-to-r from-teal-700 via-teal-600 to-emerald-600 dark:from-teal-400 dark:to-emerald-400 bg-clip-text text-transparent">
             vs. Libros Contables
           </span>
         </h1>
@@ -431,7 +431,7 @@ export function UploadPanel() {
           className={cn(
             "flex-1 inline-flex h-11 sm:h-12 items-center justify-center gap-2 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-black text-white shadow-lg transition-all cursor-pointer select-none",
             isReadyToReconcile
-              ? "bg-gradient-to-r from-teal-700 via-teal-600 to-emerald-600 hover:from-teal-800 hover:to-emerald-700 shadow-teal-700/25 hover:shadow-teal-700/35 hover:-translate-y-0.5 active:translate-y-0"
+              ? "bg-linear-to-r from-teal-700 via-teal-600 to-emerald-600 hover:from-teal-800 hover:to-emerald-700 shadow-teal-700/25 hover:shadow-teal-700/35 hover:-translate-y-0.5 active:translate-y-0"
               : "bg-bg-subtle text-ink-subtle border border-line cursor-not-allowed shadow-none opacity-60"
           )}
         >

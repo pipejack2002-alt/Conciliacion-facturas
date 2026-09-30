@@ -60,7 +60,7 @@ export const BankHeaderBanner = memo(function BankHeaderBanner({
       </div>
 
       {/* Banner Principal de Conciliación Bancaria */}
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 rounded-2xl border border-line bg-gradient-to-r from-bg-surface via-bg-surface to-teal-soft/25 p-4 sm:p-5 shadow-xs">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 rounded-2xl border border-line bg-linear-to-r from-bg-surface via-bg-surface to-teal-soft/25 p-4 sm:p-5 shadow-xs">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="rounded-lg bg-teal p-1.5 text-white shadow-xs">

@@ -203,7 +203,7 @@ export function TributoAuthGuardian({ children }: TributoAuthGuardianProps) {
         <div className="w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-2xl p-8 shadow-2xl backdrop-blur-xl text-center space-y-6 animate-in fade-in zoom-in-95 duration-200">
           <div className="relative mx-auto size-20 flex items-center justify-center">
             <div className="absolute inset-0 rounded-full bg-teal-500/20 animate-ping opacity-60" />
-            <div className="size-16 rounded-2xl bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center text-white shadow-lg shadow-teal-900/40">
+            <div className="size-16 rounded-2xl bg-linear-to-br from-teal-500 to-teal-700 flex items-center justify-center text-white shadow-lg shadow-teal-900/40">
               <Loader2 className="size-8 animate-spin" />
             </div>
           </div>
@@ -263,7 +263,7 @@ export function TributoAuthGuardian({ children }: TributoAuthGuardianProps) {
         <main className="flex-1 flex items-center justify-center p-4 sm:p-8">
           <div className="w-full max-w-2xl bg-white text-slate-900 rounded-2xl shadow-2xl shadow-black/60 border border-slate-200 overflow-hidden animate-in fade-in-50 zoom-in-95 duration-300">
             {/* Header Visual de la Tarjeta */}
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-teal-950 p-6 sm:p-8 text-white relative overflow-hidden">
+            <div className="bg-linear-to-r from-slate-900 via-slate-800 to-teal-950 p-6 sm:p-8 text-white relative overflow-hidden">
               <div className="absolute -right-10 -bottom-10 opacity-10 pointer-events-none">
                 <Lock className="size-56 text-teal-300" />
               </div>

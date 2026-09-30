@@ -256,7 +256,7 @@ export function ActaConciliacionModal({ open, onClose, result, dianName, movName
                         <tr key={r.id}>
                           <td className="p-2 text-ink-muted">{r.fecha}</td>
                           <td className="p-2 font-bold text-ink">{r.numero}</td>
-                          <td className="p-2 font-sans truncate max-w-[200px]" title={r.nombreContraparte}>
+                          <td className="p-2 font-sans truncate max-w-50" title={r.nombreContraparte}>
                             {r.nombreContraparte}
                           </td>
                           <td className="p-2 text-teal font-semibold">
