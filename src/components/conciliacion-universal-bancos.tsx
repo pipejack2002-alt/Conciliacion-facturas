@@ -90,6 +90,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
 
   // Cuenta contable seleccionada
   const [cuentaSeleccionada, setCuentaSeleccionada] = useState<string>("todas");
+  const lastAutoDetectedKeyRef = useRef<string>("");
 
   // Saldos iniciales
   const [saldoInicialExtracto, setSaldoInicialExtracto] = useState<number>(0);
@@ -161,19 +162,28 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
     return [];
   }, [customExtractItems, extractPreview, selectedSubAccount]);
 
-  // Auto-selección inteligente de cuenta contable según la entidad bancaria detectada
+  // Auto-selección inteligente de cuenta contable según la entidad bancaria detectada (solo al cargar extracto nuevo)
   useEffect(() => {
     if (!extractPreview || availableAccounts.length === 0) return;
+
+    const currentKey = `${extractPreview.fileName || ""}_${extractPreview.bancoId || ""}_${extractPreview.numeroCuenta || ""}_${extractPreview.items?.length || 0}`;
+    if (lastAutoDetectedKeyRef.current === currentKey) return;
+    lastAutoDetectedKeyRef.current = currentKey;
 
     const bName = (extractPreview.bancoDetectado || "").toLowerCase();
     const bId = extractPreview.bancoId || "";
 
     if (bId === "credicorp" || bName.includes("credicorp") || bName.includes("correval") || bName.includes("fonval")) {
-      const matchCred = availableAccounts.find(
-        (a) => a.cuenta.startsWith("12503511") || /credicorp|correval|fonval|fic/i.test(a.cuentaNombre)
+      const credAccounts = availableAccounts.filter(
+        (a) =>
+          a.cuenta.startsWith("12503511") ||
+          a.cuenta.startsWith("12450541") ||
+          /credicorp|correval|fonval|serfinco|fic/i.test(a.cuentaNombre)
       );
-      if (matchCred) {
-        setCuentaSeleccionada(matchCred.cuenta);
+      if (credAccounts.length > 0) {
+        // Ordenar por volumen de movimientos (la cuenta de mayor actividad primero)
+        credAccounts.sort((a, b) => b.totalMovimientos - a.totalMovimientos);
+        setCuentaSeleccionada(credAccounts[0].cuenta);
         return;
       }
     }
@@ -212,10 +222,10 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
       }
     }
 
-    if (cuentaSeleccionada === "todas" && availableAccounts.length === 1) {
+    if (availableAccounts.length === 1) {
       setCuentaSeleccionada(availableAccounts[0].cuenta);
     }
-  }, [extractPreview, availableAccounts, cuentaSeleccionada]);
+  }, [extractPreview, availableAccounts]);
 
   // Movimientos de libros filtrados
   const librosBancos = useMemo(() => {
@@ -620,7 +630,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                     >
                       {extractPreview.cuentasDisponibles.map((sub) => (
                         <option key={sub.id} value={sub.id}>
-                          {sub.nombre} ({sub.items.length} movs · Saldo Fin: {formatMoney(sub.saldoFinal)})
+                          {sub.nombre} ({sub.items.length} movs · Saldo Fin: {formatMoneyExact(sub.saldoFinal)})
                         </option>
                       ))}
                     </select>
@@ -712,27 +722,64 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
 
             {/* Selector de Cuenta Contable */}
             <div className="rounded-xl border border-line bg-bg-subtle/50 p-3 text-xs space-y-2 mb-3">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-ink">Cuenta a Conciliar:</span>
-                <span className="text-[11px] text-ink-muted">
-                  {availableAccounts.length} cuentas de tesorería detectadas
-                </span>
-              </div>
+              {(() => {
+                const credicorpAccounts = availableAccounts.filter(
+                  (a) =>
+                    a.cuenta.startsWith("12503511") ||
+                    a.cuenta.startsWith("12450541") ||
+                    /credicorp|correval|fonval|serfinco/i.test(a.cuentaNombre)
+                );
+                const credicorpTotalMovs = credicorpAccounts.reduce(
+                  (sum, a) => sum + a.totalMovimientos,
+                  0
+                );
 
-              <select
-                value={cuentaSeleccionada}
-                onChange={(e) => setCuentaSeleccionada(e.target.value)}
-                className="w-full rounded-lg border border-line bg-bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink focus:outline-teal"
-              >
-                <option value="todas">
-                  Todas las cuentas de tesorería y bancos ({librosBancos.length} movs)
-                </option>
-                {availableAccounts.map((acc) => (
-                  <option key={acc.cuenta} value={acc.cuenta}>
-                    {acc.cuenta} - {acc.cuentaNombre} ({acc.totalMovimientos} registros)
-                  </option>
-                ))}
-              </select>
+                return (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-ink">Cuenta a Conciliar:</span>
+                      <span className="text-[11px] text-ink-muted">
+                        {availableAccounts.length} cuentas de tesorería detectadas
+                      </span>
+                    </div>
+
+                    <select
+                      value={cuentaSeleccionada}
+                      onChange={(e) => setCuentaSeleccionada(e.target.value)}
+                      className="w-full rounded-lg border border-line bg-bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink focus:outline-teal"
+                    >
+                      <option value="todas">
+                        Todas las cuentas de tesorería y bancos ({effectiveMovLines.length} movs)
+                      </option>
+                      {credicorpAccounts.length > 1 && (
+                        <option value="credicorp_all">
+                          ⭐ Credicorp Capital - Ambas Cuentas ({credicorpAccounts.map((a) => a.cuenta).join(" + ")}) ({credicorpTotalMovs} registros)
+                        </option>
+                      )}
+                      {availableAccounts.map((acc) => {
+                        const isCredicorp = credicorpAccounts.some((c) => c.cuenta === acc.cuenta);
+                        return (
+                          <option key={acc.cuenta} value={acc.cuenta}>
+                            {acc.cuenta} - {acc.cuentaNombre} ({acc.totalMovimientos} registros)
+                            {isCredicorp ? " · [Credicorp Capital]" : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    {cuentaSeleccionada !== "todas" && (
+                      <div className="pt-1 flex items-center justify-between text-[11px] text-ink-muted">
+                        <span>
+                          {cuentaSeleccionada === "credicorp_all"
+                            ? "Movimientos en cuentas Credicorp:"
+                            : "Movimientos en esta cuenta:"}
+                        </span>
+                        <span className="font-mono font-bold text-ink">{librosBancos.length} líneas</span>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
 
@@ -948,9 +995,9 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                   >
                     {concilResult.summary.cuadrado
                       ? concilResult.summary.soloRendimientos
-                        ? `CUADRADO: SOLO RENDIMIENTOS (${formatMoney(concilResult.summary.notasCreditoRendimientos || 0)})`
+                        ? `CUADRADO: SOLO RENDIMIENTOS (${formatMoneyExact(concilResult.summary.notasCreditoRendimientos || 0)})`
                         : "CUADRADO PERFECTO"
-                      : `DIFERENCIA: ${formatMoney(concilResult.summary.diferenciaCuadre)}`}
+                      : `DIFERENCIA: ${formatMoneyExact(concilResult.summary.diferenciaCuadre)}`}
                   </div>
                   <p
                     className={cn(
@@ -962,7 +1009,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                   >
                     {concilResult.summary.cuadrado
                       ? concilResult.summary.soloRendimientos
-                        ? `El saldo contable conciliado coincide al 100% con el extracto bancario. La única partida pendiente de registro contable son los rendimientos financieros (${formatMoney(concilResult.summary.notasCreditoRendimientos || 0)}) que se causan al mes siguiente.`
+                        ? `El saldo contable conciliado coincide al 100% con el extracto bancario. La única partida pendiente de registro contable son los rendimientos financieros (${formatMoneyExact(concilResult.summary.notasCreditoRendimientos || 0)}) que se causan al mes siguiente.`
                         : "El saldo bancario ajustado coincide con el saldo de libros contables al 100% sin partidas huérfanas."
                       : "Existen partidas pendientes por conciliar o diferencias en el saldo inicial."}
                   </p>

@@ -100,6 +100,7 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
 
   // Cuenta contable seleccionada para la conciliación
   const [cuentaSeleccionada, setCuentaSeleccionada] = useState<string>("todas");
+  const lastAutoDetectedKeyRef = useRef<string>("");
 
   useEffect(() => {
     setSaldoInputStr(formatMoneyExact(saldoInicialExtracto).replace("$", "").trim());
@@ -124,9 +125,13 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
     setSaldoInputStr(formatMoneyExact(saldoInicialExtracto).replace("$", "").trim());
   }, [saldoInicialExtracto]);
 
-  // Auto-seleccionar cuenta contable cuando se carga un extracto bancario específico
+  // Auto-seleccionar cuenta contable inteligente SOLO cuando se carga un nuevo extracto
   useEffect(() => {
     if (!extractoMeta || availableAccounts.length === 0) return;
+
+    const currentKey = `${extractoMeta.bancoId || ""}_${extractoMeta.numeroCuenta || ""}_${extractoMeta.periodo || ""}_${extractoMeta.items?.length || 0}`;
+    if (lastAutoDetectedKeyRef.current === currentKey) return;
+    lastAutoDetectedKeyRef.current = currentKey;
 
     if (extractoMeta.bancoId === "banco_caja_social") {
       const matchBcsc = availableAccounts.find(
@@ -141,13 +146,16 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
     }
 
     if (extractoMeta.bancoId === "credicorp") {
-      const matchCred = availableAccounts.find(
+      const credAccounts = availableAccounts.filter(
         (a) =>
           a.cuenta.startsWith("12503511") ||
-          /credicorp|correval|fonval|fic/i.test(a.cuentaNombre)
+          a.cuenta.startsWith("12450541") ||
+          /credicorp|correval|fonval|serfinco|fic/i.test(a.cuentaNombre)
       );
-      if (matchCred) {
-        setCuentaSeleccionada(matchCred.cuenta);
+      if (credAccounts.length > 0) {
+        // Ordenar por volumen de movimientos (la cuenta principal de mayor actividad primero)
+        credAccounts.sort((a, b) => b.totalMovimientos - a.totalMovimientos);
+        setCuentaSeleccionada(credAccounts[0].cuenta);
         return;
       }
     }
@@ -162,10 +170,10 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
       }
     }
 
-    if (cuentaSeleccionada === "todas" && availableAccounts.length === 1) {
+    if (availableAccounts.length === 1) {
       setCuentaSeleccionada(availableAccounts[0].cuenta);
     }
-  }, [extractoMeta, availableAccounts, cuentaSeleccionada]);
+  }, [extractoMeta, availableAccounts]);
 
   // Actualizar items de extracto cuando cambia la subcuenta seleccionada
   useEffect(() => {

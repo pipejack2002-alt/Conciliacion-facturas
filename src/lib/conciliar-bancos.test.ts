@@ -433,5 +433,70 @@ describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuen
     assert.strictEqual(Math.round(res.summary.diferenciaExtractoLibros ?? 0), 1959191);
     assert.strictEqual(res.summary.notasCreditoRendimientos, 1959190.59);
   });
+
+  it("debe permitir conciliar con 'credicorp_all' (ambas cuentas: 12503511 + 12450541) o individualmente", () => {
+    const movLines: MovLine[] = [
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL",
+        comprobante: "L 001",
+        fecha: "2026-08-01",
+        nit: "860068182",
+        nombre: "CREDICORP CAPITAL COLOMBIA",
+        descripcion: "OPERACIONES FONVAL",
+        cruce: "",
+        debito: 1000000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "12450541",
+        cuentaNombre: "SERFINCO CARTERA COLECTIVA 1046364000 SMTE",
+        comprobante: "L 002",
+        fecha: "2026-08-01",
+        nit: "860068182",
+        nombre: "CREDICORP CAPITAL COLOMBIA",
+        descripcion: "CARTERA VISTA",
+        cruce: "",
+        debito: 5541.08,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "11100512",
+        cuentaNombre: "BANCO COLMENA BCSC",
+        comprobante: "CE 01",
+        fecha: "2026-08-01",
+        nit: "900",
+        nombre: "TERCERO",
+        descripcion: "PAGO BCSC",
+        cruce: "",
+        debito: 0,
+        credito: 500000,
+        observacion: "",
+      },
+    ];
+
+    // 1. Filtrar solo 12503511
+    const f1 = extractLibroBancos(movLines, "12503511");
+    assert.strictEqual(f1.length, 1);
+    assert.strictEqual(f1[0].cuenta, "12503511");
+
+    // 2. Filtrar solo 12450541
+    const f2 = extractLibroBancos(movLines, "12450541");
+    assert.strictEqual(f2.length, 1);
+    assert.strictEqual(f2[0].cuenta, "12450541");
+
+    // 3. Filtrar ambas cuentas de Credicorp con 'credicorp_all'
+    const fBoth = extractLibroBancos(movLines, "credicorp_all");
+    assert.strictEqual(fBoth.length, 2);
+    assert.ok(fBoth.some((m) => m.cuenta === "12503511"));
+    assert.ok(fBoth.some((m) => m.cuenta === "12450541"));
+    assert.strictEqual(fBoth.some((m) => m.cuenta === "11100512"), false);
+
+    // 4. Filtrar por lista separada por comas
+    const fComma = extractLibroBancos(movLines, "12503511, 12450541");
+    assert.strictEqual(fComma.length, 2);
+  });
 });
 

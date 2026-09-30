@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { FileText, FileSpreadsheet, Upload, RefreshCw } from "lucide-react";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatMoneyExact } from "@/lib/format";
 import type { ParsedBankExtractResult } from "@/lib/parse-bank-extract";
 import type { DetectedBankAccount } from "@/lib/conciliar-bancos";
 
@@ -114,7 +114,7 @@ export const BankUploadCards = memo(function BankUploadCards({
                   >
                     {extractoMeta.cuentasDisponibles.map((sub) => (
                       <option key={sub.id} value={sub.id}>
-                        {sub.nombre} ({sub.items.length} movs · Saldo: {formatMoney(sub.saldoFinal)})
+                        {sub.nombre} ({sub.items.length} movs · Saldo: {formatMoneyExact(sub.saldoFinal)})
                       </option>
                     ))}
                   </select>
@@ -188,36 +188,64 @@ export const BankUploadCards = memo(function BankUploadCards({
           </p>
 
           {/* Selector de Cuenta Contable */}
-          <div className="rounded-xl border border-line bg-bg-subtle/50 p-3 text-xs space-y-2 mb-3">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-ink">Cuenta Contable a Conciliar:</span>
-              <span className="text-[11px] text-ink-muted">
-                {availableAccounts.length} cuentas de tesorería detectadas
-              </span>
-            </div>
+          {(() => {
+            const credicorpAccounts = availableAccounts.filter(
+              (a) =>
+                a.cuenta.startsWith("12503511") ||
+                a.cuenta.startsWith("12450541") ||
+                /credicorp|correval|fonval|serfinco/i.test(a.cuentaNombre)
+            );
+            const credicorpTotalMovs = credicorpAccounts.reduce(
+              (sum, a) => sum + a.totalMovimientos,
+              0
+            );
 
-            <select
-              value={cuentaSeleccionada}
-              onChange={(e) => onSelectCuenta(e.target.value)}
-              className="w-full rounded-lg border border-line bg-bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink focus:outline-teal"
-            >
-              <option value="todas">
-                Todas las cuentas de bancos y tesorería ({librosEfectivosCount} movs)
-              </option>
-              {availableAccounts.map((acc) => (
-                <option key={acc.cuenta} value={acc.cuenta}>
-                  {acc.cuenta} - {acc.cuentaNombre} ({acc.totalMovimientos} registros)
-                </option>
-              ))}
-            </select>
+            return (
+              <div className="rounded-xl border border-line bg-bg-subtle/50 p-3 text-xs space-y-2 mb-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-ink">Cuenta Contable a Conciliar:</span>
+                  <span className="text-[11px] text-ink-muted">
+                    {availableAccounts.length} cuentas de tesorería detectadas
+                  </span>
+                </div>
 
-            {cuentaSeleccionada !== "todas" && (
-              <div className="pt-1 flex items-center justify-between text-[11px] text-ink-muted">
-                <span>Movimientos en esta cuenta:</span>
-                <span className="font-mono font-bold text-ink">{librosBancosCount} líneas</span>
+                <select
+                  value={cuentaSeleccionada}
+                  onChange={(e) => onSelectCuenta(e.target.value)}
+                  className="w-full rounded-lg border border-line bg-bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink focus:outline-teal"
+                >
+                  <option value="todas">
+                    Todas las cuentas de bancos y tesorería ({librosEfectivosCount} movs)
+                  </option>
+                  {credicorpAccounts.length > 1 && (
+                    <option value="credicorp_all">
+                      ⭐ Credicorp Capital - Ambas Cuentas ({credicorpAccounts.map((a) => a.cuenta).join(" + ")}) ({credicorpTotalMovs} registros)
+                    </option>
+                  )}
+                  {availableAccounts.map((acc) => {
+                    const isCredicorp = credicorpAccounts.some((c) => c.cuenta === acc.cuenta);
+                    return (
+                      <option key={acc.cuenta} value={acc.cuenta}>
+                        {acc.cuenta} - {acc.cuentaNombre} ({acc.totalMovimientos} registros)
+                        {isCredicorp ? " · [Credicorp Capital]" : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+
+                {cuentaSeleccionada !== "todas" && (
+                  <div className="pt-1 flex items-center justify-between text-[11px] text-ink-muted">
+                    <span>
+                      {cuentaSeleccionada === "credicorp_all"
+                        ? "Movimientos en cuentas Credicorp:"
+                        : "Movimientos en esta cuenta:"}
+                    </span>
+                    <span className="font-mono font-bold text-ink">{librosBancosCount} líneas</span>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            );
+          })()}
         </div>
 
         <div>

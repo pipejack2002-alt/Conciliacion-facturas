@@ -82,9 +82,9 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 ? "LISTO PARA CONCILIAR"
                 : summary.cuadrado
                 ? summary.soloRendimientos
-                  ? `CUADRADO: SOLO RENDIMIENTOS (${formatMoney(summary.notasCreditoRendimientos || 0)})`
+                  ? `CUADRADO: SOLO RENDIMIENTOS (${formatMoneyExact(summary.notasCreditoRendimientos || 0)})`
                   : "CUADRADO PERFECTO"
-                : `DIFERENCIA: ${formatMoney(summary.diferenciaCuadre)}`}
+                : `DIFERENCIA: ${formatMoneyExact(summary.diferenciaCuadre)}`}
             </div>
             <p
               className={cn(
@@ -100,7 +100,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 ? "Carga tu extracto bancario en PDF o Excel arriba para realizar el cruce automático con tus libros auxiliares."
                 : summary.cuadrado
                 ? summary.soloRendimientos
-                  ? `El saldo contable conciliado coincide al 100% con el extracto bancario. La única partida pendiente de registro contable son los rendimientos financieros (${formatMoney(summary.notasCreditoRendimientos || 0)}) que se causan al mes siguiente.`
+                  ? `El saldo contable conciliado coincide al 100% con el extracto bancario. La única partida pendiente de registro contable son los rendimientos financieros (${formatMoneyExact(summary.notasCreditoRendimientos || 0)}) que se causan al mes siguiente.`
                   : "El saldo bancario ajustado coincide con el saldo de libros contables al 100% sin partidas huérfanas."
                 : "Existen partidas pendientes por identificar, cheques en tránsito o notas bancarias pendientes de registro."}
             </p>

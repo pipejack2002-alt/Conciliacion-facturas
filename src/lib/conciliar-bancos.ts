@@ -208,9 +208,26 @@ export function getAvailableBankAccounts(mov: MovLine[]): DetectedBankAccount[] 
 export function extractLibroBancos(mov: MovLine[], cuentaFiltro?: string): MovLine[] {
   if (cuentaFiltro && cuentaFiltro !== "todas") {
     const cleanFiltro = cuentaFiltro.trim();
+    if (cleanFiltro === "credicorp_all") {
+      return mov.filter((m) => {
+        const c = m.cuenta.trim();
+        const nom = (m.cuentaNombre || "").toLowerCase();
+        return (
+          c.startsWith("12503511") ||
+          c.startsWith("12450541") ||
+          /credicorp|correval|fonval|serfinco/i.test(nom)
+        );
+      });
+    }
+
+    const filters = cleanFiltro
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
     return mov.filter((m) => {
       const c = m.cuenta.trim();
-      return c === cleanFiltro || c.startsWith(cleanFiltro);
+      return filters.some((f) => c === f || c.startsWith(f));
     });
   }
 
