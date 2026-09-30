@@ -927,7 +927,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                   {concilResult.summary.cuadrado ? (
                     <span className="flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-xs font-black text-white shadow-xs">
                       <CheckCircle2 className="size-3.5" />
-                      Cuadrado 100%
+                      {concilResult.summary.soloRendimientos ? "Cuadrado (Solo Rendimientos)" : "Cuadrado 100%"}
                     </span>
                   ) : (
                     <span className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1 text-xs font-black text-white shadow-xs">
@@ -947,7 +947,9 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                     )}
                   >
                     {concilResult.summary.cuadrado
-                      ? "CUADRADO PERFECTO"
+                      ? concilResult.summary.soloRendimientos
+                        ? `CUADRADO: SOLO RENDIMIENTOS (${formatMoney(concilResult.summary.notasCreditoRendimientos || 0)})`
+                        : "CUADRADO PERFECTO"
                       : `DIFERENCIA: ${formatMoney(concilResult.summary.diferenciaCuadre)}`}
                   </div>
                   <p
@@ -959,7 +961,9 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                     )}
                   >
                     {concilResult.summary.cuadrado
-                      ? "El saldo bancario ajustado coincide con el saldo de libros contables al 100% sin partidas huérfanas."
+                      ? concilResult.summary.soloRendimientos
+                        ? `El saldo contable conciliado coincide al 100% con el extracto bancario. La única partida pendiente de registro contable son los rendimientos financieros (${formatMoney(concilResult.summary.notasCreditoRendimientos || 0)}) que se causan al mes siguiente.`
+                        : "El saldo bancario ajustado coincide con el saldo de libros contables al 100% sin partidas huérfanas."
                       : "Existen partidas pendientes por conciliar o diferencias en el saldo inicial."}
                   </p>
                 </div>
@@ -969,7 +973,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                 <div className="flex items-center justify-between text-ink font-semibold">
                   <span>Movimientos Conciliados:</span>
                   <span className="font-mono font-bold text-emerald-900 dark:text-emerald-300 bg-emerald-100/90 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-md">
-                    {concilResult.summary.totalConciliados} de {effectiveExtractItems.length} en extracto
+                    {concilResult.summary.totalMovimientosBancoConciliados || concilResult.summary.totalConciliados} de {effectiveExtractItems.length} en extracto ({concilResult.summary.totalConciliados} partidas)
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-ink font-semibold">
@@ -1007,29 +1011,33 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs">
                 <div className="flex justify-between py-1 border-b border-line/60">
-                  <span className="text-ink-muted">Saldo Final según Extracto:</span>
+                  <span className="text-ink-muted">Saldo según Libros Contables:</span>
                   <span className="font-mono font-bold text-ink">
-                    {formatMoneyExact(concilResult.summary.saldoExtracto)}
+                    {formatMoneyExact(concilResult.summary.saldoLibros)}
                   </span>
                 </div>
 
-                <div className="flex justify-between py-1 border-b border-line/60 text-emerald-600 dark:text-emerald-400">
-                  <span>(+) Consignaciones en Tránsito:</span>
-                  <span className="font-mono font-bold">
-                    {formatMoneyExact(concilResult.summary.consignacionesEnTransito)}
-                  </span>
-                </div>
-
-                <div className="flex justify-between py-1 border-b border-line/60 text-rose-600 dark:text-rose-400">
-                  <span>(-) Cheques / Transferencias en Tránsito:</span>
-                  <span className="font-mono font-bold">
-                    -{formatMoneyExact(concilResult.summary.chequesEnTransito)}
-                  </span>
+                <div className="py-1 border-b border-line/60 text-blue-600 dark:text-blue-400">
+                  <div className="flex justify-between">
+                    <span title="Abonos e ingresos registrados por el banco pendientes de causar en libros contables (ej. rendimientos financieros del mes)">
+                      (+) Notas Crédito Banco (Rendimientos / Abonos):
+                    </span>
+                    <span className="font-mono font-bold">
+                      +{formatMoneyExact(concilResult.summary.notasCreditoNoRegistradas)}
+                    </span>
+                  </div>
+                  {concilResult.summary.notasCreditoNoRegistradas > 0 && (
+                    <div className="flex flex-wrap items-center gap-x-2 text-[10px] text-ink-muted mt-0.5 font-normal">
+                      <span>Rendimientos: <strong className="text-teal font-mono">{formatMoneyExact(concilResult.summary.notasCreditoRendimientos || 0)}</strong></span>
+                      <span>•</span>
+                      <span>Otros Abonos: <strong className="text-ink font-mono">{formatMoneyExact(concilResult.summary.notasCreditoOperativas || 0)}</strong></span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="py-1 border-b border-line/60 text-amber-600 dark:text-amber-400">
                   <div className="flex justify-between">
-                    <span title="Cargos y retiros efectuados por el banco que aún no se han registrado en libros contables">
+                    <span title="Cargos y retiros efectuados por el banco que aún no se han registrado en libros contables (GMF 4x1000, comisiones bancarias)">
                       (-) Notas Débito Banco (Cargos no en Libros):
                     </span>
                     <span className="font-mono font-bold">
@@ -1047,26 +1055,24 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                   )}
                 </div>
 
-                <div className="py-1 border-b border-line/60 text-blue-600 dark:text-blue-400">
-                  <div className="flex justify-between">
-                    <span title="Abonos e ingresos registrados por el banco pendientes de causar en libros contables">
-                      (+) Notas Crédito Banco (Abonos no en Libros):
-                    </span>
-                    <span className="font-mono font-bold">
-                      +{formatMoneyExact(concilResult.summary.notasCreditoNoRegistradas)}
-                    </span>
-                  </div>
-                  {concilResult.summary.notasCreditoNoRegistradas > 0 && (
-                    <div className="flex flex-wrap items-center gap-x-2 text-[10px] text-ink-muted mt-0.5 font-normal">
-                      <span>Rendimientos: <strong className="text-teal font-mono">{formatMoneyExact(concilResult.summary.notasCreditoRendimientos || 0)}</strong></span>
-                      <span>•</span>
-                      <span>Otros Abonos: <strong className="text-ink font-mono">{formatMoneyExact(concilResult.summary.notasCreditoOperativas || 0)}</strong></span>
-                    </div>
-                  )}
+                <div className="flex justify-between py-1 border-b border-line/60 text-rose-600 dark:text-rose-400">
+                  <span>(+) Cheques / Transferencias en Tránsito:</span>
+                  <span className="font-mono font-bold">
+                    +{formatMoneyExact(concilResult.summary.chequesEnTransito)}
+                  </span>
+                </div>
+
+                <div className="flex justify-between py-1 border-b border-line/60 text-emerald-600 dark:text-emerald-400">
+                  <span>(-) Consignaciones en Tránsito:</span>
+                  <span className="font-mono font-bold">
+                    -{formatMoneyExact(concilResult.summary.consignacionesEnTransito)}
+                  </span>
                 </div>
 
                 <div className="flex justify-between py-1 border-b border-teal/40 bg-teal-soft/20 px-2 rounded font-semibold text-teal-deep dark:text-teal">
-                  <span>(=) Saldo Bancario Conciliado:</span>
+                  <span title="Saldo bancario resultante de conciliar libros con extracto (debe coincidir con el Saldo según Extracto Bancario)">
+                    (=) Saldo Bancario Conciliado (según Extracto):
+                  </span>
                   <span className="font-mono font-bold">
                     {formatMoneyExact(concilResult.summary.saldoConciliado)}
                   </span>

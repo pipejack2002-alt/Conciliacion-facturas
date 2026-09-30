@@ -57,7 +57,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
             ) : summary.cuadrado ? (
               <span className="flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-xs font-black text-white shadow-xs">
                 <CheckCircle2 className="size-3.5" />
-                Cuadrado 100%
+                {summary.soloRendimientos ? "Cuadrado (Solo Rendimientos)" : "Cuadrado 100%"}
               </span>
             ) : (
               <span className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1 text-xs font-black text-white shadow-xs">
@@ -81,7 +81,9 @@ export const BankSummaryCards = memo(function BankSummaryCards({
               {isSinExtracto
                 ? "LISTO PARA CONCILIAR"
                 : summary.cuadrado
-                ? "CUADRADO PERFECTO"
+                ? summary.soloRendimientos
+                  ? `CUADRADO: SOLO RENDIMIENTOS (${formatMoney(summary.notasCreditoRendimientos || 0)})`
+                  : "CUADRADO PERFECTO"
                 : `DIFERENCIA: ${formatMoney(summary.diferenciaCuadre)}`}
             </div>
             <p
@@ -97,7 +99,9 @@ export const BankSummaryCards = memo(function BankSummaryCards({
               {isSinExtracto
                 ? "Carga tu extracto bancario en PDF o Excel arriba para realizar el cruce automático con tus libros auxiliares."
                 : summary.cuadrado
-                ? "El saldo bancario ajustado coincide con el saldo de libros contables al 100% sin partidas huérfanas."
+                ? summary.soloRendimientos
+                  ? `El saldo contable conciliado coincide al 100% con el extracto bancario. La única partida pendiente de registro contable son los rendimientos financieros (${formatMoney(summary.notasCreditoRendimientos || 0)}) que se causan al mes siguiente.`
+                  : "El saldo bancario ajustado coincide con el saldo de libros contables al 100% sin partidas huérfanas."
                 : "Existen partidas pendientes por identificar, cheques en tránsito o notas bancarias pendientes de registro."}
             </p>
           </div>
@@ -107,7 +111,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
           <div className="flex items-center justify-between text-ink font-semibold">
             <span>Movimientos Conciliados:</span>
             <span className="font-mono font-bold text-ink bg-bg-subtle border border-line px-2 py-0.5 rounded-md">
-              {summary.totalConciliados} de {extractoItemsCount} en extracto
+              {summary.totalMovimientosBancoConciliados || summary.totalConciliados} de {extractoItemsCount} en extracto ({summary.totalConciliados} partidas)
             </span>
           </div>
           <div className="flex items-center justify-between text-ink font-semibold">
@@ -145,29 +149,33 @@ export const BankSummaryCards = memo(function BankSummaryCards({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs">
           <div className="flex justify-between py-1 border-b border-line/60">
-            <span className="text-ink-muted">Saldo Final según Extracto Bancario:</span>
+            <span className="text-ink-muted">Saldo según Libros Contables:</span>
             <span className="font-mono font-bold text-ink">
-              {formatMoneyExact(summary.saldoExtracto)}
+              {formatMoneyExact(summary.saldoLibros)}
             </span>
           </div>
 
-          <div className="flex justify-between py-1 border-b border-line/60 text-emerald-600 dark:text-emerald-400">
-            <span>(+) Consignaciones en Tránsito:</span>
-            <span className="font-mono font-bold">
-              {formatMoneyExact(summary.consignacionesEnTransito)}
-            </span>
-          </div>
-
-          <div className="flex justify-between py-1 border-b border-line/60 text-rose-600 dark:text-rose-400">
-            <span>(-) Cheques / Transferencias en Tránsito:</span>
-            <span className="font-mono font-bold">
-              -{formatMoneyExact(summary.chequesEnTransito)}
-            </span>
+          <div className="py-1 border-b border-line/60 text-blue-600 dark:text-blue-400">
+            <div className="flex justify-between">
+              <span title="Abonos e ingresos registrados por el banco pendientes de causar en libros contables (ej. rendimientos financieros del mes)">
+                (+) Notas Crédito Banco (Rendimientos / Abonos):
+              </span>
+              <span className="font-mono font-bold">
+                +{formatMoneyExact(summary.notasCreditoNoRegistradas)}
+              </span>
+            </div>
+            {summary.notasCreditoNoRegistradas > 0 && (
+              <div className="flex flex-wrap items-center gap-x-2 text-[10px] text-ink-muted mt-0.5 font-normal">
+                <span>Rendimientos: <strong className="text-teal font-mono">{formatMoneyExact(summary.notasCreditoRendimientos || 0)}</strong></span>
+                <span>•</span>
+                <span>Otros Abonos: <strong className="text-ink font-mono">{formatMoneyExact(summary.notasCreditoOperativas || 0)}</strong></span>
+              </div>
+            )}
           </div>
 
           <div className="py-1 border-b border-line/60 text-amber-600 dark:text-amber-400">
             <div className="flex justify-between">
-              <span title="Cargos y retiros efectuados por el banco que aún no se han registrado en libros contables (incluye GMF, comisiones bancarias y traslados/pagos pendientes)">
+              <span title="Cargos y retiros efectuados por el banco que aún no se han registrado en libros contables (GMF 4x1000, comisiones bancarias)">
                 (-) Notas Débito Banco (Cargos no en Libros):
               </span>
               <span className="font-mono font-bold">
@@ -185,26 +193,24 @@ export const BankSummaryCards = memo(function BankSummaryCards({
             )}
           </div>
 
-          <div className="py-1 border-b border-line/60 text-blue-600 dark:text-blue-400">
-            <div className="flex justify-between">
-              <span title="Abonos e ingresos registrados por el banco pendientes de causar en libros contables (incluye rendimientos y consignaciones pendientes)">
-                (+) Notas Crédito Banco (Abonos no en Libros):
-              </span>
-              <span className="font-mono font-bold">
-                +{formatMoneyExact(summary.notasCreditoNoRegistradas)}
-              </span>
-            </div>
-            {summary.notasCreditoNoRegistradas > 0 && (
-              <div className="flex flex-wrap items-center gap-x-2 text-[10px] text-ink-muted mt-0.5 font-normal">
-                <span>Rendimientos: <strong className="text-teal font-mono">{formatMoneyExact(summary.notasCreditoRendimientos || 0)}</strong></span>
-                <span>•</span>
-                <span>Otros Abonos: <strong className="text-ink font-mono">{formatMoneyExact(summary.notasCreditoOperativas || 0)}</strong></span>
-              </div>
-            )}
+          <div className="flex justify-between py-1 border-b border-line/60 text-rose-600 dark:text-rose-400">
+            <span>(+) Cheques / Transferencias en Tránsito:</span>
+            <span className="font-mono font-bold">
+              +{formatMoneyExact(summary.chequesEnTransito)}
+            </span>
+          </div>
+
+          <div className="flex justify-between py-1 border-b border-line/60 text-emerald-600 dark:text-emerald-400">
+            <span>(-) Consignaciones en Tránsito:</span>
+            <span className="font-mono font-bold">
+              -{formatMoneyExact(summary.consignacionesEnTransito)}
+            </span>
           </div>
 
           <div className="flex justify-between py-1 border-b border-teal/40 bg-teal-soft/20 px-2 rounded font-semibold text-teal-deep dark:text-teal">
-            <span>(=) Saldo Bancario Conciliado:</span>
+            <span title="Saldo bancario resultante de conciliar libros con extracto (debe coincidir con el Saldo según Extracto Bancario)">
+              (=) Saldo Bancario Conciliado (según Extracto):
+            </span>
             <span className="font-mono font-bold">
               {formatMoneyExact(summary.saldoConciliado)}
             </span>

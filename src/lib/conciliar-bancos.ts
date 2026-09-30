@@ -50,10 +50,13 @@ export interface BankConciliacionSummary {
   notasCreditoOperativas?: number;
   saldoConciliado: number;
   diferenciaCuadre: number;
+  diferenciaExtractoLibros?: number;
   cuadrado: boolean;
+  soloRendimientos?: boolean;
   totalItemsBanco: number;
   totalItemsLibros: number;
   totalConciliados: number;
+  totalMovimientosBancoConciliados?: number;
 }
 
 export interface DetectedBankAccount {
@@ -74,6 +77,57 @@ export interface BankConciliacionResult {
 }
 
 /**
+ * Determina si una cuenta contable corresponde estrictamente a Tesorería, Bancos o Fondos de Inversión/Liquidez.
+ * Regla contable estricta:
+ * - Cuentas de Pasivo (2xxx), Patrimonio (3xxx), Ingresos (4xxx), Gastos (5xxx), Costos (6xxx, 7xxx), Orden (8xxx, 9xxx)
+ *   NUNCA son bancos ni tesorería, incluso si su nombre contiene "caja" (ej. 2370/5105 cajas de compensación) o "ahorro" (ej. ahorro institucional).
+ * - Cuentas de Activo de Tesorería PUC: 11 (Efectivo y equivalentes: 1105 Caja, 1110 Bancos, 1115 Remesas, 1120 Ahorro, 1125 Fondos).
+ * - Cuentas de Activo de Inversiones / FICs de Liquidez: 1205, 1215, 1225, 1245 (Carteras Colectivas / SMTE), 1250 (Fondos de Inversión / Fonval / Credicorp).
+ * - Cuentas bajo IFRS / NIIF: Clase 10 (Efectivo y equivalentes).
+ */
+export function isTreasuryAccount(c: string, nom: string): boolean {
+  const cleanC = (c || "").trim();
+  const cleanNom = (nom || "").trim().toLowerCase();
+
+  // Regla contable absoluta: Pasivos (2), Patrimonio (3), Ingresos (4), Gastos (5), Costos (6/7), Orden (8/9) JAMÁS son bancos/tesorería
+  if (/^[2-9]/.test(cleanC)) {
+    return false;
+  }
+
+  // Exclusiones explícitas de conceptos que no son tesorería aunque coincidan con palabras como "caja" o "ahorro"
+  if (
+    /cajas?\s+de\s+compensaci|sena\b|icbf\b|n[oó]mina|cesant|pensi[oó]n|ahorro\s+institucional|fondo\s+de\s+empleados|retenci[oó]n|proveedor|cliente|deudor|anticipo/i.test(
+      cleanNom
+    )
+  ) {
+    return false;
+  }
+
+  // Cuentas de Activo de Tesorería PUC y FICs / Fondos de liquidez:
+  if (
+    cleanC.startsWith("11") ||
+    cleanC.startsWith("1250") ||
+    cleanC.startsWith("1245") ||
+    cleanC.startsWith("1205") ||
+    cleanC.startsWith("1225") ||
+    cleanC.startsWith("10")
+  ) {
+    return true;
+  }
+
+  // Cuentas con códigos de ERP alfanuméricos cuyo nombre confirme explícitamente tesorería bancaria
+  if (
+    /banco|bcsc|colmena|credicorp|correval|banistmo|fonval|fiducia|fic\b|cartera colectiva|cuenta\s*corriente|cta\s*cte|cuenta\s*de\s*ahorro|cta\s*ahorro|caja\s*general|caja\s*menor/i.test(
+      cleanNom
+    )
+  ) {
+    return cleanC.startsWith("1") || !/^[0-9]/.test(cleanC);
+  }
+
+  return false;
+}
+
+/**
  * Detecta y agrupa todas las cuentas contables de tesorería, bancos e inversiones/fondos
  * (Clase 11 y Clase 12 como 1250 Fondos de Inversión / FICs / Carteras Colectivas tipo Credicorp)
  */
@@ -91,20 +145,7 @@ export function getAvailableBankAccounts(mov: MovLine[]): DetectedBankAccount[] 
     const c = line.cuenta.trim();
     const nom = (line.cuentaNombre || "").trim();
 
-    // Filtro universal: Cuentas de activo de tesorería (Clase 11 PUC), inversiones/fondos de liquidez (1250, 1205),
-    // Efectivo y equivalentes de efectivo bajo NIIF / IFRS internacional (Clase 10),
-    // o cuentas cuyo nombre mencione banco, caja, bcsc, colmena, credicorp, correval, banistmo, fonval, fiducia, ahorro, corriente, tesoreria
-    const isTreasury =
-      c.startsWith("11") ||
-      c.startsWith("1250") ||
-      c.startsWith("1205") ||
-      c.startsWith("10") ||
-      /banco|bcsc|colmena|caja|credicorp|correval|banistmo|fonval|fiducia|fic\b|cartera colectiva|ahorro|corriente|tesor|moneda|rotativ/i.test(
-        nom
-      ) ||
-      /banco|bcsc|caja|bank/i.test(c);
-
-    if (!isTreasury) continue;
+    if (!isTreasuryAccount(c, nom)) continue;
 
     if (!map.has(c)) {
       map.set(c, {
@@ -173,20 +214,7 @@ export function extractLibroBancos(mov: MovLine[], cuentaFiltro?: string): MovLi
     });
   }
 
-  const filtered = mov.filter((m) => {
-    const c = m.cuenta.trim();
-    const nom = (m.cuentaNombre || "").trim();
-    return (
-      c.startsWith("11") ||
-      c.startsWith("1250") ||
-      c.startsWith("1205") ||
-      c.startsWith("10") ||
-      /banco|bcsc|colmena|caja|credicorp|correval|banistmo|fonval|fiducia|fic\b|cartera colectiva|ahorro|corriente|tesor|moneda|rotativ/i.test(
-        nom
-      ) ||
-      /banco|bcsc|caja|bank/i.test(c)
-    );
-  });
+  const filtered = mov.filter((m) => isTreasuryAccount(m.cuenta, m.cuentaNombre));
 
   return filtered.length > 0 ? filtered : mov;
 }
@@ -258,10 +286,12 @@ export function conciliarBancos(
   const cuentasBancosDetectadas = Array.from(cuentasSet);
   const cuentasDetalle = getAvailableBankAccounts(cleanLibros);
 
+  let prevRendLineIndex = -1;
   // FASE 0: Causación en libros de Rendimientos del periodo anterior que igualan el Saldo Inicial
   for (let i = 0; i < cleanLibros.length; i++) {
     const l = cleanLibros[i];
     if (l.debito > 0 && /rendimientos?\s+(julio|mes\s+anterior|inicial)/i.test(l.descripcion || l.nombre)) {
+      prevRendLineIndex = i;
       matchedLibroIndices.add(i);
       rows.push({
         id: `prev_rend_${i}`,
@@ -745,26 +775,37 @@ export function conciliarBancos(
   const totalCreditosExtracto = extracto.reduce((a, b) => a + b.credito, 0);
   const saldoFinalExtracto = saldoInicialExtracto + totalCreditosExtracto - totalDebitosExtracto;
 
-  const totalDebitosLibros = cleanLibros.reduce((a, b) => a + b.debito, 0);
+  // En libros: Si hubo nota contable de rendimientos del mes anterior (FASE 0) que ya estaba
+  // incorporada en el saldo inicial del extracto bancario, no se duplica en los débitos operativos del periodo actual.
+  const totalDebitosLibros = cleanLibros
+    .filter((_, idx) => idx !== prevRendLineIndex)
+    .reduce((a, b) => a + b.debito, 0);
   const totalCreditosLibros = cleanLibros.reduce((a, b) => a + b.credito, 0);
-  const saldoFinalLibros = saldoInicialLibros + totalDebitosLibros - totalCreditosLibros;
+  const saldoFinalLibros = (saldoInicialLibros || saldoInicialExtracto) + totalDebitosLibros - totalCreditosLibros;
 
-  // Fórmula estándar de conciliación bancaria:
-  // Saldo según Extracto
-  // (+) Consignaciones en tránsito
-  // (-) Cheques y transferencias en tránsito
-  // (-) Notas débito bancarias no registradas
-  // (+) Notas crédito bancarias no registradas
-  // = Saldo Conciliado
+  // Conciliación de Libros a Extracto Bancario (Norma Técnica DIAN / NIIF):
+  // Saldo según Libros Contables
+  // (+) Notas Crédito Bancarias no causadas en libros (Rendimientos del periodo pendientes de registro)
+  // (-) Notas Débito Bancarias no registradas en libros (GMF, comisiones, cheques devueltos)
+  // (+) Cheques / Giros en tránsito
+  // (-) Consignaciones en tránsito
+  // (=) Saldo Bancario Conciliado (debe coincidir con el Saldo según Extracto Bancario)
   const saldoConciliado =
-    saldoFinalExtracto +
-    consignacionesEnTransito -
-    chequesEnTransito -
+    saldoFinalLibros +
+    notasCreditoNoRegistradas -
     notasDebitoNoRegistradas +
-    notasCreditoNoRegistradas;
+    chequesEnTransito -
+    consignacionesEnTransito;
 
-  const diferenciaCuadre = Math.abs(saldoConciliado - saldoFinalLibros);
+  const diferenciaCuadre = Math.abs(saldoConciliado - saldoFinalExtracto);
   const cuadrado = diferenciaCuadre < 1;
+  const diferenciaExtractoLibros = Math.abs(saldoFinalExtracto - saldoFinalLibros);
+  const soloRendimientos =
+    cuadrado &&
+    notasCreditoRendimientos > 0 &&
+    notasDebitoNoRegistradas === 0 &&
+    chequesEnTransito === 0 &&
+    consignacionesEnTransito === 0;
 
   const summary: BankConciliacionSummary = {
     saldoExtracto: saldoFinalExtracto,
@@ -780,10 +821,13 @@ export function conciliarBancos(
     notasCreditoOperativas,
     saldoConciliado,
     diferenciaCuadre,
+    diferenciaExtractoLibros,
     cuadrado,
+    soloRendimientos,
     totalItemsBanco: extracto.length,
     totalItemsLibros: libros.length,
     totalConciliados: rows.filter((r) => r.estado === "conciliado").length,
+    totalMovimientosBancoConciliados: matchedExtractoIds.size,
   };
 
   return {

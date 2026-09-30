@@ -307,5 +307,131 @@ describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuen
     assert.strictEqual(exec.comisiones.count, 1, "Solo debe haber 1 comisión, no inflada por GMF");
     assert.strictEqual(exec.comisiones.total, 149254.56);
   });
+
+  it("debe rechazar estrictamente cuentas de pasivo (2370) y gastos (5105) aunque contengan 'caja' o 'ahorro'", () => {
+    const movCuentas: MovLine[] = [
+      {
+        cuenta: "23701001",
+        cuentaNombre: "APORTES AL I C B F   SENA Y CAJAS DE COM",
+        comprobante: "P 01",
+        fecha: "2026-08-01",
+        nit: "899999034",
+        nombre: "ICBF",
+        descripcion: "",
+        cruce: "",
+        debito: 852500,
+        credito: 852500,
+        observacion: "",
+      },
+      {
+        cuenta: "51057201",
+        cuentaNombre: "APORTES CAJAS DE COMPESACION FAMILIAR",
+        comprobante: "P 02",
+        fecha: "2026-08-01",
+        nit: "890101999",
+        nombre: "COMFAMILIAR",
+        descripcion: "",
+        cruce: "",
+        debito: 852500,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "51059522",
+        cuentaNombre: "AHORRO INSTITUCIONAL",
+        comprobante: "P 03",
+        fecha: "2026-08-01",
+        nit: "900000001",
+        nombre: "FONDO EMPLEADOS",
+        descripcion: "",
+        cruce: "",
+        debito: 10000000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "11100512",
+        cuentaNombre: "BANCO COLMENA BCSC",
+        comprobante: "G 01",
+        fecha: "2026-08-01",
+        nit: "1",
+        nombre: "BANCO",
+        descripcion: "",
+        cruce: "",
+        debito: 1000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL",
+        comprobante: "G 02",
+        fecha: "2026-08-01",
+        nit: "2",
+        nombre: "CREDICORP",
+        descripcion: "",
+        cruce: "",
+        debito: 2000,
+        credito: 0,
+        observacion: "",
+      },
+    ];
+
+    const detected = getAvailableBankAccounts(movCuentas);
+    const cuentasDetectadas = detected.map((d) => d.cuenta);
+
+    // Debe incluir SOLO activos de tesorería y fondos
+    assert.deepStrictEqual(cuentasDetectadas, ["11100512", "12503511"]);
+
+    // Debe excluir cuentas de pasivo (2370) y gastos (5105)
+    assert.strictEqual(cuentasDetectadas.includes("23701001"), false, "2370 NUNCA debe ser tesorería");
+    assert.strictEqual(cuentasDetectadas.includes("51057201"), false, "5105 NUNCA debe ser tesorería");
+    assert.strictEqual(cuentasDetectadas.includes("51059522"), false, "5105 NUNCA debe ser tesorería");
+  });
+
+  it("debe cuadrar al 100% y señalar que la única diferencia de ajuste son los rendimientos", () => {
+    const extracto: BankExtractItem[] = [
+      { id: "e1", fecha: "2026-08-06", descripcion: "AJUSTE TRASLADO", referencia: "TP 1", debito: 25000000, credito: 0 },
+      { id: "e2", fecha: "2026-08-31", descripcion: "RENDIMIENTOS DEL MES", referencia: "1-1-47311-2", debito: 0, credito: 1959190.59 },
+    ];
+
+    const libros: MovLine[] = [
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL",
+        comprobante: "L 001",
+        fecha: "2026-08-01",
+        nit: "0",
+        nombre: "RENDIMIENTOS JULIO 2026",
+        descripcion: "RENDIMIENTOS JULIO 2026",
+        cruce: "",
+        debito: 2367723.42, // Reflejado en saldo inicial de extracto
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL",
+        comprobante: "G 001",
+        fecha: "2026-08-06",
+        nit: "900",
+        nombre: "PROVEEDOR",
+        descripcion: "AJUSTE TRASLADO",
+        cruce: "",
+        debito: 0,
+        credito: 25000000,
+        observacion: "",
+      },
+    ];
+
+    const saldoInicial = 329354431.03;
+    const res = conciliarBancos(extracto, libros, saldoInicial, saldoInicial);
+
+    assert.strictEqual(res.summary.cuadrado, true, "Debe estar cuadrado 100%");
+    assert.strictEqual(res.summary.soloRendimientos, true, "La única diferencia deben ser los rendimientos");
+    assert.strictEqual(Math.round(res.summary.diferenciaCuadre), 0);
+    assert.strictEqual(Math.round(res.summary.diferenciaExtractoLibros ?? 0), 1959191);
+    assert.strictEqual(res.summary.notasCreditoRendimientos, 1959190.59);
+  });
 });
 
