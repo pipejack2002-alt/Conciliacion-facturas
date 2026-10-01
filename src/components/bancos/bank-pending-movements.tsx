@@ -33,6 +33,8 @@ export const BankPendingMovements = memo(function BankPendingMovements({
   allMovLines = [],
 }: BankPendingMovementsProps) {
   const [modalRow, setModalRow] = useState<BankConciliacionRow | null>(null);
+  const [filtroTipo, setFiltroTipo] = useState<"todos" | "rendimientos" | "abonos" | "cargos" | "transito">("todos");
+
   // Filtrar exclusivamente partidas pendientes de registro en libros o partidas en tránsito
   const pendingRows = useMemo(() => {
     return rows.filter(
@@ -62,6 +64,14 @@ export const BankPendingMovements = memo(function BankPendingMovements({
   const consignacionesTransito = useMemo(() => {
     return pendingRows.filter((r) => r.estado === "partida_en_transito_libros" && r.tipo === "consignacion");
   }, [pendingRows]);
+
+  const displayedRows = useMemo(() => {
+    if (filtroTipo === "rendimientos") return rendimientosPendientes;
+    if (filtroTipo === "abonos") return otrosAbonosPendientes;
+    if (filtroTipo === "cargos") return cargosPendientes;
+    if (filtroTipo === "transito") return [...chequesTransito, ...consignacionesTransito];
+    return pendingRows;
+  }, [filtroTipo, pendingRows, rendimientosPendientes, otrosAbonosPendientes, cargosPendientes, chequesTransito, consignacionesTransito]);
 
   function handleExportPendingExcel() {
     if (pendingRows.length === 0) return;
@@ -183,69 +193,6 @@ export const BankPendingMovements = memo(function BankPendingMovements({
         )}
       </div>
 
-      {/* Franja de Indicadores / Resumen de Partidas Pendientes */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Rendimientos / Abonos por Causar */}
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/40 dark:bg-emerald-950/20 p-3 space-y-1">
-          <div className="flex items-center justify-between text-[11px] font-bold text-emerald-800 dark:text-emerald-400">
-            <span>Abonos por Causar (Notas Crédito)</span>
-            <span className="font-mono">{rendimientosPendientes.length + otrosAbonosPendientes.length}</span>
-          </div>
-          <div className="font-mono text-base font-black text-emerald-900 dark:text-emerald-200">
-            +{formatMoneyExact(summary.notasCreditoNoRegistradas)}
-          </div>
-          <div className="text-[10px] text-ink-muted flex items-center gap-1.5 pt-0.5">
-            <ArrowUpRight className="size-3 text-emerald-600" />
-            <span>Rendimientos: {formatMoneyExact(summary.notasCreditoRendimientos || 0)}</span>
-          </div>
-        </div>
-
-        {/* Cargos / Gastos por Registrar */}
-        <div className="rounded-xl border border-rose-500/30 bg-rose-50/40 dark:bg-rose-950/20 p-3 space-y-1">
-          <div className="flex items-center justify-between text-[11px] font-bold text-rose-800 dark:text-rose-400">
-            <span>Cargos por Registrar (Notas Débito)</span>
-            <span className="font-mono">{cargosPendientes.length}</span>
-          </div>
-          <div className="font-mono text-base font-black text-rose-900 dark:text-rose-200">
-            -{formatMoneyExact(summary.notasDebitoNoRegistradas)}
-          </div>
-          <div className="text-[10px] text-ink-muted flex items-center gap-1.5 pt-0.5">
-            <ArrowDownLeft className="size-3 text-rose-600" />
-            <span>GMF 4×1000 + Comisiones</span>
-          </div>
-        </div>
-
-        {/* Cheques en Tránsito */}
-        <div className="rounded-xl border border-line bg-bg-subtle/50 p-3 space-y-1">
-          <div className="flex items-center justify-between text-[11px] font-bold text-ink">
-            <span>Cheques / Giros en Tránsito</span>
-            <span className="font-mono">{chequesTransito.length}</span>
-          </div>
-          <div className="font-mono text-base font-bold text-ink">
-            +{formatMoneyExact(summary.chequesEnTransito)}
-          </div>
-          <div className="text-[10px] text-ink-muted flex items-center gap-1.5 pt-0.5">
-            <Clock className="size-3 text-ink-muted" />
-            <span>Girados en libros no cobrados</span>
-          </div>
-        </div>
-
-        {/* Consignaciones en Tránsito */}
-        <div className="rounded-xl border border-line bg-bg-subtle/50 p-3 space-y-1">
-          <div className="flex items-center justify-between text-[11px] font-bold text-ink">
-            <span>Consignaciones en Tránsito</span>
-            <span className="font-mono">{consignacionesTransito.length}</span>
-          </div>
-          <div className="font-mono text-base font-bold text-ink">
-            -{formatMoneyExact(summary.consignacionesEnTransito)}
-          </div>
-          <div className="text-[10px] text-ink-muted flex items-center gap-1.5 pt-0.5">
-            <Clock className="size-3 text-ink-muted" />
-            <span>Registradas no acreditadas</span>
-          </div>
-        </div>
-      </div>
-
       {/* Contenido Principal: Tabla Detallada o Mensaje de Cuadre */}
       {pendingRows.length === 0 ? (
         <div className="rounded-xl border border-emerald-300/80 bg-emerald-50/50 dark:bg-emerald-950/30 p-6 text-center">
@@ -258,22 +205,150 @@ export const BankPendingMovements = memo(function BankPendingMovements({
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-line">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-line bg-bg-subtle text-ink-muted font-bold text-[11px] uppercase tracking-wider">
-                <th className="py-2.5 px-3">Fecha</th>
-                <th className="py-2.5 px-3">Origen</th>
-                <th className="py-2.5 px-3">Naturaleza / Concepto</th>
-                <th className="py-2.5 px-3">Descripción en Movimiento</th>
-                <th className="py-2.5 px-3">Referencia</th>
-                <th className="py-2.5 px-3 text-right">Valor Exacto</th>
-                <th className="py-2.5 px-3">Asiento Contable Sugerido (PUC)</th>
-                <th className="py-2.5 px-3 text-center">Acción</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line/60">
-              {pendingRows.map((r) => {
+        <div className="space-y-3">
+          {/* Barra de Filtros por Tipo de Partida y Cifras Resumen Compactas */}
+          <div className="flex items-center justify-between flex-wrap gap-2.5">
+            {/* Pestañas de Filtro */}
+            <div className="inline-flex rounded-xl bg-bg-subtle p-0.5 border border-line text-xs font-bold flex-wrap gap-0.5">
+              <button
+                type="button"
+                onClick={() => setFiltroTipo("todos")}
+                className={cn(
+                  "px-3 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5",
+                  filtroTipo === "todos"
+                    ? "bg-bg-surface text-ink shadow-2xs border border-line"
+                    : "text-ink-muted hover:text-ink"
+                )}
+              >
+                <span>Todas</span>
+                <span className="font-mono text-[10px] rounded-full px-1.5 py-0.2 bg-bg-subtle border border-line">
+                  {pendingRows.length}
+                </span>
+              </button>
+
+              {rendimientosPendientes.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFiltroTipo("rendimientos")}
+                  className={cn(
+                    "px-3 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5",
+                    filtroTipo === "rendimientos"
+                      ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 shadow-2xs border border-emerald-300 dark:border-emerald-700"
+                      : "text-ink-muted hover:text-emerald-700 dark:hover:text-emerald-300"
+                  )}
+                >
+                  <Sparkles className="size-3 text-emerald-600" />
+                  <span>Rendimientos por Causar</span>
+                  <span className="font-mono text-[10px] rounded-full px-1.5 py-0.2 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200">
+                    {rendimientosPendientes.length}
+                  </span>
+                </button>
+              )}
+
+              {otrosAbonosPendientes.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFiltroTipo("abonos")}
+                  className={cn(
+                    "px-3 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5",
+                    filtroTipo === "abonos"
+                      ? "bg-teal-soft/80 text-teal-deep dark:text-teal shadow-2xs border border-teal/40"
+                      : "text-ink-muted hover:text-teal"
+                  )}
+                >
+                  <ArrowUpRight className="size-3 text-teal" />
+                  <span>Otros Abonos</span>
+                  <span className="font-mono text-[10px] rounded-full px-1.5 py-0.2 bg-teal-soft text-teal-deep dark:text-teal">
+                    {otrosAbonosPendientes.length}
+                  </span>
+                </button>
+              )}
+
+              {cargosPendientes.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFiltroTipo("cargos")}
+                  className={cn(
+                    "px-3 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5",
+                    filtroTipo === "cargos"
+                      ? "bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 shadow-2xs border border-rose-300 dark:border-rose-700"
+                      : "text-ink-muted hover:text-rose-700 dark:hover:text-rose-300"
+                  )}
+                >
+                  <ArrowDownLeft className="size-3 text-rose-600" />
+                  <span>Cargos / GMF / Comisiones</span>
+                  <span className="font-mono text-[10px] rounded-full px-1.5 py-0.2 bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200">
+                    {cargosPendientes.length}
+                  </span>
+                </button>
+              )}
+
+              {(chequesTransito.length > 0 || consignacionesTransito.length > 0) && (
+                <button
+                  type="button"
+                  onClick={() => setFiltroTipo("transito")}
+                  className={cn(
+                    "px-3 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5",
+                    filtroTipo === "transito"
+                      ? "bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 shadow-2xs border border-blue-300 dark:border-blue-700"
+                      : "text-ink-muted hover:text-blue-700 dark:hover:text-blue-300"
+                  )}
+                >
+                  <Clock className="size-3 text-blue-600" />
+                  <span>En Tránsito</span>
+                  <span className="font-mono text-[10px] rounded-full px-1.5 py-0.2 bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200">
+                    {chequesTransito.length + consignacionesTransito.length}
+                  </span>
+                </button>
+              )}
+            </div>
+
+            {/* Badges de Cifras Resumen Compactas */}
+            <div className="flex items-center gap-2 text-xs flex-wrap font-mono">
+              {summary.notasCreditoNoRegistradas > 0 && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40 font-bold">
+                  <span className="text-[10px] font-sans font-semibold">Abonos por Causar:</span>
+                  +{formatMoneyExact(summary.notasCreditoNoRegistradas)}
+                </span>
+              )}
+              {summary.notasDebitoNoRegistradas > 0 && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300 border border-rose-300/40 font-bold">
+                  <span className="text-[10px] font-sans font-semibold">Cargos por Registrar:</span>
+                  -{formatMoneyExact(summary.notasDebitoNoRegistradas)}
+                </span>
+              )}
+              {(summary.chequesEnTransito > 0 || summary.consignacionesEnTransito > 0) && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-bg-subtle text-ink border border-line font-bold">
+                  <span className="text-[10px] font-sans font-semibold">En Tránsito:</span>
+                  +{formatMoneyExact(summary.chequesEnTransito)} / -{formatMoneyExact(summary.consignacionesEnTransito)}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-line">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-line bg-bg-subtle text-ink-muted font-bold text-[11px] uppercase tracking-wider">
+                  <th className="py-2.5 px-3">Fecha</th>
+                  <th className="py-2.5 px-3">Origen</th>
+                  <th className="py-2.5 px-3">Naturaleza / Concepto</th>
+                  <th className="py-2.5 px-3">Descripción en Movimiento</th>
+                  <th className="py-2.5 px-3">Referencia</th>
+                  <th className="py-2.5 px-3 text-right">Valor Exacto</th>
+                  <th className="py-2.5 px-3">Asiento Contable Sugerido (PUC)</th>
+                  <th className="py-2.5 px-3 text-center">Acción</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line/60">
+                {displayedRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-6 text-center text-xs text-ink-muted">
+                      No hay partidas pendientes en la categoría seleccionada.
+                    </td>
+                  </tr>
+                ) : (
+                  displayedRows.map((r) => {
                 const isNotaCredito = r.estado === "nota_credito_banco";
                 const isNotaDebito = r.estado === "nota_debito_banco";
                 const isTransito = r.estado === "partida_en_transito_libros";
@@ -453,11 +528,12 @@ export const BankPendingMovements = memo(function BankPendingMovements({
                     </td>
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
         </div>
-      )}
+      </div>
+    )}
 
       {/* Modal de Asiento Contable */}
       {modalRow && (

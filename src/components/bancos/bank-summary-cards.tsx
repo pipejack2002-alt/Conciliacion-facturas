@@ -1,5 +1,15 @@
-import { memo } from "react";
-import { CheckCircle2, AlertCircle, ArrowUpRight, ArrowDownLeft, Scale } from "lucide-react";
+import { memo, useState } from "react";
+import {
+  CheckCircle2,
+  AlertCircle,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Scale,
+  Sparkles,
+  ArrowRightLeft,
+  BookOpen,
+  Building2,
+} from "lucide-react";
 import { formatMoneyExact } from "@/lib/format";
 import type { BankConciliacionSummary } from "@/lib/conciliar-bancos";
 import { cn } from "@/lib/cn";
@@ -21,6 +31,8 @@ export const BankSummaryCards = memo(function BankSummaryCards({
   onSaldoChange,
   onSaldoBlur,
 }: BankSummaryCardsProps) {
+  const [metodoFormato, setMetodoFormato] = useState<"libros_a_banco" | "banco_a_libros" | "saldos_ajustados">("libros_a_banco");
+
   const isSinArchivos = extractoItemsCount === 0 && librosEfectivosCount === 0;
   const isSoloExtracto = extractoItemsCount > 0 && librosEfectivosCount === 0;
   const isSoloLibros = extractoItemsCount === 0 && librosEfectivosCount > 0;
@@ -28,6 +40,22 @@ export const BankSummaryCards = memo(function BankSummaryCards({
 
   const totalPartidasSuman = (summary.notasCreditoNoRegistradas || 0) + (summary.chequesEnTransito || 0);
   const totalPartidasRestan = (summary.notasDebitoNoRegistradas || 0) + (summary.consignacionesEnTransito || 0);
+
+  // Cálculos para método "De Banco a Libros"
+  const saldoBancoAjustadoALibros = summary.saldoExtracto + totalPartidasRestan - totalPartidasSuman;
+  const difBancoALibros = Math.abs(saldoBancoAjustadoALibros - summary.saldoLibros);
+
+  // Cálculos para método "Saldos Ajustados"
+  const saldoLibrosAjustado = summary.saldoLibros + (summary.notasCreditoNoRegistradas || 0) - (summary.notasDebitoNoRegistradas || 0);
+  const saldoBancoAjustado = summary.saldoExtracto + (summary.consignacionesEnTransito || 0) - (summary.chequesEnTransito || 0);
+  const difSaldosAjustados = Math.abs(saldoLibrosAjustado - saldoBancoAjustado);
+
+  const isSoloRend =
+    summary.soloRendimientos ||
+    ((summary.notasCreditoRendimientos || 0) > 0 &&
+      (summary.notasDebitoNoRegistradas || 0) === 0 &&
+      (summary.chequesEnTransito || 0) === 0 &&
+      (summary.consignacionesEnTransito || 0) === 0);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
@@ -79,14 +107,14 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 <CheckCircle2 className="size-3.5" />
                 {(summary.consignacionesEnTransito === 0 && summary.chequesEnTransito === 0 && summary.notasDebitoNoRegistradas === 0 && summary.notasCreditoNoRegistradas === 0 && Math.abs(summary.saldoLibros - summary.saldoExtracto) < 0.05)
                   ? "Cuadrado 100% (Sin Pendientes)"
-                  : (summary.soloRendimientos || ((summary.notasCreditoRendimientos || 0) > 0 && (summary.notasDebitoNoRegistradas || 0) === 0 && (summary.chequesEnTransito || 0) === 0 && (summary.consignacionesEnTransito || 0) === 0))
-                  ? "Pendiente Causar Rendimientos"
+                  : isSoloRend
+                  ? "Conciliado (Pendiente Causación)"
                   : "Conciliado con Partidas Pendientes"}
               </span>
             ) : (
               <span className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1 text-xs font-black text-white shadow-xs">
                 <AlertCircle className="size-3.5" />
-                Con Diferencia
+                Con Descuadre Pendiente
               </span>
             )}
           </div>
@@ -112,15 +140,34 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 ? "PENDIENTE: CARGAR EXTRACTO"
                 : summary.cuadrado
                 ? (summary.consignacionesEnTransito === 0 && summary.chequesEnTransito === 0 && summary.notasDebitoNoRegistradas === 0 && summary.notasCreditoNoRegistradas === 0 && Math.abs(summary.saldoLibros - summary.saldoExtracto) < 0.05)
-                  ? "CUADRADO PERFECTO (SIN PARTIDAS PENDIENTES)"
-                  : (summary.soloRendimientos || ((summary.notasCreditoRendimientos || 0) > 0 && (summary.notasDebitoNoRegistradas || 0) === 0 && (summary.chequesEnTransito || 0) === 0 && (summary.consignacionesEnTransito || 0) === 0))
-                  ? `DIFERENCIA: ${formatMoneyExact(summary.notasCreditoRendimientos || summary.diferenciaExtractoLibros || 0)} (RENDIMIENTOS DEL PERIODO)`
-                  : "CONCILIADO CON PARTIDAS PENDIENTES DE AJUSTE"
-                : `DIFERENCIA NETA PENDIENTE: ${formatMoneyExact(summary.diferenciaCuadre)}`}
+                  ? "CUADRADO PERFECTO AL 100%"
+                  : isSoloRend
+                  ? "CONCILIACIÓN CUADRADA AL 100%"
+                  : "CONCILIACIÓN CUADRADA"
+                : `DESCUADRE POR AJUSTAR: ${formatMoneyExact(summary.diferenciaCuadre)}`}
             </div>
+
+            {/* Partida destacada cuando la única variación son los rendimientos devengados */}
+            {summary.cuadrado && isSoloRend && (
+              <div className="mt-2.5 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 space-y-1">
+                <div className="text-[11px] font-extrabold text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Sparkles className="size-3.5 text-emerald-600" />
+                    Rendimientos del Periodo por Causar:
+                  </span>
+                  <span className="font-mono font-black text-sm">
+                    +{formatMoneyExact(summary.notasCreditoRendimientos || summary.diferenciaExtractoLibros || 0)}
+                  </span>
+                </div>
+                <div className="text-[10px] text-emerald-900/80 dark:text-emerald-300/80 leading-tight">
+                  Abonados en el extracto bancario. Se causan en libros contables al corte o en el mes siguiente.
+                </div>
+              </div>
+            )}
+
             <p
               className={cn(
-                "mt-1.5 text-xs font-medium leading-relaxed",
+                "mt-2 text-xs font-medium leading-relaxed",
                 isSinArchivos
                   ? "text-ink-muted"
                   : isSoloExtracto || isSoloLibros
@@ -139,9 +186,9 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 : summary.cuadrado
                 ? (summary.consignacionesEnTransito === 0 && summary.chequesEnTransito === 0 && summary.notasDebitoNoRegistradas === 0 && summary.notasCreditoNoRegistradas === 0 && Math.abs(summary.saldoLibros - summary.saldoExtracto) < 0.05)
                   ? "El saldo bancario coincide con el saldo de libros contables al 100% sin partidas pendientes ni ajustes requeridos."
-                  : (summary.soloRendimientos || ((summary.notasCreditoRendimientos || 0) > 0 && (summary.notasDebitoNoRegistradas || 0) === 0 && (summary.chequesEnTransito || 0) === 0 && (summary.consignacionesEnTransito || 0) === 0))
-                  ? `Diferencia de ${formatMoneyExact(summary.notasCreditoRendimientos || summary.diferenciaExtractoLibros || 0)} que corresponde a los rendimientos del periodo que están en el extracto y aún no han sido registrados en libros contables (se causan al corte/siguiente mes).`
-                  : "El saldo bancario ajustado cuadra con libros contables a través de las partidas conciliatorias identificadas (rendimientos, notas bancarias y partidas en tránsito)."
+                  : isSoloRend
+                  ? `El saldo contable y el extracto bancario concilian con exactitud matemática ($0,00 de diferencia neta). La variación de ${formatMoneyExact(summary.notasCreditoRendimientos || summary.diferenciaExtractoLibros || 0)} corresponde a los rendimientos ganados en el extracto que deben causarse en libros contables.`
+                  : "El saldo bancario ajustado concilia con libros contables a través de las partidas conciliatorias identificadas (rendimientos, notas bancarias y partidas en tránsito)."
                 : "Existen partidas pendientes por identificar, cheques en tránsito o notas bancarias pendientes de registro contable."}
             </p>
           </div>
@@ -165,9 +212,9 @@ export const BankSummaryCards = memo(function BankSummaryCards({
         </div>
       </div>
 
-      {/* Panel B: Formato Oficial de Conciliación Bancaria (Norma Técnica NIIF / DIAN) */}
+      {/* Panel B: Cédula de Conciliación Bancaria con Enfoque Dual (Libros ↔ Extracto) */}
       <div className="lg:col-span-8 rounded-2xl border border-line bg-bg-surface p-5 shadow-xs space-y-3.5">
-        {/* Cabecera del Formato Oficial */}
+        {/* Cabecera del Formato Oficial y Selector de Método */}
         <div className="flex items-center justify-between flex-wrap gap-2 pb-2.5 border-b border-line">
           <div className="flex items-center gap-2">
             <span className="rounded-lg bg-teal-soft/80 p-1.5 text-teal">
@@ -175,195 +222,476 @@ export const BankSummaryCards = memo(function BankSummaryCards({
             </span>
             <div>
               <h3 className="font-bold text-sm text-ink flex items-center gap-1.5">
-                Formato de Conciliación Bancaria (Norma Técnica NIIF / DIAN)
+                Cédula Oficial de Conciliación Bancaria (PUC / NIIF Colombia)
               </h3>
               <p className="text-[11px] text-ink-muted">
-                Método de Saldos Ajustados · Libros Contables hacia Extracto Bancario
+                Confrontación técnica y matemática entre la contabilidad y el extracto financiero
               </p>
             </div>
           </div>
 
-          {/* Ajuste manual de saldo inicial del extracto */}
-          <div className="flex items-center gap-1.5 rounded-xl border border-line bg-bg-subtle/70 px-3 py-1.5 shadow-2xs">
-            <span className="text-ink-muted text-xs font-semibold whitespace-nowrap">Saldo Inicial Extracto:</span>
-            <span className="font-mono text-xs font-bold text-teal">$</span>
-            <input
-              type="text"
-              value={saldoInputStr}
-              onChange={(e) => onSaldoChange(e.target.value)}
-              onBlur={onSaldoBlur}
-              placeholder="0,00"
-              className="w-36 rounded-md bg-transparent px-1 font-mono text-right text-xs font-bold text-ink focus:outline-teal focus:bg-bg-surface transition"
-              title="Ingresa el saldo inicial del extracto bancario con separadores de miles y decimales"
-            />
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Pestañas de Método: Libros a Banco / Banco a Libros / Saldos Ajustados */}
+            <div className="inline-flex rounded-xl bg-bg-subtle p-0.5 border border-line text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setMetodoFormato("libros_a_banco")}
+                className={cn(
+                  "px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1",
+                  metodoFormato === "libros_a_banco"
+                    ? "bg-bg-surface text-teal shadow-2xs border border-line/60"
+                    : "text-ink-muted hover:text-ink"
+                )}
+                title="Partir del saldo en libros contables hasta llegar al extracto"
+              >
+                <BookOpen className="size-3" />
+                <span>Libros → Banco</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMetodoFormato("banco_a_libros")}
+                className={cn(
+                  "px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1",
+                  metodoFormato === "banco_a_libros"
+                    ? "bg-bg-surface text-teal shadow-2xs border border-line/60"
+                    : "text-ink-muted hover:text-ink"
+                )}
+                title="Partir del saldo del extracto bancario hasta llegar a libros contables"
+              >
+                <Building2 className="size-3" />
+                <span>Banco → Libros</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMetodoFormato("saldos_ajustados")}
+                className={cn(
+                  "px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1",
+                  metodoFormato === "saldos_ajustados"
+                    ? "bg-bg-surface text-teal shadow-2xs border border-line/60"
+                    : "text-ink-muted hover:text-ink"
+                )}
+                title="Confrontar ambos saldos ajustados simultáneamente"
+              >
+                <ArrowRightLeft className="size-3" />
+                <span>Saldos Ajustados</span>
+              </button>
+            </div>
+
+            {/* Saldo Inicial Extracto */}
+            <div className="flex items-center gap-1.5 rounded-xl border border-line bg-bg-subtle/70 px-3 py-1 shadow-2xs">
+              <span className="text-ink-muted text-[11px] font-semibold whitespace-nowrap">Saldo Inicial Extracto:</span>
+              <span className="font-mono text-xs font-bold text-teal">$</span>
+              <input
+                type="text"
+                value={saldoInputStr}
+                onChange={(e) => onSaldoChange(e.target.value)}
+                onBlur={onSaldoBlur}
+                placeholder="0,00"
+                className="w-32 rounded bg-transparent px-1 font-mono text-right text-xs font-bold text-ink focus:outline-teal focus:bg-bg-surface transition"
+                title="Saldo inicial según extracto bancario"
+              />
+            </div>
           </div>
         </div>
 
-        {/* Estructura Aritmética Vertical Formal de Conciliación */}
-        <div className="space-y-2 text-xs">
-          {/* 1. Saldo en Libros Contables */}
-          <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-bg-subtle/70 border border-line font-medium text-ink">
-            <span className="font-bold">1. Saldo Final según Libros Contables al Cierre:</span>
-            <span className="font-mono font-black text-sm text-ink">
-              ${formatMoneyExact(summary.saldoLibros)}
-            </span>
+        {/* MÉTODO 1: LIBROS HACIA BANCO */}
+        {metodoFormato === "libros_a_banco" && (
+          <div className="space-y-2 text-xs">
+            {/* 1. Saldo en Libros Contables */}
+            <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-bg-subtle/70 border border-line font-medium text-ink">
+              <span className="font-bold">1. Saldo Final según Libro Auxiliar de Bancos (al corte):</span>
+              <span className="font-mono font-black text-sm text-ink">
+                ${formatMoneyExact(summary.saldoLibros)}
+              </span>
+            </div>
+
+            {/* 2. Grupo Partidas que Suman (+) */}
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/30 dark:bg-emerald-950/15 p-2.5 space-y-1.5">
+              <div className="flex items-center justify-between text-emerald-800 dark:text-emerald-400 font-bold text-[11px] uppercase tracking-wider">
+                <span className="flex items-center gap-1">
+                  <ArrowUpRight className="size-3.5 text-emerald-600" />
+                  (+) MÁS: Partidas que Aumentan el Saldo en Libros (Abonos no causados / Giros en tránsito)
+                </span>
+                <span className="font-mono text-xs font-black">
+                  +{formatMoneyExact(totalPartidasSuman)}
+                </span>
+              </div>
+
+              <div className="space-y-1 pl-4 text-[11px]">
+                <div className="flex items-center justify-between text-ink py-0.5 border-b border-emerald-500/10">
+                  <div>
+                    <span className="font-medium">• Rendimientos Financieros del Periodo (Abonados en Extracto):</span>
+                    <span className="block text-[10px] text-ink-muted">Intereses ganados pendientes de causar en libros contables</span>
+                  </div>
+                  <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                    +{formatMoneyExact(summary.notasCreditoRendimientos || 0)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-ink py-0.5 border-b border-emerald-500/10">
+                  <div>
+                    <span className="font-medium">• Otros Abonos y Transferencias Bancarias pendientes de registrar:</span>
+                    <span className="block text-[10px] text-ink-muted">Consignaciones directas de clientes no identificadas en libros</span>
+                  </div>
+                  <span className="font-mono font-bold text-ink whitespace-nowrap">
+                    +{formatMoneyExact(summary.notasCreditoOperativas || 0)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-ink py-0.5">
+                  <div>
+                    <span className="font-medium">• Cheques y Transferencias en Tránsito (Girados en Libros no Cobrados):</span>
+                    <span className="block text-[10px] text-ink-muted">Pagos registrados en libros pero aún no debitados por el banco</span>
+                  </div>
+                  <span className="font-mono font-bold text-ink whitespace-nowrap">
+                    +{formatMoneyExact(summary.chequesEnTransito || 0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Grupo Partidas que Restan (-) */}
+            <div className="rounded-xl border border-rose-500/30 bg-rose-50/30 dark:bg-rose-950/15 p-2.5 space-y-1.5">
+              <div className="flex items-center justify-between text-rose-800 dark:text-rose-400 font-bold text-[11px] uppercase tracking-wider">
+                <span className="flex items-center gap-1">
+                  <ArrowDownLeft className="size-3.5 text-rose-600" />
+                  (-) MENOS: Partidas que Disminuyen el Saldo en Libros (Cargos bancarios no registrados / En tránsito)
+                </span>
+                <span className="font-mono text-xs font-black">
+                  -{formatMoneyExact(totalPartidasRestan)}
+                </span>
+              </div>
+
+              <div className="space-y-1 pl-4 text-[11px]">
+                <div className="flex items-center justify-between text-ink py-0.5 border-b border-rose-500/10">
+                  <div>
+                    <span className="font-medium">• Gravamen a los Movimientos Financieros (GMF 4×1000):</span>
+                    <span className="block text-[10px] text-ink-muted">Impuesto bancario debitado por el banco pendiente de registrar (PUC 511595)</span>
+                  </div>
+                  <span className="font-mono font-bold text-rose-700 dark:text-rose-400 whitespace-nowrap">
+                    -{formatMoneyExact(summary.notasDebitoGmf || 0)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-ink py-0.5 border-b border-rose-500/10">
+                  <div>
+                    <span className="font-medium">• Comisiones Bancarias y Gastos Financieros con IVA:</span>
+                    <span className="block text-[10px] text-ink-muted">Cuotas de manejo, transferencias y comisiones debitadas (PUC 530515)</span>
+                  </div>
+                  <span className="font-mono font-bold text-rose-700 dark:text-rose-400 whitespace-nowrap">
+                    -{formatMoneyExact(summary.notasDebitoComisiones || 0)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-ink py-0.5 border-b border-rose-500/10">
+                  <div>
+                    <span className="font-medium">• Otras Notas Débito Bancarias no Contabilizadas:</span>
+                    <span className="block text-[10px] text-ink-muted">Pagos automáticos o débitos bancarios pendientes de causar</span>
+                  </div>
+                  <span className="font-mono font-bold text-ink whitespace-nowrap">
+                    -{formatMoneyExact(summary.notasDebitoOperativas || 0)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-ink py-0.5">
+                  <div>
+                    <span className="font-medium">• Consignaciones en Tránsito (Registradas en Libros no Acreditadas en Banco):</span>
+                    <span className="block text-[10px] text-ink-muted">Depósitos contabilizados aún no compensados en el extracto</span>
+                  </div>
+                  <span className="font-mono font-bold text-ink whitespace-nowrap">
+                    -{formatMoneyExact(summary.consignacionesEnTransito || 0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Confrontación Final y Cuadre */}
+            <div className="pt-1.5 space-y-1.5">
+              <div className="flex items-center justify-between py-2 px-3 rounded-xl bg-teal-soft/30 border border-teal/40 font-bold text-ink">
+                <span className="text-teal-deep dark:text-teal font-extrabold">
+                  (=) Saldo Bancario Conciliado (Libros Ajustados):
+                </span>
+                <span className="font-mono font-black text-sm text-teal-deep dark:text-teal">
+                  ${formatMoneyExact(summary.saldoConciliado)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between py-1.5 px-3 rounded-lg border border-line text-ink font-semibold">
+                <span className="text-ink-muted">
+                  (=) Saldo Final según Extracto Bancario al Corte:
+                </span>
+                <span className="font-mono font-bold text-ink">
+                  ${formatMoneyExact(summary.saldoExtracto)}
+                </span>
+              </div>
+
+              {/* Banner de Diferencia Neta */}
+              <div
+                className={cn(
+                  "flex items-center justify-between py-2 px-3 rounded-xl border text-xs font-bold transition",
+                  summary.cuadrado
+                    ? "border-emerald-500/60 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200"
+                    : "border-amber-500/60 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200"
+                )}
+              >
+                <div className="flex items-center gap-1.5">
+                  {summary.cuadrado ? (
+                    <>
+                      <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+                      <span>
+                        DIFERENCIA NETA DE CONCILIACIÓN: CUADRADA AL 100%
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="size-4 text-amber-600 dark:text-amber-400" />
+                      <span>DIFERENCIA NETA DE CONCILIACIÓN PENDIENTE</span>
+                    </>
+                  )}
+                </div>
+                <span className="font-mono font-black text-sm">
+                  ${formatMoneyExact(summary.diferenciaCuadre)}
+                </span>
+              </div>
+            </div>
           </div>
+        )}
 
-          {/* 2. Grupo Partidas que Suman (+) */}
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/30 dark:bg-emerald-950/15 p-2.5 space-y-1.5">
-            <div className="flex items-center justify-between text-emerald-800 dark:text-emerald-400 font-bold text-[11px] uppercase tracking-wider">
-              <span className="flex items-center gap-1">
-                <ArrowUpRight className="size-3.5 text-emerald-600" />
-                (+) MÁS: Partidas que Aumentan el Saldo en Libros (Abonos no causados / Giros en tránsito)
-              </span>
-              <span className="font-mono text-xs font-black">
-                +{formatMoneyExact(totalPartidasSuman)}
-              </span>
-            </div>
-
-            <div className="space-y-1 pl-4 text-[11px]">
-              <div className="flex items-center justify-between text-ink py-0.5 border-b border-emerald-500/10">
-                <div>
-                  <span className="font-medium">• Rendimientos Financieros del Periodo (Notas Crédito Banco):</span>
-                  <span className="block text-[10px] text-ink-muted">Intereses abonados por el banco pendientes de causar en libros</span>
-                </div>
-                <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
-                  +{formatMoneyExact(summary.notasCreditoRendimientos || 0)}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between text-ink py-0.5 border-b border-emerald-500/10">
-                <div>
-                  <span className="font-medium">• Otros Abonos y Transferencias Bancarias pendientes de registrar:</span>
-                  <span className="block text-[10px] text-ink-muted">Consignaciones directas de clientes no identificadas en libros</span>
-                </div>
-                <span className="font-mono font-bold text-ink whitespace-nowrap">
-                  +{formatMoneyExact(summary.notasCreditoOperativas || 0)}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between text-ink py-0.5">
-                <div>
-                  <span className="font-medium">• Cheques y Transferencias en Tránsito (Girados y no Cobrados):</span>
-                  <span className="block text-[10px] text-ink-muted">Pagos registrados en libros pero aún no debitados por el banco</span>
-                </div>
-                <span className="font-mono font-bold text-ink whitespace-nowrap">
-                  +{formatMoneyExact(summary.chequesEnTransito || 0)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* 3. Grupo Partidas que Restan (-) */}
-          <div className="rounded-xl border border-rose-500/30 bg-rose-50/30 dark:bg-rose-950/15 p-2.5 space-y-1.5">
-            <div className="flex items-center justify-between text-rose-800 dark:text-rose-400 font-bold text-[11px] uppercase tracking-wider">
-              <span className="flex items-center gap-1">
-                <ArrowDownLeft className="size-3.5 text-rose-600" />
-                (-) MENOS: Partidas que Disminuyen el Saldo en Libros (Cargos bancarios no registrados / En tránsito)
-              </span>
-              <span className="font-mono text-xs font-black">
-                -{formatMoneyExact(totalPartidasRestan)}
-              </span>
-            </div>
-
-            <div className="space-y-1 pl-4 text-[11px]">
-              <div className="flex items-center justify-between text-ink py-0.5 border-b border-rose-500/10">
-                <div>
-                  <span className="font-medium">• Gravamen a los Movimientos Financieros (GMF 4×1000):</span>
-                  <span className="block text-[10px] text-ink-muted">Impuesto bancario debitado por el banco pendiente de registrar</span>
-                </div>
-                <span className="font-mono font-bold text-rose-700 dark:text-rose-400 whitespace-nowrap">
-                  -{formatMoneyExact(summary.notasDebitoGmf || 0)}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between text-ink py-0.5 border-b border-rose-500/10">
-                <div>
-                  <span className="font-medium">• Comisiones Bancarias y Gastos Financieros con IVA:</span>
-                  <span className="block text-[10px] text-ink-muted">Cuotas de manejo, transferencias y comisiones debitadas</span>
-                </div>
-                <span className="font-mono font-bold text-rose-700 dark:text-rose-400 whitespace-nowrap">
-                  -{formatMoneyExact(summary.notasDebitoComisiones || 0)}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between text-ink py-0.5 border-b border-rose-500/10">
-                <div>
-                  <span className="font-medium">• Otras Notas Débito Bancarias no Contabilizadas:</span>
-                  <span className="block text-[10px] text-ink-muted">Pagos automáticos o débitos bancarios pendientes de causar</span>
-                </div>
-                <span className="font-mono font-bold text-ink whitespace-nowrap">
-                  -{formatMoneyExact(summary.notasDebitoOperativas || 0)}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between text-ink py-0.5">
-                <div>
-                  <span className="font-medium">• Consignaciones en Tránsito (Registradas y no Acreditadas):</span>
-                  <span className="block text-[10px] text-ink-muted">Depósitos registrados en libros aún no abonados en el extracto</span>
-                </div>
-                <span className="font-mono font-bold text-ink whitespace-nowrap">
-                  -{formatMoneyExact(summary.consignacionesEnTransito || 0)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* 4. Confrontación Final y Cuadre */}
-          <div className="pt-1.5 space-y-1.5">
-            <div className="flex items-center justify-between py-2 px-3 rounded-xl bg-teal-soft/30 border border-teal/40 font-bold text-ink">
-              <span className="text-teal-deep dark:text-teal font-extrabold">
-                (=) Saldo Bancario Conciliado (Libros Ajustados):
-              </span>
-              <span className="font-mono font-black text-sm text-teal-deep dark:text-teal">
-                ${formatMoneyExact(summary.saldoConciliado)}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between py-1.5 px-3 rounded-lg border border-line text-ink font-semibold">
-              <span className="text-ink-muted">
-                (=) Saldo Final según Extracto Bancario al Corte:
-              </span>
-              <span className="font-mono font-bold text-ink">
+        {/* MÉTODO 2: BANCO HACIA LIBROS ("Y al contrario...") */}
+        {metodoFormato === "banco_a_libros" && (
+          <div className="space-y-2 text-xs">
+            {/* 1. Saldo Final en Extracto */}
+            <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-bg-subtle/70 border border-line font-medium text-ink">
+              <span className="font-bold">1. Saldo Final según Extracto Bancario al Corte:</span>
+              <span className="font-mono font-black text-sm text-ink">
                 ${formatMoneyExact(summary.saldoExtracto)}
               </span>
             </div>
 
-            {/* Banner de Diferencia Neta */}
+            {/* 2. (-) Partidas de Abono que Faltan en Libros (Rendimientos / Abonos) */}
+            <div className="rounded-xl border border-rose-500/30 bg-rose-50/30 dark:bg-rose-950/15 p-2.5 space-y-1.5">
+              <div className="flex items-center justify-between text-rose-800 dark:text-rose-400 font-bold text-[11px] uppercase tracking-wider">
+                <span className="flex items-center gap-1">
+                  <ArrowDownLeft className="size-3.5 text-rose-600" />
+                  (-) MENOS: Partidas Acreditadas en Extracto y no Causadas en Libros
+                </span>
+                <span className="font-mono text-xs font-black">
+                  -{formatMoneyExact(totalPartidasSuman)}
+                </span>
+              </div>
+
+              <div className="space-y-1 pl-4 text-[11px]">
+                <div className="flex items-center justify-between text-ink py-0.5 border-b border-rose-500/10">
+                  <div>
+                    <span className="font-medium">• Rendimientos Financieros del Periodo en Extracto:</span>
+                    <span className="block text-[10px] text-ink-muted">Abonados por el banco pendientes de causar en contabilidad</span>
+                  </div>
+                  <span className="font-mono font-bold text-rose-700 dark:text-rose-400 whitespace-nowrap">
+                    -{formatMoneyExact(summary.notasCreditoRendimientos || 0)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-ink py-0.5 border-b border-rose-500/10">
+                  <div>
+                    <span className="font-medium">• Otros Abonos Bancarios pendientes de contabilizar:</span>
+                    <span className="block text-[10px] text-ink-muted">Abonos directos pendientes de identificación</span>
+                  </div>
+                  <span className="font-mono font-bold text-ink whitespace-nowrap">
+                    -{formatMoneyExact(summary.notasCreditoOperativas || 0)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-ink py-0.5">
+                  <div>
+                    <span className="font-medium">• Cheques y Giros en Tránsito (Girados y no Cobrados):</span>
+                    <span className="block text-[10px] text-ink-muted">Ya deducidos en libros, pendientes de débito en banco</span>
+                  </div>
+                  <span className="font-mono font-bold text-ink whitespace-nowrap">
+                    -{formatMoneyExact(summary.chequesEnTransito || 0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. (+) Partidas de Débito que Faltan en Libros (GMF / Comisiones) */}
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/30 dark:bg-emerald-950/15 p-2.5 space-y-1.5">
+              <div className="flex items-center justify-between text-emerald-800 dark:text-emerald-400 font-bold text-[11px] uppercase tracking-wider">
+                <span className="flex items-center gap-1">
+                  <ArrowUpRight className="size-3.5 text-emerald-600" />
+                  (+) MÁS: Partidas Debitadas en Extracto y no Causadas en Libros
+                </span>
+                <span className="font-mono text-xs font-black">
+                  +{formatMoneyExact(totalPartidasRestan)}
+                </span>
+              </div>
+
+              <div className="space-y-1 pl-4 text-[11px]">
+                <div className="flex items-center justify-between text-ink py-0.5 border-b border-emerald-500/10">
+                  <div>
+                    <span className="font-medium">• Gravamen a los Movimientos Financieros (GMF 4×1000):</span>
+                    <span className="block text-[10px] text-ink-muted">Cargado en banco, pendiente de asiento en libros</span>
+                  </div>
+                  <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                    +{formatMoneyExact(summary.notasDebitoGmf || 0)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-ink py-0.5 border-b border-emerald-500/10">
+                  <div>
+                    <span className="font-medium">• Comisiones y Gastos Bancarios:</span>
+                    <span className="block text-[10px] text-ink-muted">Cargados en extracto, pendientes de causar</span>
+                  </div>
+                  <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                    +{formatMoneyExact(summary.notasDebitoComisiones || 0)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-ink py-0.5">
+                  <div>
+                    <span className="font-medium">• Consignaciones en Tránsito:</span>
+                    <span className="block text-[10px] text-ink-muted">Acreditadas en libros, pendientes de cobro por banco</span>
+                  </div>
+                  <span className="font-mono font-bold text-ink whitespace-nowrap">
+                    +{formatMoneyExact(summary.consignacionesEnTransito || 0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Confrontación Final contra Libros */}
+            <div className="pt-1.5 space-y-1.5">
+              <div className="flex items-center justify-between py-2 px-3 rounded-xl bg-teal-soft/30 border border-teal/40 font-bold text-ink">
+                <span className="text-teal-deep dark:text-teal font-extrabold">
+                  (=) Saldo Bancario Ajustado al Libro Contable:
+                </span>
+                <span className="font-mono font-black text-sm text-teal-deep dark:text-teal">
+                  ${formatMoneyExact(saldoBancoAjustadoALibros)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between py-1.5 px-3 rounded-lg border border-line text-ink font-semibold">
+                <span className="text-ink-muted">
+                  (=) Saldo Final según Libro Auxiliar de Bancos al Cierre:
+                </span>
+                <span className="font-mono font-bold text-ink">
+                  ${formatMoneyExact(summary.saldoLibros)}
+                </span>
+              </div>
+
+              <div
+                className={cn(
+                  "flex items-center justify-between py-2 px-3 rounded-xl border text-xs font-bold transition",
+                  difBancoALibros < 0.05
+                    ? "border-emerald-500/60 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200"
+                    : "border-amber-500/60 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200"
+                )}
+              >
+                <div className="flex items-center gap-1.5">
+                  {difBancoALibros < 0.05 ? (
+                    <>
+                      <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+                      <span>DIFERENCIA NETA DE CONCILIACIÓN: CUADRADA AL 100%</span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="size-4 text-amber-600 dark:text-amber-400" />
+                      <span>DIFERENCIA NETA PENDIENTE</span>
+                    </>
+                  )}
+                </div>
+                <span className="font-mono font-black text-sm">
+                  ${formatMoneyExact(difBancoALibros)}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MÉTODO 3: SALDOS AJUSTADOS (SIMULTÁNEO) */}
+        {metodoFormato === "saldos_ajustados" && (
+          <div className="space-y-3 text-xs">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Columna A: Lado Libros Contables */}
+              <div className="rounded-xl border border-line bg-bg-subtle/30 p-3 space-y-2">
+                <div className="font-bold text-ink flex items-center justify-between pb-1 border-b border-line">
+                  <span className="flex items-center gap-1.5 text-teal">
+                    <BookOpen className="size-3.5" />
+                    Lado Contable (Libros)
+                  </span>
+                  <span className="font-mono">${formatMoneyExact(summary.saldoLibros)}</span>
+                </div>
+                <div className="space-y-1 text-[11px]">
+                  <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400">
+                    <span>(+) Rendimientos por causar:</span>
+                    <span className="font-mono font-bold">+{formatMoneyExact(summary.notasCreditoNoRegistradas || 0)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-rose-700 dark:text-rose-400">
+                    <span>(-) Gastos bancarios (GMF/Com):</span>
+                    <span className="font-mono font-bold">-{formatMoneyExact(summary.notasDebitoNoRegistradas || 0)}</span>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-line flex items-center justify-between font-black text-teal">
+                  <span>(=) Saldo Libros Ajustado:</span>
+                  <span className="font-mono">${formatMoneyExact(saldoLibrosAjustado)}</span>
+                </div>
+              </div>
+
+              {/* Columna B: Lado Extracto Bancario */}
+              <div className="rounded-xl border border-line bg-bg-subtle/30 p-3 space-y-2">
+                <div className="font-bold text-ink flex items-center justify-between pb-1 border-b border-line">
+                  <span className="flex items-center gap-1.5 text-teal">
+                    <Building2 className="size-3.5" />
+                    Lado Bancario (Extracto)
+                  </span>
+                  <span className="font-mono">${formatMoneyExact(summary.saldoExtracto)}</span>
+                </div>
+                <div className="space-y-1 text-[11px]">
+                  <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400">
+                    <span>(+) Consignaciones en tránsito:</span>
+                    <span className="font-mono font-bold">+{formatMoneyExact(summary.consignacionesEnTransito || 0)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-rose-700 dark:text-rose-400">
+                    <span>(-) Cheques en tránsito:</span>
+                    <span className="font-mono font-bold">-{formatMoneyExact(summary.chequesEnTransito || 0)}</span>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-line flex items-center justify-between font-black text-teal">
+                  <span>(=) Saldo Banco Ajustado:</span>
+                  <span className="font-mono">${formatMoneyExact(saldoBancoAjustado)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Confrontación de ambos lados */}
             <div
               className={cn(
                 "flex items-center justify-between py-2 px-3 rounded-xl border text-xs font-bold transition",
-                summary.cuadrado
+                difSaldosAjustados < 0.05
                   ? "border-emerald-500/60 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200"
                   : "border-amber-500/60 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200"
               )}
             >
               <div className="flex items-center gap-1.5">
-                {summary.cuadrado ? (
+                {difSaldosAjustados < 0.05 ? (
                   <>
                     <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
-                    <span>
-                      {(summary.consignacionesEnTransito === 0 && summary.chequesEnTransito === 0 && summary.notasDebitoNoRegistradas === 0 && summary.notasCreditoNoRegistradas === 0 && Math.abs(summary.saldoLibros - summary.saldoExtracto) < 0.05)
-                        ? "DIFERENCIA NETA DE CONCILIACIÓN: CUADRADA AL 100% (SIN PARTIDAS PENDIENTES)"
-                        : (summary.soloRendimientos || ((summary.notasCreditoRendimientos || 0) > 0 && (summary.notasDebitoNoRegistradas || 0) === 0 && (summary.chequesEnTransito || 0) === 0 && (summary.consignacionesEnTransito || 0) === 0))
-                        ? `CONCILIACIÓN CUADRADA (DIFERENCIA EN RENDIMIENTOS: $ ${formatMoneyExact(summary.notasCreditoRendimientos || summary.diferenciaExtractoLibros || 0)})`
-                        : "DIFERENCIA NETA DE CONCILIACIÓN: CONCILIADA CON PARTIDAS EN TRÁNSITO / AJUSTES"}
-                    </span>
+                    <span>CONCILIACIÓN COINCIDENTE EN AMBOS SALDOS AJUSTADOS</span>
                   </>
                 ) : (
                   <>
                     <AlertCircle className="size-4 text-amber-600 dark:text-amber-400" />
-                    <span>DIFERENCIA NETA DE CONCILIACIÓN PENDIENTE</span>
+                    <span>DIFERENCIA ENTRE SALDOS AJUSTADOS</span>
                   </>
                 )}
               </div>
               <span className="font-mono font-black text-sm">
-                ${formatMoneyExact(summary.diferenciaCuadre)}
+                ${formatMoneyExact(difSaldosAjustados)}
               </span>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
 });
+

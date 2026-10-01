@@ -630,7 +630,10 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
         onSaldoBlur={handleSaldoBlur}
       />
 
-      {/* 4. Movimientos Pendientes de Registro Contable (Partidas Conciliatorias) */}
+      {/* 4. Franja Ejecutiva de Conceptos Bancarios (GMF, Comisiones, Rendimientos, Lotes ACH) */}
+      <BankExecutiveCards breakdown={executiveBreakdown} />
+
+      {/* 5. Movimientos Pendientes de Registro Contable (Partidas Conciliatorias) */}
       <BankPendingMovements
         rows={concilResult.rows}
         summary={concilResult.summary}
@@ -638,9 +641,6 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
         bancoNombre={extractoMeta?.bancoNombre || (isDemoMode ? "Banco de Demostración" : "Banco")}
         allMovLines={effectiveMovLines}
       />
-
-      {/* 5. Franja Ejecutiva de Conceptos Bancarios */}
-      <BankExecutiveCards breakdown={executiveBreakdown} />
 
       {/* 6. Tabla Detallada con Pestañas, Búsqueda Debounced, Asiento Contable y Paginación */}
       <BankTable
