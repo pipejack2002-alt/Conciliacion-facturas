@@ -14,11 +14,14 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Scale,
+  CheckCircle2,
 } from "lucide-react";
 import { formatMoneyExact, formatDate } from "@/lib/format";
 import type { BankConciliacionRow } from "@/lib/conciliar-bancos";
 import type { MovLine } from "@/lib/types";
 import { AsientoContableModal } from "./asiento-contable-modal";
+import { resolveVoucherFullEntry } from "@/lib/voucher-entry-resolver";
 import { cn } from "@/lib/cn";
 
 export type BankSortField =
@@ -330,7 +333,7 @@ export const BankTable = memo(function BankTable({
               <tr>
                 <th
                   onClick={() => handleToggleSort("estado")}
-                  className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                  className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap min-w-[130px]"
                   title="Clic para ordenar por Estado"
                 >
                   <div className="flex items-center gap-1">
@@ -488,10 +491,10 @@ export const BankTable = memo(function BankTable({
                   return (
                     <Fragment key={r.id}>
                       <tr className="hover:bg-bg-subtle/40 transition">
-                        <td className="px-3.5 py-2.5">
+                        <td className="px-3.5 py-2.5 whitespace-nowrap min-w-[130px]">
                           <span
                             className={cn(
-                              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-black border shadow-2xs",
+                              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-bold border shadow-2xs whitespace-nowrap shrink-0",
                               r.estado === "conciliado"
                                 ? r.itemsLibrosLote
                                   ? "bg-purple-100 text-purple-950 border-purple-300 dark:bg-purple-950/80 dark:text-purple-200 dark:border-purple-700"
@@ -511,7 +514,7 @@ export const BankTable = memo(function BankTable({
                           >
                             <span
                               className={cn(
-                                "inline-block size-1.5 rounded-full",
+                                "inline-block size-1.5 rounded-full shrink-0",
                                 r.estado === "conciliado"
                                   ? r.itemsLibrosLote
                                     ? "bg-purple-600 dark:bg-purple-400"
@@ -531,9 +534,9 @@ export const BankTable = memo(function BankTable({
                               ? r.itemsLibrosLote
                                 ? `Lote ACH (${r.itemsLibrosLote.length})`
                                 : r.esGmf
-                                ? "GMF 4x1000 Conciliado"
+                                ? "GMF 4x1000"
                                 : r.esRendimiento
-                                ? "Rendimiento Conciliado"
+                                ? "Rendimiento"
                                 : "Conciliado"
                               : r.esGmf
                               ? "GMF 4x1000"
@@ -705,14 +708,14 @@ export const BankTable = memo(function BankTable({
                                 </div>
                               </div>
                             ) : r.itemLibros ? (() => {
-                              const compClean = (r.itemLibros.comprobante || "").trim().toLowerCase();
-                              const voucherAllLines = compClean
-                                ? allMovLines.filter((m) => (m.comprobante || "").trim().toLowerCase() === compClean)
-                                : [r.itemLibros];
-                              const hasMultipleLines = voucherAllLines.length > 1;
-                              const debSum = voucherAllLines.reduce((acc, l) => acc + (l.debito || 0), 0);
-                              const credSum = voucherAllLines.reduce((acc, l) => acc + (l.credito || 0), 0);
-                              const isCuadrado = Math.abs(debSum - credSum) < 0.05 && (debSum > 0 || credSum > 0);
+                              const resolved = resolveVoucherFullEntry(
+                                r.itemLibros.comprobante || "",
+                                r.itemLibros,
+                                allMovLines,
+                                r
+                              );
+                              const voucherLines = resolved.lines;
+                              const isCuadrado = resolved.isPartidaDobleCuadrada;
 
                               return (
                                 <div className="rounded-xl border border-teal-300 bg-teal-50/40 dark:bg-teal-950/30 dark:border-teal-800 p-4 space-y-3 shadow-2xs">
@@ -723,16 +726,19 @@ export const BankTable = memo(function BankTable({
                                       </span>
                                       <div>
                                         <div className="font-bold text-xs text-teal-950 dark:text-teal-200">
-                                          Asiento Contable en Libros · Comprobante {r.itemLibros.comprobante || "Sin número"} ({voucherAllLines.length} registros)
+                                          Asiento Contable en Libros · Comprobante {resolved.comprobante} ({voucherLines.length} registros)
                                         </div>
                                         <div className="text-[11px] text-ink-muted">
-                                          {r.itemLibros.nombre} {r.itemLibros.nit ? `· NIT: ${r.itemLibros.nit}` : ""} · Fecha: {formatDate(r.itemLibros.fecha)}
+                                          {resolved.terceroNombre ? `${resolved.terceroNombre} · ` : ""}
+                                          {resolved.terceroNit ? `NIT: ${resolved.terceroNit} · ` : ""}
+                                          Fecha: {formatDate(resolved.fecha)}
                                         </div>
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-2">
                                       {isCuadrado && (
-                                        <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 px-2 py-0.5 rounded-md border border-emerald-300">
+                                        <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 px-2.5 py-1 rounded-md border border-emerald-300 flex items-center gap-1 shadow-2xs">
+                                          <CheckCircle2 className="size-3 text-emerald-600 dark:text-emerald-400" />
                                           Partida Doble Cuadrada
                                         </span>
                                       )}
@@ -748,99 +754,94 @@ export const BankTable = memo(function BankTable({
                                     </div>
                                   </div>
 
-                                  {/* Tabla del Asiento Contable Completo */}
-                                  {hasMultipleLines ? (
-                                    <div className="overflow-x-auto rounded-lg border border-teal-200 dark:border-teal-800 bg-bg-surface">
-                                      <table className="w-full text-left text-xs">
-                                        <thead className="bg-teal-100/60 dark:bg-teal-950/60 text-teal-950 dark:text-teal-200 font-semibold border-b border-teal-200 dark:border-teal-800">
-                                          <tr>
-                                            <th className="px-3 py-2">Cuenta PUC</th>
-                                            <th className="px-3 py-2">Nombre Cuenta</th>
-                                            <th className="px-3 py-2">Tercero / NIT</th>
-                                            <th className="px-3 py-2">Concepto / Glosa</th>
-                                            <th className="px-3 py-2 text-right">Débito (COP)</th>
-                                            <th className="px-3 py-2 text-right">Crédito (COP)</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-teal-100 dark:divide-teal-900/30">
-                                          {voucherAllLines.map((line, lIdx) => {
-                                            const isBank = /^(11|1250)/.test(line.cuenta.trim());
-                                            return (
-                                              <tr
-                                                key={[line.cuenta, line.debito, line.credito, lIdx].join("-")}
-                                                className={`hover:bg-teal-50/50 dark:hover:bg-teal-950/20 transition ${
-                                                  isBank ? "bg-teal-50/30 font-semibold" : ""
-                                                }`}
-                                              >
-                                                <td className="px-3 py-2 font-mono text-ink">
-                                                  <span className={isBank ? "text-teal font-bold" : ""}>{line.cuenta}</span>
-                                                </td>
-                                                <td className="px-3 py-2 font-medium text-ink max-w-44 truncate" title={line.cuentaNombre}>
-                                                  {line.cuentaNombre}
-                                                </td>
-                                                <td className="px-3 py-2 text-ink max-w-40 truncate" title={line.nombre}>
-                                                  {line.nombre}
-                                                </td>
-                                                <td className="px-3 py-2 text-ink-muted max-w-56 truncate" title={line.descripcion}>
-                                                  {line.descripcion}
-                                                </td>
-                                                <td className="px-3 py-2 font-mono font-bold text-right text-ink">
-                                                  {line.debito > 0 ? formatMoneyExact(line.debito) : "—"}
-                                                </td>
-                                                <td className="px-3 py-2 font-mono font-bold text-right text-ink">
-                                                  {line.credito > 0 ? formatMoneyExact(line.credito) : "—"}
-                                                </td>
-                                              </tr>
-                                            );
-                                          })}
-                                        </tbody>
-                                        <tfoot className="bg-teal-100/40 dark:bg-teal-950/40 font-bold border-t border-teal-200 dark:border-teal-800">
-                                          <tr>
-                                            <td colSpan={4} className="px-3 py-1.5 text-right text-teal-950 dark:text-teal-200">
-                                              Sumas Iguales:
-                                            </td>
-                                            <td className="px-3 py-1.5 font-mono text-right text-teal-950 dark:text-teal-200">
-                                              {formatMoneyExact(debSum)}
-                                            </td>
-                                            <td className="px-3 py-1.5 font-mono text-right text-teal-950 dark:text-teal-200">
-                                              {formatMoneyExact(credSum)}
-                                            </td>
-                                          </tr>
-                                        </tfoot>
-                                      </table>
-                                    </div>
-                                  ) : (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs pt-1">
-                                      <div className="bg-bg-surface p-2 rounded-lg border border-line">
-                                        <span className="text-ink-muted block text-[11px]">Comprobante Contable:</span>
-                                        <span className="font-mono font-bold text-ink text-xs">{r.itemLibros.comprobante || "Sin número"}</span>
+                                  {/* Franja Destacada de Contrapartida Contable */}
+                                  {resolved.contrapartidaResumen && (
+                                    <div className="rounded-lg bg-teal-100/70 dark:bg-teal-900/40 px-3 py-2 border border-teal-300 dark:border-teal-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                                      <div className="flex items-center gap-2 text-teal-950 dark:text-teal-100">
+                                        <Scale className="size-4 text-teal shrink-0" />
+                                        <div>
+                                          <span className="font-extrabold text-teal-950 dark:text-teal-100">Contrapartida: </span>
+                                          <span className="font-medium text-teal-900 dark:text-teal-200">{resolved.contrapartidaResumen.descripcionCruce}</span>
+                                        </div>
                                       </div>
-                                      <div className="bg-bg-surface p-2 rounded-lg border border-line">
-                                        <span className="text-ink-muted block text-[11px]">Fecha en Libros:</span>
-                                        <span className="font-mono font-bold text-ink text-xs">{formatDate(r.itemLibros.fecha)}</span>
-                                      </div>
-                                      <div className="bg-bg-surface p-2 rounded-lg border border-line">
-                                        <span className="text-ink-muted block text-[11px]">Cuenta PUC:</span>
-                                        <span className="font-mono text-ink text-xs font-semibold">{r.itemLibros.cuenta} - {r.itemLibros.cuentaNombre}</span>
-                                      </div>
-                                      <div className="bg-bg-surface p-2 rounded-lg border border-line">
-                                        <span className="text-ink-muted block text-[11px]">Tercero / Beneficiario:</span>
-                                        <span className="text-ink font-semibold text-xs">{r.itemLibros.nombre} {r.itemLibros.nit ? `(NIT: ${r.itemLibros.nit})` : ""}</span>
-                                      </div>
-                                      <div className="bg-bg-surface p-2 rounded-lg border border-line sm:col-span-2">
-                                        <span className="text-ink-muted block text-[11px]">Glosa / Concepto en Libros:</span>
-                                        <span className="text-ink text-xs">{r.itemLibros.descripcion}</span>
-                                      </div>
-                                      <div className="bg-bg-surface p-2 rounded-lg border border-line">
-                                        <span className="text-ink-muted block text-[11px]">Documento Fuente / Cruce:</span>
-                                        <span className="font-mono text-ink text-xs">{r.itemLibros.cruce || r.itemLibros.referencia || "—"}</span>
-                                      </div>
-                                      <div className="bg-bg-surface p-2 rounded-lg border border-line">
-                                        <span className="text-ink-muted block text-[11px]">Monto en Contabilidad:</span>
-                                        <span className="font-mono font-bold text-teal text-xs">{formatMoneyExact(r.montoLibros)}</span>
-                                      </div>
+                                      {resolved.contrapartidaResumen.esDeducida && (
+                                        <span className="text-[10px] font-semibold text-teal-800 dark:text-teal-300 self-start sm:self-auto bg-teal-200/50 dark:bg-teal-950/50 px-2 py-0.5 rounded">
+                                          Deducida de movimiento
+                                        </span>
+                                      )}
                                     </div>
                                   )}
+
+                                  {/* Tabla del Asiento Contable Completo */}
+                                  <div className="overflow-x-auto rounded-lg border border-teal-200 dark:border-teal-800 bg-bg-surface">
+                                    <table className="w-full text-left text-xs">
+                                      <thead className="bg-teal-100/60 dark:bg-teal-950/60 text-teal-950 dark:text-teal-200 font-semibold border-b border-teal-200 dark:border-teal-800">
+                                        <tr>
+                                          <th className="px-3 py-2">Cuenta PUC</th>
+                                          <th className="px-3 py-2">Nombre Cuenta</th>
+                                          <th className="px-3 py-2">Tercero / NIT</th>
+                                          <th className="px-3 py-2">Concepto / Glosa</th>
+                                          <th className="px-3 py-2">Cruce / Ref</th>
+                                          <th className="px-3 py-2 text-right">Débito (COP)</th>
+                                          <th className="px-3 py-2 text-right">Crédito (COP)</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-teal-100 dark:divide-teal-900/30">
+                                        {voucherLines.map((line, lIdx) => {
+                                          const isBank = line.esBanco;
+                                          return (
+                                            <tr
+                                              key={[line.cuenta, line.debito, line.credito, lIdx].join("-")}
+                                              className={`hover:bg-teal-50/50 dark:hover:bg-teal-950/20 transition ${
+                                                isBank ? "bg-teal-50/30 font-semibold" : ""
+                                              }`}
+                                            >
+                                              <td className="px-3 py-2 font-mono text-ink">
+                                                <span className={isBank ? "text-teal font-bold" : ""}>{line.cuenta}</span>
+                                                {line.esContrapartidaDeducida && (
+                                                  <span className="block text-[10px] text-teal font-medium">
+                                                    (Contrapartida Cruce)
+                                                  </span>
+                                                )}
+                                              </td>
+                                              <td className="px-3 py-2 font-medium text-ink max-w-44 truncate" title={line.cuentaNombre}>
+                                                {line.cuentaNombre}
+                                              </td>
+                                              <td className="px-3 py-2 text-ink max-w-40 truncate" title={line.nombre}>
+                                                <span>{line.nombre || "—"}</span>
+                                                {line.nit && <span className="block text-[10px] text-ink-subtle font-mono">NIT: {line.nit}</span>}
+                                              </td>
+                                              <td className="px-3 py-2 text-ink-muted max-w-56 truncate" title={line.descripcion}>
+                                                {line.descripcion}
+                                              </td>
+                                              <td className="px-3 py-2 font-mono text-ink-subtle">
+                                                {line.cruce || "—"}
+                                              </td>
+                                              <td className="px-3 py-2 font-mono font-bold text-right text-ink">
+                                                {line.debito > 0 ? formatMoneyExact(line.debito) : "—"}
+                                              </td>
+                                              <td className="px-3 py-2 font-mono font-bold text-right text-ink">
+                                                {line.credito > 0 ? formatMoneyExact(line.credito) : "—"}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                      <tfoot className="bg-teal-100/40 dark:bg-teal-950/40 font-bold border-t border-teal-200 dark:border-teal-800">
+                                        <tr>
+                                          <td colSpan={5} className="px-3 py-1.5 text-right text-teal-950 dark:text-teal-200">
+                                            Sumas Iguales:
+                                          </td>
+                                          <td className="px-3 py-1.5 font-mono text-right text-teal-950 dark:text-teal-200">
+                                            {formatMoneyExact(resolved.totalDebito)}
+                                          </td>
+                                          <td className="px-3 py-1.5 font-mono text-right text-teal-950 dark:text-teal-200">
+                                            {formatMoneyExact(resolved.totalCredito)}
+                                          </td>
+                                        </tr>
+                                      </tfoot>
+                                    </table>
+                                  </div>
                                 </div>
                               );
                             })() : r.estado === "nota_debito_banco" || r.estado === "nota_credito_banco" ? (

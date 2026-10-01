@@ -15,6 +15,7 @@ import { formatMoneyExact, formatDate } from "@/lib/format";
 import type { BankConciliacionRow } from "@/lib/conciliar-bancos";
 import type { MovLine } from "@/lib/types";
 import { exportAsientoAjusteBancario } from "@/lib/export-bancos-excel";
+import { resolveVoucherFullEntry, type ResolvedVoucherLine } from "@/lib/voucher-entry-resolver";
 
 interface Props {
   open: boolean;
@@ -60,39 +61,31 @@ export function AsientoContableModal({
     return comprobantesList[0] || "";
   }, [selectedCompTab, comprobantesList]);
 
-  // Buscar todas las líneas contables de ese comprobante en el libro auxiliar
-  const voucherLines = useMemo(() => {
-    if (!activeComprobante || !allMovLines || allMovLines.length === 0) return [];
-    const cleanComp = activeComprobante.toLowerCase();
-    return allMovLines.filter(
-      (m) => (m.comprobante || "").trim().toLowerCase() === cleanComp
-    );
-  }, [activeComprobante, allMovLines]);
-
-  // Si no se encontraron líneas en allMovLines pero tenemos el item individual o del lote
-  const displayLines: MovLine[] = useMemo(() => {
-    if (voucherLines.length > 0) return voucherLines;
-    if (row?.itemLibros) return [row.itemLibros];
-    if (row?.itemsLibrosLote && row.itemsLibrosLote.length > 0) {
-      const matchInLote = row.itemsLibrosLote.filter(
-        (m) => (m.comprobante || "").trim().toLowerCase() === activeComprobante.toLowerCase()
-      );
-      return matchInLote.length > 0 ? matchInLote : row.itemsLibrosLote;
+  // Obtener la línea de referencia actual para el comprobante
+  const currentLine = useMemo(() => {
+    if (row?.itemLibros && (row.itemLibros.comprobante || "").trim().toLowerCase() === activeComprobante.toLowerCase()) {
+      return row.itemLibros;
     }
-    return [];
-  }, [voucherLines, row, activeComprobante]);
+    if (row?.itemsLibrosLote && row.itemsLibrosLote.length > 0) {
+      return (
+        row.itemsLibrosLote.find(
+          (m) => (m.comprobante || "").trim().toLowerCase() === activeComprobante.toLowerCase()
+        ) || row.itemsLibrosLote[0]
+      );
+    }
+    return row?.itemLibros || null;
+  }, [row, activeComprobante]);
 
-  // Totales del comprobante
-  const totalDebitos = useMemo(
-    () => displayLines.reduce((acc, l) => acc + (l.debito || 0), 0),
-    [displayLines]
-  );
-  const totalCreditos = useMemo(
-    () => displayLines.reduce((acc, l) => acc + (l.credito || 0), 0),
-    [displayLines]
-  );
+  // Resolver comprobante contable completo y su contrapartida (con partida doble cuadrada)
+  const resolvedVoucher = useMemo(() => {
+    return resolveVoucherFullEntry(activeComprobante, currentLine, allMovLines, row);
+  }, [activeComprobante, currentLine, allMovLines, row]);
+
+  const displayLines: ResolvedVoucherLine[] = resolvedVoucher.lines;
+  const totalDebitos = resolvedVoucher.totalDebito;
+  const totalCreditos = resolvedVoucher.totalCredito;
   const balanceDiferencia = Math.abs(totalDebitos - totalCreditos);
-  const isPartidaDobleCuadrada = balanceDiferencia < 0.05 && (totalDebitos > 0 || totalCreditos > 0);
+  const isPartidaDobleCuadrada = resolvedVoucher.isPartidaDobleCuadrada;
 
   if (!open || !row) return null;
 
@@ -195,24 +188,25 @@ export function AsientoContableModal({
 
         {/* Selector de Comprobantes si es un Lote ACH */}
         {comprobantesList.length > 1 && (
-          <div className="border-b border-line bg-bg-subtle/50 px-6 py-2.5 flex items-center gap-2 overflow-x-auto text-xs">
-            <span className="text-[11px] font-bold text-ink-muted shrink-0 flex items-center gap-1">
+          <div className="border-b border-line bg-bg-subtle/50 px-6 py-2.5 flex items-center gap-2 overflow-x-auto text-xs scrollbar-thin">
+            <span className="text-[11px] font-bold text-ink-muted shrink-0 flex items-center gap-1.5">
               <Layers className="size-3.5 text-purple-600" />
               Comprobantes en Lote ({comprobantesList.length}):
             </span>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
               {comprobantesList.map((comp) => (
                 <button
                   key={comp}
                   type="button"
                   onClick={() => setSelectedCompTab(comp)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-mono font-semibold transition cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer whitespace-nowrap shrink-0 leading-normal inline-flex items-center gap-1.5 ${
                     activeComprobante === comp
-                      ? "bg-purple-600 text-white shadow-xs font-bold"
-                      : "bg-bg-surface text-ink-muted hover:text-ink border border-line"
+                      ? "bg-purple-600 text-white shadow-xs"
+                      : "bg-bg-surface text-ink-muted hover:text-ink hover:border-purple-300 border border-line"
                   }`}
                 >
-                  {comp}
+                  <FileText className="size-3 shrink-0 opacity-70" />
+                  <span>{comp}</span>
                 </button>
               ))}
             </div>
@@ -382,6 +376,33 @@ export function AsientoContableModal({
           ) : (
             /* CASO B: ASIENTO CONTABLE REGISTRADO EN LIBROS (CONCILIADO O EN TRÁNSITO) */
             <div className="space-y-4">
+              {/* Resumen Ejecutivo de la Contrapartida Contable */}
+              {resolvedVoucher.contrapartidaResumen && (
+                <div className="rounded-xl bg-teal-50/80 dark:bg-teal-950/40 p-3.5 border border-teal-200 dark:border-teal-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                  <div className="flex items-start sm:items-center gap-2.5 text-teal-950 dark:text-teal-200">
+                    <span className="rounded-lg bg-teal text-white p-1 shrink-0 mt-0.5 sm:mt-0 shadow-2xs">
+                      <Scale className="size-4" />
+                    </span>
+                    <div>
+                      <div className="font-extrabold text-xs text-teal-950 dark:text-teal-100">
+                        {resolvedVoucher.contrapartidaResumen.descripcionCruce}
+                      </div>
+                      <p className="text-[11px] text-teal-800 dark:text-teal-300">
+                        {resolvedVoucher.contrapartidaResumen.esDeducida
+                          ? "Contrapartida contable vinculada automáticamente a partir del beneficiario, concepto y cruce del comprobante."
+                          : "Líneas de contrapartida verificadas directamente en el libro auxiliar de la contabilidad."}
+                      </p>
+                    </div>
+                  </div>
+                  {isPartidaDobleCuadrada && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-200 border border-emerald-300 px-3 py-1 text-xs font-bold shrink-0 self-start sm:self-auto shadow-2xs">
+                      <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                      Partida Doble Cuadrada ({formatMoneyExact(totalDebitos)})
+                    </span>
+                  )}
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <h3 className="text-xs font-black uppercase tracking-wider text-ink">
@@ -401,7 +422,7 @@ export function AsientoContableModal({
                 {isPartidaDobleCuadrada && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold">
                     <CheckCircle2 className="size-3 text-emerald-600" />
-                    Partida Doble Cuadrada
+                    Sumas Iguales Débitos = Créditos
                   </span>
                 )}
               </div>
@@ -438,6 +459,11 @@ export function AsientoContableModal({
                               <span className={isTreasury ? "text-teal font-bold" : ""}>
                                 {line.cuenta}
                               </span>
+                              {line.esContrapartidaDeducida && (
+                                <span className="block text-[10px] text-teal font-medium">
+                                  (Contrapartida Cruce)
+                                </span>
+                              )}
                             </td>
                             <td className="px-3.5 py-2.5 font-medium text-ink max-w-48 truncate" title={line.cuentaNombre}>
                               {line.cuentaNombre}
