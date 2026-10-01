@@ -50,6 +50,10 @@ export const BankSummaryCards = memo(function BankSummaryCards({
   const saldoBancoAjustado = summary.saldoExtracto + (summary.consignacionesEnTransito || 0) - (summary.chequesEnTransito || 0);
   const difSaldosAjustados = Math.abs(saldoLibrosAjustado - saldoBancoAjustado);
 
+  const diferenciaSaldos = Math.abs(summary.saldoExtracto - summary.saldoLibros);
+  const sinPartidasPendientes =
+    totalPartidasSuman === 0 && totalPartidasRestan === 0 && diferenciaSaldos < 0.05;
+
   const isSoloRend =
     summary.soloRendimientos ||
     ((summary.notasCreditoRendimientos || 0) > 0 &&
@@ -67,9 +71,11 @@ export const BankSummaryCards = memo(function BankSummaryCards({
             ? "border-line bg-bg-surface text-ink"
             : isSoloExtracto || isSoloLibros
             ? "border-amber-500/70 bg-linear-to-br from-amber-50/90 via-white to-amber-50/40 dark:from-amber-950/60 dark:via-bg-surface dark:to-amber-950/20 text-ink"
-            : summary.cuadrado
+            : sinPartidasPendientes
             ? "border-emerald-500/70 bg-linear-to-br from-emerald-50/90 via-white to-emerald-50/40 dark:from-emerald-950/60 dark:via-bg-surface dark:to-emerald-950/20 text-ink"
-            : "border-amber-500/70 bg-linear-to-br from-amber-50/90 via-white to-amber-50/40 dark:from-amber-950/60 dark:via-bg-surface dark:to-amber-950/20 text-ink"
+            : summary.cuadrado
+            ? "border-amber-500/70 bg-linear-to-br from-amber-50/90 via-white to-amber-50/40 dark:from-amber-950/60 dark:via-bg-surface dark:to-amber-950/20 text-ink"
+            : "border-rose-500/70 bg-linear-to-br from-rose-50/90 via-white to-rose-50/40 dark:from-rose-950/60 dark:via-bg-surface dark:to-rose-950/20 text-ink"
         )}
       >
         <div>
@@ -81,9 +87,11 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                   ? "text-ink-muted"
                   : isSoloExtracto || isSoloLibros
                   ? "text-amber-800 dark:text-amber-400"
-                  : summary.cuadrado
+                  : sinPartidasPendientes
                   ? "text-emerald-800 dark:text-emerald-400"
-                  : "text-amber-800 dark:text-amber-400"
+                  : summary.cuadrado
+                  ? "text-amber-800 dark:text-amber-400"
+                  : "text-rose-800 dark:text-rose-400"
               )}
             >
               Resultado de Conciliación
@@ -102,19 +110,20 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 <AlertCircle className="size-3.5" />
                 Falta Extracto Bancario
               </span>
-            ) : summary.cuadrado ? (
+            ) : sinPartidasPendientes ? (
               <span className="flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-xs font-black text-white shadow-xs">
                 <CheckCircle2 className="size-3.5" />
-                {(summary.consignacionesEnTransito === 0 && summary.chequesEnTransito === 0 && summary.notasDebitoNoRegistradas === 0 && summary.notasCreditoNoRegistradas === 0 && Math.abs(summary.saldoLibros - summary.saldoExtracto) < 0.05)
-                  ? "Cuadrado 100% (Sin Pendientes)"
-                  : isSoloRend
-                  ? "Conciliado (Pendiente Causación)"
-                  : "Conciliado con Partidas Pendientes"}
+                Cuadrado 100% (Sin Pendientes)
               </span>
-            ) : (
+            ) : summary.cuadrado ? (
               <span className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1 text-xs font-black text-white shadow-xs">
                 <AlertCircle className="size-3.5" />
-                Con Descuadre Pendiente
+                Diferencia por Registrar en Libros
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 rounded-full bg-rose-600 px-3 py-1 text-xs font-black text-white shadow-xs">
+                <AlertCircle className="size-3.5" />
+                Descuadre Pendiente
               </span>
             )}
           </div>
@@ -127,9 +136,11 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                   ? "text-ink"
                   : isSoloExtracto || isSoloLibros
                   ? "text-amber-950 dark:text-amber-200"
-                  : summary.cuadrado
+                  : sinPartidasPendientes
                   ? "text-emerald-950 dark:text-emerald-200"
-                  : "text-amber-950 dark:text-amber-200"
+                  : summary.cuadrado
+                  ? "text-amber-950 dark:text-amber-200"
+                  : "text-rose-950 dark:text-rose-200"
               )}
             >
               {isSinArchivos
@@ -138,43 +149,126 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 ? "PENDIENTE: CARGAR LIBRO AUXILIAR"
                 : isSoloLibros
                 ? "PENDIENTE: CARGAR EXTRACTO"
-                : summary.cuadrado
-                ? (summary.consignacionesEnTransito === 0 && summary.chequesEnTransito === 0 && summary.notasDebitoNoRegistradas === 0 && summary.notasCreditoNoRegistradas === 0 && Math.abs(summary.saldoLibros - summary.saldoExtracto) < 0.05)
-                  ? "CUADRADO PERFECTO AL 100%"
-                  : isSoloRend
-                  ? "CONCILIACIÓN CUADRADA AL 100%"
-                  : "CONCILIACIÓN CUADRADA"
-                : `DESCUADRE POR AJUSTAR: ${formatMoneyExact(summary.diferenciaCuadre)}`}
+                : sinPartidasPendientes
+                ? "SALDOS COINCIDENTES: $ 0,00"
+                : `DIFERENCIA: ${formatMoneyExact(diferenciaSaldos)}`}
             </div>
 
-            {/* Partida destacada cuando la única variación son los rendimientos devengados */}
-            {summary.cuadrado && isSoloRend && (
-              <div className="mt-2.5 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 space-y-1">
-                <div className="text-[11px] font-extrabold text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Sparkles className="size-3.5 text-emerald-600" />
-                    Rendimientos del Periodo por Causar:
+            {/* A qué corresponde la diferencia */}
+            {isAmbosCargados && diferenciaSaldos > 0.05 && (
+              <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 space-y-2">
+                <div className="text-[11px] font-extrabold text-amber-900 dark:text-amber-300 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Sparkles className="size-3.5 text-amber-600" />
+                    A qué corresponde la diferencia:
                   </span>
-                  <span className="font-mono font-black text-sm">
-                    +{formatMoneyExact(summary.notasCreditoRendimientos || summary.diferenciaExtractoLibros || 0)}
-                  </span>
+                  {summary.cuadrado && (
+                    <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-amber-200/60 dark:bg-amber-900/60 px-2 py-0.5 rounded-full">
+                      Justificada en Cédula
+                    </span>
+                  )}
                 </div>
-                <div className="text-[10px] text-emerald-900/80 dark:text-emerald-300/80 leading-tight">
-                  Abonados en el extracto bancario. Se causan en libros contables al corte o en el mes siguiente.
+
+                <div className="space-y-1 text-xs">
+                  {(summary.notasCreditoRendimientos || 0) > 0 && (
+                    <div className="flex items-center justify-between bg-bg-surface/90 px-2.5 py-1.5 rounded-lg border border-amber-500/20 text-ink">
+                      <div>
+                        <span className="font-bold text-emerald-700 dark:text-emerald-400">• Rendimientos Financieros del Periodo:</span>
+                        <span className="block text-[10px] text-ink-muted">Abonados en extracto, pendientes de causar en libros</span>
+                      </div>
+                      <span className="font-mono font-black text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                        +{formatMoneyExact(summary.notasCreditoRendimientos || 0)}
+                      </span>
+                    </div>
+                  )}
+
+                  {(summary.notasCreditoOperativas || 0) > 0 && (
+                    <div className="flex items-center justify-between bg-bg-surface/90 px-2.5 py-1.5 rounded-lg border border-line text-ink">
+                      <div>
+                        <span className="font-bold text-ink">• Otros Abonos en Extracto:</span>
+                        <span className="block text-[10px] text-ink-muted">Consignaciones pendientes de registrar</span>
+                      </div>
+                      <span className="font-mono font-bold text-ink whitespace-nowrap">
+                        +{formatMoneyExact(summary.notasCreditoOperativas || 0)}
+                      </span>
+                    </div>
+                  )}
+
+                  {(summary.notasDebitoGmf || 0) > 0 && (
+                    <div className="flex items-center justify-between bg-bg-surface/90 px-2.5 py-1.5 rounded-lg border border-line text-ink">
+                      <div>
+                        <span className="font-bold text-rose-700 dark:text-rose-400">• GMF (4×1000) en Extracto:</span>
+                        <span className="block text-[10px] text-ink-muted">Impuesto debitado pendiente de causar</span>
+                      </div>
+                      <span className="font-mono font-bold text-rose-700 dark:text-rose-400 whitespace-nowrap">
+                        -{formatMoneyExact(summary.notasDebitoGmf || 0)}
+                      </span>
+                    </div>
+                  )}
+
+                  {(summary.notasDebitoComisiones || 0) > 0 && (
+                    <div className="flex items-center justify-between bg-bg-surface/90 px-2.5 py-1.5 rounded-lg border border-line text-ink">
+                      <div>
+                        <span className="font-bold text-rose-700 dark:text-rose-400">• Comisiones Bancarias en Extracto:</span>
+                        <span className="block text-[10px] text-ink-muted">Cargos debitados pendientes de causar</span>
+                      </div>
+                      <span className="font-mono font-bold text-rose-700 dark:text-rose-400 whitespace-nowrap">
+                        -{formatMoneyExact(summary.notasDebitoComisiones || 0)}
+                      </span>
+                    </div>
+                  )}
+
+                  {(summary.chequesEnTransito || 0) > 0 && (
+                    <div className="flex items-center justify-between bg-bg-surface/90 px-2.5 py-1.5 rounded-lg border border-line text-ink">
+                      <div>
+                        <span className="font-bold text-ink">• Cheques / Giros en Tránsito:</span>
+                        <span className="block text-[10px] text-ink-muted">Girados en libros no cobrados en banco</span>
+                      </div>
+                      <span className="font-mono font-bold text-ink whitespace-nowrap">
+                        +{formatMoneyExact(summary.chequesEnTransito || 0)}
+                      </span>
+                    </div>
+                  )}
+
+                  {(summary.consignacionesEnTransito || 0) > 0 && (
+                    <div className="flex items-center justify-between bg-bg-surface/90 px-2.5 py-1.5 rounded-lg border border-line text-ink">
+                      <div>
+                        <span className="font-bold text-ink">• Consignaciones en Tránsito:</span>
+                        <span className="block text-[10px] text-ink-muted">Registradas en libros no acreditadas en banco</span>
+                      </div>
+                      <span className="font-mono font-bold text-ink whitespace-nowrap">
+                        -{formatMoneyExact(summary.consignacionesEnTransito || 0)}
+                      </span>
+                    </div>
+                  )}
+
+                  {summary.diferenciaCuadre > 0.05 && (
+                    <div className="flex items-center justify-between bg-rose-50 dark:bg-rose-950/40 px-2.5 py-1.5 rounded-lg border border-rose-300 text-rose-900 dark:text-rose-200">
+                      <div>
+                        <span className="font-bold text-rose-800 dark:text-rose-300">• Descuadre Pendiente por Explicar:</span>
+                        <span className="block text-[10px] text-rose-700 dark:text-rose-400">Diferencia sin justificación documental</span>
+                      </div>
+                      <span className="font-mono font-black text-rose-800 dark:text-rose-300 whitespace-nowrap">
+                        ${formatMoneyExact(summary.diferenciaCuadre)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
             <p
               className={cn(
-                "mt-2 text-xs font-medium leading-relaxed",
+                "mt-2.5 text-xs font-medium leading-relaxed",
                 isSinArchivos
                   ? "text-ink-muted"
                   : isSoloExtracto || isSoloLibros
                   ? "text-amber-900/90 dark:text-amber-300"
-                  : summary.cuadrado
+                  : sinPartidasPendientes
                   ? "text-emerald-900/90 dark:text-emerald-300"
-                  : "text-amber-900/90 dark:text-amber-300"
+                  : summary.cuadrado
+                  ? "text-amber-900/90 dark:text-amber-300"
+                  : "text-rose-900/90 dark:text-rose-300"
               )}
             >
               {isSinArchivos
@@ -183,13 +277,11 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 ? `Se cargó el extracto bancario con ${extractoItemsCount} movimientos, pero aún falta cargar el archivo de movimientos en libros (Excel) para realizar la confrontación y cuadre.`
                 : isSoloLibros
                 ? `Se cargó el libro auxiliar con ${librosEfectivosCount} registros contables, pero aún falta cargar el extracto bancario (PDF o Excel) para realizar la conciliación.`
+                : sinPartidasPendientes
+                ? "El saldo bancario coincide con el saldo de libros contables al 100% sin partidas pendientes ni ajustes requeridos."
                 : summary.cuadrado
-                ? (summary.consignacionesEnTransito === 0 && summary.chequesEnTransito === 0 && summary.notasDebitoNoRegistradas === 0 && summary.notasCreditoNoRegistradas === 0 && Math.abs(summary.saldoLibros - summary.saldoExtracto) < 0.05)
-                  ? "El saldo bancario coincide con el saldo de libros contables al 100% sin partidas pendientes ni ajustes requeridos."
-                  : isSoloRend
-                  ? `El saldo contable y el extracto bancario concilian con exactitud matemática ($0,00 de diferencia neta). La variación de ${formatMoneyExact(summary.notasCreditoRendimientos || summary.diferenciaExtractoLibros || 0)} corresponde a los rendimientos ganados en el extracto que deben causarse en libros contables.`
-                  : "El saldo bancario ajustado concilia con libros contables a través de las partidas conciliatorias identificadas (rendimientos, notas bancarias y partidas en tránsito)."
-                : "Existen partidas pendientes por identificar, cheques en tránsito o notas bancarias pendientes de registro contable."}
+                ? `Existe una diferencia contable de ${formatMoneyExact(diferenciaSaldos)} entre el saldo en libros (${formatMoneyExact(summary.saldoLibros)}) y el extracto (${formatMoneyExact(summary.saldoExtracto)}) debida a que las partidas indicadas aún no se han registrado en contabilidad. En la Cédula (lado derecho) se realiza la conciliación técnica que demuestra el cuadre exacto al 100% al incorporar dichas partidas.`
+                : `Existe un descuadre de ${formatMoneyExact(summary.diferenciaCuadre)} que no ha sido justificado por las partidas conciliatorias conocidas y requiere revisión contable.`}
             </p>
           </div>
         </div>
@@ -318,12 +410,17 @@ export const BankSummaryCards = memo(function BankSummaryCards({
               </div>
 
               <div className="space-y-1 pl-4 text-[11px]">
-                <div className="flex items-center justify-between text-ink py-0.5 border-b border-emerald-500/10">
+                <div className="flex items-center justify-between text-ink py-1 border-b border-emerald-500/10">
                   <div>
-                    <span className="font-medium">• Rendimientos Financieros del Periodo (Abonados en Extracto):</span>
-                    <span className="block text-[10px] text-ink-muted">Intereses ganados pendientes de causar en libros contables</span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold">• Rendimientos Financieros del Periodo (Abonados en Extracto):</span>
+                      <span className="rounded-full bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border border-emerald-300/60">
+                        Partida Conciliatoria (Pendiente de Registrar)
+                      </span>
+                    </div>
+                    <span className="block text-[10px] text-ink-muted">Abonados por el banco en extracto, pendientes de causar en libros contables (aumenta libros)</span>
                   </div>
-                  <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                  <span className="font-mono font-black text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
                     +{formatMoneyExact(summary.notasCreditoRendimientos || 0)}
                   </span>
                 </div>
@@ -425,33 +522,43 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 </span>
               </div>
 
-              {/* Banner de Diferencia Neta */}
+              {/* Banner de Diferencia Neta de la Cédula */}
               <div
                 className={cn(
-                  "flex items-center justify-between py-2 px-3 rounded-xl border text-xs font-bold transition",
+                  "flex items-center justify-between py-2.5 px-3.5 rounded-xl border text-xs font-bold transition",
                   summary.cuadrado
-                    ? "border-emerald-500/60 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200"
-                    : "border-amber-500/60 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200"
+                    ? "border-emerald-500/60 bg-emerald-50/90 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200"
+                    : "border-amber-500/60 bg-amber-50/90 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200"
                 )}
               >
-                <div className="flex items-center gap-1.5">
-                  {summary.cuadrado ? (
-                    <>
-                      <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
-                      <span>
-                        DIFERENCIA NETA DE CONCILIACIÓN: CUADRADA AL 100%
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <AlertCircle className="size-4 text-amber-600 dark:text-amber-400" />
-                      <span>DIFERENCIA NETA DE CONCILIACIÓN PENDIENTE</span>
-                    </>
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5 font-black text-sm">
+                    {summary.cuadrado ? (
+                      <>
+                        <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span>CONCILIACIÓN CUADRADA AL 100%</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="size-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <span>DIFERENCIA NETA DE CONCILIACIÓN PENDIENTE</span>
+                      </>
+                    )}
+                  </div>
+                  {summary.cuadrado && (
+                    <div className="text-[10px] font-normal text-emerald-800/90 dark:text-emerald-300/90">
+                      {isSoloRend
+                        ? `Al aplicar la partida conciliatoria de rendimientos (+${formatMoneyExact(summary.notasCreditoRendimientos || 0)}), el saldo conciliado iguala exactamente al extracto bancario ($0,00 de diferencia neta).`
+                        : "Al incorporar las partidas conciliatorias identificadas, la conciliación técnica queda cuadrada con exactitud matemática al 100%."}
+                    </div>
                   )}
                 </div>
-                <span className="font-mono font-black text-sm">
-                  ${formatMoneyExact(summary.diferenciaCuadre)}
-                </span>
+                <div className="text-right shrink-0">
+                  <span className="block text-[10px] text-ink-muted uppercase">Diferencia Neta:</span>
+                  <span className="font-mono font-black text-sm text-emerald-700 dark:text-emerald-300">
+                    ${formatMoneyExact(summary.diferenciaCuadre)}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -481,12 +588,17 @@ export const BankSummaryCards = memo(function BankSummaryCards({
               </div>
 
               <div className="space-y-1 pl-4 text-[11px]">
-                <div className="flex items-center justify-between text-ink py-0.5 border-b border-rose-500/10">
+                <div className="flex items-center justify-between text-ink py-1 border-b border-rose-500/10">
                   <div>
-                    <span className="font-medium">• Rendimientos Financieros del Periodo en Extracto:</span>
-                    <span className="block text-[10px] text-ink-muted">Abonados por el banco pendientes de causar en contabilidad</span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold">• Rendimientos Financieros del Periodo en Extracto:</span>
+                      <span className="rounded-full bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-300 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border border-rose-300/60">
+                        Partida Conciliatoria (Pendiente de Registrar)
+                      </span>
+                    </div>
+                    <span className="block text-[10px] text-ink-muted">Abonados por el banco, a deducir del extracto para conciliar con libros contables</span>
                   </div>
-                  <span className="font-mono font-bold text-rose-700 dark:text-rose-400 whitespace-nowrap">
+                  <span className="font-mono font-black text-rose-700 dark:text-rose-400 whitespace-nowrap">
                     -{formatMoneyExact(summary.notasCreditoRendimientos || 0)}
                   </span>
                 </div>
@@ -578,30 +690,43 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 </span>
               </div>
 
+              {/* Banner de Diferencia Neta de la Cédula (Banco a Libros) */}
               <div
                 className={cn(
-                  "flex items-center justify-between py-2 px-3 rounded-xl border text-xs font-bold transition",
+                  "flex items-center justify-between py-2.5 px-3.5 rounded-xl border text-xs font-bold transition",
                   difBancoALibros < 0.05
-                    ? "border-emerald-500/60 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200"
-                    : "border-amber-500/60 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200"
+                    ? "border-emerald-500/60 bg-emerald-50/90 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200"
+                    : "border-amber-500/60 bg-amber-50/90 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200"
                 )}
               >
-                <div className="flex items-center gap-1.5">
-                  {difBancoALibros < 0.05 ? (
-                    <>
-                      <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
-                      <span>DIFERENCIA NETA DE CONCILIACIÓN: CUADRADA AL 100%</span>
-                    </>
-                  ) : (
-                    <>
-                      <AlertCircle className="size-4 text-amber-600 dark:text-amber-400" />
-                      <span>DIFERENCIA NETA PENDIENTE</span>
-                    </>
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5 font-black text-sm">
+                    {difBancoALibros < 0.05 ? (
+                      <>
+                        <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span>CONCILIACIÓN CUADRADA AL 100%</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="size-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <span>DIFERENCIA NETA PENDIENTE</span>
+                      </>
+                    )}
+                  </div>
+                  {difBancoALibros < 0.05 && (
+                    <div className="text-[10px] font-normal text-emerald-800/90 dark:text-emerald-300/90">
+                      {isSoloRend
+                        ? `Al deducir del extracto los rendimientos pendientes de registro (-${formatMoneyExact(summary.notasCreditoRendimientos || 0)}), el saldo concilia exactamente con los libros contables ($0,00 de diferencia neta).`
+                        : "Al aplicar las partidas conciliatorias identificadas, el extracto concilia con exactitud matemática al 100% con los libros contables."}
+                    </div>
                   )}
                 </div>
-                <span className="font-mono font-black text-sm">
-                  ${formatMoneyExact(difBancoALibros)}
-                </span>
+                <div className="text-right shrink-0">
+                  <span className="block text-[10px] text-ink-muted uppercase">Diferencia Neta:</span>
+                  <span className="font-mono font-black text-sm text-emerald-700 dark:text-emerald-300">
+                    ${formatMoneyExact(difBancoALibros)}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -665,28 +790,38 @@ export const BankSummaryCards = memo(function BankSummaryCards({
             {/* Confrontación de ambos lados */}
             <div
               className={cn(
-                "flex items-center justify-between py-2 px-3 rounded-xl border text-xs font-bold transition",
+                "flex items-center justify-between py-2.5 px-3.5 rounded-xl border text-xs font-bold transition",
                 difSaldosAjustados < 0.05
-                  ? "border-emerald-500/60 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200"
-                  : "border-amber-500/60 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200"
+                  ? "border-emerald-500/60 bg-emerald-50/90 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200"
+                  : "border-amber-500/60 bg-amber-50/90 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200"
               )}
             >
-              <div className="flex items-center gap-1.5">
-                {difSaldosAjustados < 0.05 ? (
-                  <>
-                    <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
-                    <span>CONCILIACIÓN COINCIDENTE EN AMBOS SALDOS AJUSTADOS</span>
-                  </>
-                ) : (
-                  <>
-                    <AlertCircle className="size-4 text-amber-600 dark:text-amber-400" />
-                    <span>DIFERENCIA ENTRE SALDOS AJUSTADOS</span>
-                  </>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5 font-black text-sm">
+                  {difSaldosAjustados < 0.05 ? (
+                    <>
+                      <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>CONCILIACIÓN COINCIDENTE EN AMBOS SALDOS AJUSTADOS</span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="size-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span>DIFERENCIA ENTRE SALDOS AJUSTADOS</span>
+                    </>
+                  )}
+                </div>
+                {difSaldosAjustados < 0.05 && (
+                  <div className="text-[10px] font-normal text-emerald-800/90 dark:text-emerald-300/90">
+                    Al aplicar las partidas conciliatorias respectivas a cada lado, ambos saldos ajustados concilian al centavo con exactitud matemática ($0,00 de diferencia).
+                  </div>
                 )}
               </div>
-              <span className="font-mono font-black text-sm">
-                ${formatMoneyExact(difSaldosAjustados)}
-              </span>
+              <div className="text-right shrink-0">
+                <span className="block text-[10px] text-ink-muted uppercase">Diferencia Neta:</span>
+                <span className="font-mono font-black text-sm text-emerald-700 dark:text-emerald-300">
+                  ${formatMoneyExact(difSaldosAjustados)}
+                </span>
+              </div>
             </div>
           </div>
         )}
