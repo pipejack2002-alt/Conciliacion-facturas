@@ -8,6 +8,8 @@ import {
   RotateCcw,
   Sparkles,
   AlertTriangle,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import type { ColumnKey, ColumnMapping, DetectedProfile, SoftwareProfileId } from "@/lib/types";
 import {
@@ -135,6 +137,7 @@ export function ColumnMapperModal({
   const [savedProfiles, setSavedProfiles] = useState<Record<string, ColumnMapping>>({});
   const [showSaveInput, setShowSaveInput] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -209,8 +212,21 @@ export function ColumnMapperModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-slate-800 dark:text-slate-100">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-200 ${
+        isMaximized ? "p-1 sm:p-2" : "p-3 sm:p-6"
+      }`}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className={`relative flex flex-col w-full transition-all duration-200 overflow-hidden rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 ${
+          isMaximized
+            ? "h-[98vh] max-w-[99vw]"
+            : "max-h-[95vh] max-w-5xl xl:max-w-6xl 2xl:max-w-7xl"
+        }`}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50">
           <div className="flex items-center gap-3">
@@ -229,12 +245,23 @@ export function ColumnMapperModal({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            <X className="size-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsMaximized((prev) => !prev)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              title={isMaximized ? "Restaurar tamaño normal" : "Maximizar a pantalla completa"}
+            >
+              {isMaximized ? <Minimize2 className="size-5" /> : <Maximize2 className="size-5" />}
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Cerrar"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
         </div>
 
         {/* Notificación Toast local */}
@@ -246,7 +273,7 @@ export function ColumnMapperModal({
         )}
 
         {/* Body scrollable */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 [scrollbar-width:thin]">
           {/* Fila de Selección de Software y Confianza */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
             <div>
@@ -415,7 +442,7 @@ export function ColumnMapperModal({
                 <span>Previsualización de Datos del Archivo (Primeras Filas)</span>
               </h3>
 
-              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 max-h-48 text-[11px]">
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 max-h-56 text-[11px] [scrollbar-width:thin]">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="bg-slate-100/80 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">

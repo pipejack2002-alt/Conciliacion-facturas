@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Printer, Award } from "lucide-react";
+import { X, Printer, Award, Maximize2, Minimize2 } from "lucide-react";
 import { formatMoney } from "@/lib/format";
 import type { ConciliacionResult } from "@/lib/types";
 
@@ -17,6 +17,7 @@ export function ActaConciliacionModal({ open, onClose, result, dianName, movName
   const [revisorNombre, setRevisorNombre] = useState("");
   const [revisorDoc, setRevisorDoc] = useState("");
   const [fechaActa, setFechaActa] = useState(() => new Date().toISOString().split("T")[0]);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   if (!open) return null;
 
@@ -34,38 +35,57 @@ export function ActaConciliacionModal({ open, onClose, result, dianName, movName
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-xl border border-line bg-bg-surface shadow-2xl flex flex-col">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm animate-in fade-in duration-200 ${
+        isMaximized ? "p-1 sm:p-2" : "p-2 sm:p-4 lg:p-6"
+      }`}
+    >
+      <div
+        className={`relative w-full overflow-hidden rounded-2xl border border-line bg-bg-surface shadow-2xl flex flex-col transition-all duration-200 ${
+          isMaximized
+            ? "h-[98vh] max-w-[99vw]"
+            : "max-h-[95vh] max-w-5xl xl:max-w-6xl 2xl:max-w-7xl"
+        }`}
+      >
         {/* Header no-print */}
-        <div className="no-print flex items-center justify-between border-b border-line px-6 py-3.5 bg-bg-elevated">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal/10 text-teal">
+        <div className="no-print flex items-center justify-between border-b border-line px-5 py-3.5 sm:px-6 bg-bg-elevated shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal/10 text-teal">
               <Award className="h-5 w-5" />
             </div>
-            <div>
-              <h2 className="text-base font-bold text-ink">
+            <div className="min-w-0">
+              <h2 className="text-base font-bold text-ink truncate">
                 Acta y Certificado Formal de Conciliación
               </h2>
-              <p className="text-xs text-ink-muted">
+              <p className="text-xs text-ink-muted truncate">
                 Documento oficial para auditorías, archivo contable o requerimientos DIAN
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-teal px-3 py-1.5 text-xs font-semibold text-bg-elevated hover:bg-teal/90 transition shadow-sm"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-teal px-2.5 py-1.5 sm:px-3 text-xs font-semibold text-white hover:bg-teal-deep transition shadow-xs cursor-pointer"
             >
               <Printer className="size-3.5" />
-              Imprimir / Guardar PDF
+              <span className="hidden sm:inline">Imprimir / PDF</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsMaximized((prev) => !prev)}
+              className="rounded-lg p-1.5 text-ink-muted hover:bg-bg-subtle hover:text-ink transition cursor-pointer"
+              title={isMaximized ? "Restaurar tamaño normal" : "Maximizar pantalla completa"}
+            >
+              {isMaximized ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg p-1.5 text-ink-muted hover:bg-bg-subtle hover:text-ink transition"
+              className="rounded-lg p-1.5 text-ink-muted hover:bg-bg-subtle hover:text-ink transition cursor-pointer"
+              title="Cerrar modal"
             >
-              <X className="h-5 w-5" />
+              <X className="size-5" />
             </button>
           </div>
         </div>
@@ -127,8 +147,8 @@ export function ActaConciliacionModal({ open, onClose, result, dianName, movName
         </div>
 
         {/* Printable Paper Area */}
-        <div className="flex-1 overflow-y-auto p-6 sm:p-8 bg-bg-surface text-ink print:p-0 print:m-0">
-          <div className="mx-auto max-w-3xl space-y-6 text-sm">
+        <div className="flex-1 overflow-y-auto p-6 sm:p-8 bg-bg-surface text-ink print:p-0 print:m-0 [scrollbar-width:thin]">
+          <div className={`mx-auto space-y-6 text-sm transition-all duration-200 ${isMaximized ? "max-w-6xl" : "max-w-4xl"}`}>
             
             {/* Header del Acta */}
             <div className="border-b-2 border-ink pb-4 text-center">

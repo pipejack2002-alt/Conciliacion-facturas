@@ -773,17 +773,17 @@ export const BankTable = memo(function BankTable({
                                   )}
 
                                   {/* Tabla del Asiento Contable Completo */}
-                                  <div className="overflow-x-auto rounded-lg border border-teal-200 dark:border-teal-800 bg-bg-surface">
-                                    <table className="w-full text-left text-xs">
+                                  <div className="overflow-x-auto rounded-lg border border-teal-200 dark:border-teal-800 bg-bg-surface scrollbar-thin [scrollbar-width:thin] [scrollbar-color:rgba(15,118,110,0.3)_transparent] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-bg-subtle/50 [&::-webkit-scrollbar-thumb]:bg-teal/30 hover:[&::-webkit-scrollbar-thumb]:bg-teal/60 [&::-webkit-scrollbar-thumb]:rounded-full">
+                                    <table className="w-full min-w-[760px] text-left text-xs">
                                       <thead className="bg-teal-100/60 dark:bg-teal-950/60 text-teal-950 dark:text-teal-200 font-semibold border-b border-teal-200 dark:border-teal-800">
                                         <tr>
-                                          <th className="px-3 py-2">Cuenta PUC</th>
-                                          <th className="px-3 py-2">Nombre Cuenta</th>
-                                          <th className="px-3 py-2">Tercero / NIT</th>
-                                          <th className="px-3 py-2">Concepto / Glosa</th>
-                                          <th className="px-3 py-2">Cruce / Ref</th>
-                                          <th className="px-3 py-2 text-right">Débito (COP)</th>
-                                          <th className="px-3 py-2 text-right">Crédito (COP)</th>
+                                          <th className="px-3 py-2 w-28 shrink-0">Cuenta PUC</th>
+                                          <th className="px-3 py-2 min-w-[140px]">Nombre Cuenta</th>
+                                          <th className="px-3 py-2 min-w-[150px]">Tercero / NIT</th>
+                                          <th className="px-3 py-2 min-w-[180px]">Concepto / Glosa</th>
+                                          <th className="px-3 py-2 w-32">Cruce / Ref</th>
+                                          <th className="px-3 py-2 text-right whitespace-nowrap w-36">Débito (COP)</th>
+                                          <th className="px-3 py-2 text-right whitespace-nowrap w-36">Crédito (COP)</th>
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-teal-100 dark:divide-teal-900/30">
@@ -796,7 +796,7 @@ export const BankTable = memo(function BankTable({
                                                 isBank ? "bg-teal-50/30 font-semibold" : ""
                                               }`}
                                             >
-                                              <td className="px-3 py-2 font-mono text-ink">
+                                              <td className="px-3 py-2 font-mono text-ink whitespace-nowrap">
                                                 <span className={isBank ? "text-teal font-bold" : ""}>{line.cuenta}</span>
                                                 {line.esContrapartidaDeducida && (
                                                   <span className="block text-[10px] text-teal font-medium">
@@ -804,23 +804,23 @@ export const BankTable = memo(function BankTable({
                                                   </span>
                                                 )}
                                               </td>
-                                              <td className="px-3 py-2 font-medium text-ink max-w-44 truncate" title={line.cuentaNombre}>
+                                              <td className="px-3 py-2 font-medium text-ink max-w-56 truncate" title={line.cuentaNombre}>
                                                 {line.cuentaNombre}
                                               </td>
-                                              <td className="px-3 py-2 text-ink max-w-40 truncate" title={line.nombre}>
+                                              <td className="px-3 py-2 text-ink max-w-56 truncate" title={line.nombre}>
                                                 <span>{line.nombre || "—"}</span>
                                                 {line.nit && <span className="block text-[10px] text-ink-subtle font-mono">NIT: {line.nit}</span>}
                                               </td>
-                                              <td className="px-3 py-2 text-ink-muted max-w-56 truncate" title={line.descripcion}>
+                                              <td className="px-3 py-2 text-ink-muted max-w-64 truncate" title={line.descripcion}>
                                                 {line.descripcion}
                                               </td>
-                                              <td className="px-3 py-2 font-mono text-ink-subtle">
+                                              <td className="px-3 py-2 font-mono text-ink-subtle whitespace-nowrap">
                                                 {line.cruce || "—"}
                                               </td>
-                                              <td className="px-3 py-2 font-mono font-bold text-right text-ink">
+                                              <td className="px-3 py-2 font-mono font-bold text-right text-ink whitespace-nowrap w-36">
                                                 {line.debito > 0 ? formatMoneyExact(line.debito) : "—"}
                                               </td>
-                                              <td className="px-3 py-2 font-mono font-bold text-right text-ink">
+                                              <td className="px-3 py-2 font-mono font-bold text-right text-ink whitespace-nowrap w-36">
                                                 {line.credito > 0 ? formatMoneyExact(line.credito) : "—"}
                                               </td>
                                             </tr>
@@ -829,13 +829,13 @@ export const BankTable = memo(function BankTable({
                                       </tbody>
                                       <tfoot className="bg-teal-100/40 dark:bg-teal-950/40 font-bold border-t border-teal-200 dark:border-teal-800">
                                         <tr>
-                                          <td colSpan={5} className="px-3 py-1.5 text-right text-teal-950 dark:text-teal-200">
+                                          <td colSpan={5} className="px-3 py-1.5 text-right text-teal-950 dark:text-teal-200 whitespace-nowrap">
                                             Sumas Iguales:
                                           </td>
-                                          <td className="px-3 py-1.5 font-mono text-right text-teal-950 dark:text-teal-200">
+                                          <td className="px-3 py-1.5 font-mono text-right text-teal-950 dark:text-teal-200 whitespace-nowrap">
                                             {formatMoneyExact(resolved.totalDebito)}
                                           </td>
-                                          <td className="px-3 py-1.5 font-mono text-right text-teal-950 dark:text-teal-200">
+                                          <td className="px-3 py-1.5 font-mono text-right text-teal-950 dark:text-teal-200 whitespace-nowrap">
                                             {formatMoneyExact(resolved.totalCredito)}
                                           </td>
                                         </tr>

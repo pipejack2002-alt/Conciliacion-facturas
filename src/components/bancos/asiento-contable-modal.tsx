@@ -10,6 +10,8 @@ import {
   Check,
   Scale,
   Sparkles,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { formatMoneyExact, formatDate } from "@/lib/format";
 import type { BankConciliacionRow } from "@/lib/conciliar-bancos";
@@ -38,6 +40,7 @@ export function AsientoContableModal({
 }: Props) {
   const [copied, setCopied] = useState(false);
   const [selectedCompTab, setSelectedCompTab] = useState<string>("");
+  const [isMaximized, setIsMaximized] = useState(false);
 
   // Comprobante solicitado prioritario (pasado por prop o en row.itemLibros)
   const targetComp = useMemo(() => {
@@ -155,13 +158,23 @@ export function AsientoContableModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-line bg-bg-surface shadow-2xl flex flex-col">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm animate-in fade-in duration-200 ${
+        isMaximized ? "p-1 sm:p-2" : "p-2 sm:p-4 lg:p-6"
+      }`}
+    >
+      <div
+        className={`relative w-full overflow-hidden rounded-2xl border border-line bg-bg-surface shadow-2xl flex flex-col transition-all duration-200 ${
+          isMaximized
+            ? "h-[98vh] max-w-[99vw]"
+            : "max-h-[95vh] max-w-[96vw] xl:max-w-7xl 2xl:max-w-[1550px]"
+        }`}
+      >
         {/* Encabezado del Modal */}
-        <div className="flex items-center justify-between border-b border-line px-6 py-4 bg-bg-elevated">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between border-b border-line px-5 py-3.5 sm:px-6 sm:py-4 bg-bg-elevated shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
             <div
-              className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
                 isBankNote
                   ? "bg-amber-500/10 text-amber-600"
                   : "bg-teal/10 text-teal"
@@ -169,72 +182,83 @@ export function AsientoContableModal({
             >
               {isBankNote ? <Sparkles className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-ink">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base font-bold text-ink truncate">
                   {isBankNote
                     ? "Asiento Contable Sugerido (Partida Pendiente en Libros)"
                     : `Auditoría del Asiento Contable · Comprobante ${activeComprobante || row.referencia || "Contable"}`}
                 </h2>
                 {isBankNote && (
-                  <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-400">
+                  <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 shrink-0">
                     Falta en Libros
                   </span>
                 )}
               </div>
-              <p className="text-xs text-ink-muted">
+              <p className="text-xs text-ink-muted truncate">
                 {isBankNote
                   ? "Instrucción de causación y registro contable para cuadrar el libro auxiliar con el extracto"
                   : "Desglose completo de todas las cuentas débitos y créditos registradas en este comprobante"}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={handleCopySuggestion}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-bg-surface px-3 py-1.5 text-xs font-semibold text-ink hover:text-teal hover:border-teal transition cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-bg-surface px-2.5 py-1.5 sm:px-3 text-xs font-semibold text-ink hover:text-teal hover:border-teal transition cursor-pointer shadow-2xs"
               title="Copiar detalle del asiento contable"
             >
               {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
-              <span>{copied ? "¡Copiado!" : "Copiar"}</span>
+              <span className="hidden sm:inline">{copied ? "¡Copiado!" : "Copiar"}</span>
             </button>
 
             {isBankNote && (
               <button
                 type="button"
                 onClick={() => exportAsientoAjusteBancario([row], bancoNombre, cuentaContable)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-teal px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-deep transition shadow-xs cursor-pointer"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-teal px-2.5 py-1.5 sm:px-3 text-xs font-semibold text-white hover:bg-teal-deep transition shadow-xs cursor-pointer"
               >
                 <Download className="size-3.5" />
-                Descargar Asiento (.xlsx)
+                <span className="hidden sm:inline">Descargar Asiento (.xlsx)</span>
               </button>
             )}
+
+            {/* Botón de Maximizar / Restaurar Pantalla Completa */}
+            <button
+              type="button"
+              onClick={() => setIsMaximized((prev) => !prev)}
+              className="rounded-lg p-1.5 text-ink-muted hover:bg-bg-subtle hover:text-ink transition cursor-pointer"
+              title={isMaximized ? "Restaurar tamaño normal" : "Maximizar pantalla completa"}
+            >
+              {isMaximized ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+            </button>
 
             <button
               type="button"
               onClick={onClose}
               className="rounded-lg p-1.5 text-ink-muted hover:bg-bg-subtle hover:text-ink transition cursor-pointer"
+              title="Cerrar modal"
             >
-              <X className="h-5 w-5" />
+              <X className="size-5" />
             </button>
           </div>
         </div>
 
         {/* Selector de Comprobantes si es un Lote ACH */}
         {comprobantesList.length > 1 && (
-          <div className="border-b border-line bg-bg-subtle/50 px-6 py-2.5 flex items-center gap-2 overflow-x-auto text-xs scrollbar-thin">
+          <div className="border-b border-line bg-bg-subtle/50 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 text-xs shrink-0">
             <span className="text-[11px] font-bold text-ink-muted shrink-0 flex items-center gap-1.5">
               <Layers className="size-3.5 text-purple-600" />
               Comprobantes en Lote ({comprobantesList.length}):
             </span>
-            <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
+            <div className="flex items-center gap-1.5 flex-wrap max-h-24 overflow-y-auto py-0.5 scrollbar-thin [scrollbar-width:thin] [scrollbar-color:rgba(147,51,234,0.3)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-purple-500/30 hover:[&::-webkit-scrollbar-thumb]:bg-purple-500/60 [&::-webkit-scrollbar-thumb]:rounded-full">
               {comprobantesList.map((comp) => (
                 <button
                   key={comp}
                   type="button"
                   onClick={() => setSelectedCompTab(comp)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer whitespace-nowrap shrink-0 leading-normal inline-flex items-center gap-1.5 ${
+                  className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition cursor-pointer whitespace-nowrap shrink-0 leading-normal inline-flex items-center gap-1.5 ${
                     activeComprobante === comp
                       ? "bg-purple-600 text-white shadow-xs"
                       : "bg-bg-surface text-ink-muted hover:text-ink hover:border-purple-300 border border-line"
@@ -249,10 +273,10 @@ export function AsientoContableModal({
         )}
 
         {/* Contenido Central */}
-        <div className="overflow-y-auto p-6 space-y-5 text-ink">
+        <div className="overflow-y-auto p-4 sm:p-6 space-y-5 text-ink flex-1">
           {/* Tarjeta de Metadatos del Movimiento Bancario */}
           <div className="rounded-xl border border-line bg-bg-subtle/40 p-4 text-xs">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <span className="text-ink-muted block text-[11px]">Fecha Movimiento:</span>
                 <span className="font-mono font-bold text-ink">{formatDate(row.fecha)}</span>
@@ -273,7 +297,7 @@ export function AsientoContableModal({
                 <span className="text-ink-muted block text-[11px]">Referencia / Folio:</span>
                 <span className="font-mono font-bold text-ink">{row.referencia || "—"}</span>
               </div>
-              <div className="sm:col-span-2 md:col-span-4 pt-1 border-t border-line/60">
+              <div className="sm:col-span-2 lg:col-span-4 pt-2 border-t border-line/60">
                 <span className="text-ink-muted block text-[11px]">Descripción del Movimiento:</span>
                 <span className="font-semibold text-ink">{row.descripcion}</span>
               </div>
@@ -308,16 +332,16 @@ export function AsientoContableModal({
                   </span>
                 </div>
 
-                <div className="overflow-x-auto rounded-xl border border-line bg-bg-surface">
-                  <table className="w-full text-left text-xs">
+                <div className="overflow-x-auto rounded-xl border border-line bg-bg-surface scrollbar-thin [scrollbar-width:thin] [scrollbar-color:rgba(217,119,6,0.3)_transparent] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-bg-subtle/50 [&::-webkit-scrollbar-thumb]:bg-amber-500/30 hover:[&::-webkit-scrollbar-thumb]:bg-amber-500/60 [&::-webkit-scrollbar-thumb]:rounded-full">
+                  <table className="w-full min-w-[760px] text-left text-xs">
                     <thead className="bg-bg-subtle text-ink-muted font-bold border-b border-line">
                       <tr>
-                        <th className="px-3.5 py-2.5">Código PUC</th>
-                        <th className="px-3.5 py-2.5">Nombre de la Cuenta</th>
-                        <th className="px-3.5 py-2.5">Tercero / Razón Social</th>
-                        <th className="px-3.5 py-2.5">Concepto Contable</th>
-                        <th className="px-3.5 py-2.5 text-right">Débito (COP)</th>
-                        <th className="px-3.5 py-2.5 text-right">Crédito (COP)</th>
+                        <th className="px-3.5 py-2.5 w-32 shrink-0">Código PUC</th>
+                        <th className="px-3.5 py-2.5 min-w-[160px]">Nombre de la Cuenta</th>
+                        <th className="px-3.5 py-2.5 min-w-[160px]">Tercero / Razón Social</th>
+                        <th className="px-3.5 py-2.5 min-w-[200px]">Concepto Contable</th>
+                        <th className="px-3.5 py-2.5 text-right whitespace-nowrap w-36">Débito (COP)</th>
+                        <th className="px-3.5 py-2.5 text-right whitespace-nowrap w-36">Crédito (COP)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-line">
@@ -338,10 +362,10 @@ export function AsientoContableModal({
                               {row.esGmf ? "DIAN - DIRECCION DE IMPUESTOS" : bancoNombre}
                             </td>
                             <td className="px-3.5 py-2.5 text-ink-muted">{row.descripcion}</td>
-                            <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink">
+                            <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap">
                               {formatMoneyExact(row.montoBanco)}
                             </td>
-                            <td className="px-3.5 py-2.5 font-mono text-right text-ink-subtle">—</td>
+                            <td className="px-3.5 py-2.5 font-mono text-right text-ink-subtle whitespace-nowrap">—</td>
                           </tr>
                           <tr className="hover:bg-bg-subtle/50 transition">
                             <td className="px-3.5 py-2.5 font-mono font-bold text-teal">{cuentaContable}</td>
@@ -350,8 +374,8 @@ export function AsientoContableModal({
                             </td>
                             <td className="px-3.5 py-2.5 text-ink-muted">{bancoNombre}</td>
                             <td className="px-3.5 py-2.5 text-ink-muted">Cargo bancario extracto</td>
-                            <td className="px-3.5 py-2.5 font-mono text-right text-ink-subtle">—</td>
-                            <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink">
+                            <td className="px-3.5 py-2.5 font-mono text-right text-ink-subtle whitespace-nowrap">—</td>
+                            <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap">
                               {formatMoneyExact(row.montoBanco)}
                             </td>
                           </tr>
@@ -365,10 +389,10 @@ export function AsientoContableModal({
                             </td>
                             <td className="px-3.5 py-2.5 text-ink-muted">{bancoNombre}</td>
                             <td className="px-3.5 py-2.5 text-ink-muted">Abono bancario extracto</td>
-                            <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink">
+                            <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap">
                               {formatMoneyExact(row.montoBanco)}
                             </td>
-                            <td className="px-3.5 py-2.5 font-mono text-right text-ink-subtle">—</td>
+                            <td className="px-3.5 py-2.5 font-mono text-right text-ink-subtle whitespace-nowrap">—</td>
                           </tr>
                           <tr className="hover:bg-bg-subtle/50 transition">
                             <td className="px-3.5 py-2.5 font-mono font-bold text-teal">
@@ -383,8 +407,8 @@ export function AsientoContableModal({
                               {row.esRendimiento ? bancoNombre : "Clientes Varios"}
                             </td>
                             <td className="px-3.5 py-2.5 text-ink-muted">{row.descripcion}</td>
-                            <td className="px-3.5 py-2.5 font-mono text-right text-ink-subtle">—</td>
-                            <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink">
+                            <td className="px-3.5 py-2.5 font-mono text-right text-ink-subtle whitespace-nowrap">—</td>
+                            <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap">
                               {formatMoneyExact(row.montoBanco)}
                             </td>
                           </tr>
@@ -393,13 +417,13 @@ export function AsientoContableModal({
                     </tbody>
                     <tfoot className="bg-bg-subtle/80 font-bold border-t border-line">
                       <tr>
-                        <td colSpan={4} className="px-3.5 py-2 text-right text-ink-muted">
+                        <td colSpan={4} className="px-3.5 py-2 text-right text-ink-muted whitespace-nowrap">
                           Sumas Iguales:
                         </td>
-                        <td className="px-3.5 py-2 font-mono text-right text-ink font-bold">
+                        <td className="px-3.5 py-2 font-mono text-right text-ink font-bold whitespace-nowrap">
                           {formatMoneyExact(row.montoBanco)}
                         </td>
-                        <td className="px-3.5 py-2 font-mono text-right text-ink font-bold">
+                        <td className="px-3.5 py-2 font-mono text-right text-ink font-bold whitespace-nowrap">
                           {formatMoneyExact(row.montoBanco)}
                         </td>
                       </tr>
@@ -438,7 +462,7 @@ export function AsientoContableModal({
                 </div>
               )}
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <h3 className="text-xs font-black uppercase tracking-wider text-ink">
                     Líneas Contables del Comprobante ({displayLines.length} registros)
@@ -467,17 +491,17 @@ export function AsientoContableModal({
                   No se encontraron líneas auxiliares adicionales para el comprobante {activeComprobante}.
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-xl border border-line bg-bg-surface">
-                  <table className="w-full text-left text-xs">
+                <div className="overflow-x-auto rounded-xl border border-line bg-bg-surface scrollbar-thin [scrollbar-width:thin] [scrollbar-color:rgba(15,118,110,0.3)_transparent] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-bg-subtle/50 [&::-webkit-scrollbar-thumb]:bg-teal/30 hover:[&::-webkit-scrollbar-thumb]:bg-teal/60 [&::-webkit-scrollbar-thumb]:rounded-full">
+                  <table className="w-full min-w-[850px] text-left text-xs">
                     <thead className="bg-bg-subtle text-ink-muted font-bold border-b border-line">
                       <tr>
-                        <th className="px-3.5 py-2.5">Cuenta PUC</th>
-                        <th className="px-3.5 py-2.5">Nombre Cuenta</th>
-                        <th className="px-3.5 py-2.5">Tercero / NIT</th>
-                        <th className="px-3.5 py-2.5">Glosa / Concepto</th>
-                        <th className="px-3.5 py-2.5">Cruce / Ref</th>
-                        <th className="px-3.5 py-2.5 text-right">Débito (COP)</th>
-                        <th className="px-3.5 py-2.5 text-right">Crédito (COP)</th>
+                        <th className="px-3.5 py-2.5 w-32 shrink-0">Cuenta PUC</th>
+                        <th className="px-3.5 py-2.5 min-w-[150px]">Nombre Cuenta</th>
+                        <th className="px-3.5 py-2.5 min-w-[160px]">Tercero / NIT</th>
+                        <th className="px-3.5 py-2.5 min-w-[200px]">Glosa / Concepto</th>
+                        <th className="px-3.5 py-2.5 w-36">Cruce / Ref</th>
+                        <th className="px-3.5 py-2.5 text-right whitespace-nowrap w-36">Débito (COP)</th>
+                        <th className="px-3.5 py-2.5 text-right whitespace-nowrap w-36">Crédito (COP)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-line">
@@ -490,7 +514,7 @@ export function AsientoContableModal({
                               isTreasury ? "bg-teal-50/40 dark:bg-teal-950/20 font-semibold" : ""
                             }`}
                           >
-                            <td className="px-3.5 py-2.5 font-mono text-ink">
+                            <td className="px-3.5 py-2.5 font-mono text-ink whitespace-nowrap">
                               <span className={isTreasury ? "text-teal font-bold" : ""}>
                                 {line.cuenta}
                               </span>
@@ -500,10 +524,10 @@ export function AsientoContableModal({
                                 </span>
                               )}
                             </td>
-                            <td className="px-3.5 py-2.5 font-medium text-ink max-w-48 truncate" title={line.cuentaNombre}>
+                            <td className="px-3.5 py-2.5 font-medium text-ink max-w-64 truncate" title={line.cuentaNombre}>
                               {line.cuentaNombre}
                             </td>
-                            <td className="px-3.5 py-2.5 text-ink max-w-44 truncate" title={line.nombre}>
+                            <td className="px-3.5 py-2.5 text-ink max-w-64 truncate" title={line.nombre}>
                               <span>{line.nombre || "—"}</span>
                               {line.nit && (
                                 <span className="block text-[10px] text-ink-subtle font-mono">
@@ -511,16 +535,16 @@ export function AsientoContableModal({
                                 </span>
                               )}
                             </td>
-                            <td className="px-3.5 py-2.5 text-ink-muted max-w-56 truncate" title={line.descripcion}>
+                            <td className="px-3.5 py-2.5 text-ink-muted max-w-80 truncate" title={line.descripcion}>
                               {line.descripcion}
                             </td>
-                            <td className="px-3.5 py-2.5 font-mono text-ink-subtle">
+                            <td className="px-3.5 py-2.5 font-mono text-ink-subtle whitespace-nowrap">
                               {line.cruce || line.referencia || "—"}
                             </td>
-                            <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink">
+                            <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap w-36">
                               {line.debito > 0 ? formatMoneyExact(line.debito) : "—"}
                             </td>
-                            <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink">
+                            <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap w-36">
                               {line.credito > 0 ? formatMoneyExact(line.credito) : "—"}
                             </td>
                           </tr>
@@ -529,22 +553,22 @@ export function AsientoContableModal({
                     </tbody>
                     <tfoot className="bg-bg-subtle/80 font-bold border-t border-line text-xs">
                       <tr>
-                        <td colSpan={5} className="px-3.5 py-2.5 text-right text-ink-muted">
+                        <td colSpan={5} className="px-3.5 py-2.5 text-right text-ink-muted whitespace-nowrap">
                           Sumas Iguales del Comprobante:
                         </td>
-                        <td className="px-3.5 py-2.5 font-mono text-right text-ink">
+                        <td className="px-3.5 py-2.5 font-mono text-right text-ink whitespace-nowrap font-bold">
                           {formatMoneyExact(totalDebitos)}
                         </td>
-                        <td className="px-3.5 py-2.5 font-mono text-right text-ink">
+                        <td className="px-3.5 py-2.5 font-mono text-right text-ink whitespace-nowrap font-bold">
                           {formatMoneyExact(totalCreditos)}
                         </td>
                       </tr>
                       {balanceDiferencia > 0.05 && (
                         <tr className="bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200">
-                          <td colSpan={5} className="px-3.5 py-1 text-right text-[11px]">
+                          <td colSpan={5} className="px-3.5 py-1.5 text-right text-[11px] whitespace-nowrap">
                             Diferencia entre débitos y créditos en este extracto de libro:
                           </td>
-                          <td colSpan={2} className="px-3.5 py-1 font-mono text-right text-[11px] font-bold">
+                          <td colSpan={2} className="px-3.5 py-1.5 font-mono text-right text-[11px] font-bold whitespace-nowrap">
                             {formatMoneyExact(balanceDiferencia)}
                           </td>
                         </tr>

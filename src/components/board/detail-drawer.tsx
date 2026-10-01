@@ -57,7 +57,7 @@ export function DetailDrawer({
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-ink/30 no-print" onClick={onClose}>
       <aside
-        className="flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-line bg-bg-elevated p-5 shadow-xl"
+        className="flex h-full w-full max-w-md sm:max-w-lg lg:max-w-xl flex-col overflow-y-auto border-l border-line bg-bg-elevated p-5 shadow-xl [scrollbar-width:thin]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">

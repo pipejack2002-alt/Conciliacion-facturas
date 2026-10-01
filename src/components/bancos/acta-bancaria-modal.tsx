@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Printer, Award, CheckCircle2, AlertCircle, FileSpreadsheet } from "lucide-react";
+import { X, Printer, Award, CheckCircle2, AlertCircle, FileSpreadsheet, Maximize2, Minimize2 } from "lucide-react";
 import { formatMoneyExact, formatDate } from "@/lib/format";
 import type { BankConciliacionResult } from "@/lib/conciliar-bancos";
 
@@ -31,6 +31,7 @@ export function ActaBancariaModal({
   const [revisorNombre, setRevisorNombre] = useState("");
   const [revisorDoc, setRevisorDoc] = useState("");
   const [fechaActa, setFechaActa] = useState(() => new Date().toISOString().split("T")[0]);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   if (!open) return null;
 
@@ -50,48 +51,67 @@ export function ActaBancariaModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-xl border border-line bg-bg-surface shadow-2xl flex flex-col">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm animate-in fade-in duration-200 ${
+        isMaximized ? "p-1 sm:p-2" : "p-2 sm:p-4 lg:p-6"
+      }`}
+    >
+      <div
+        className={`relative w-full overflow-hidden rounded-2xl border border-line bg-bg-surface shadow-2xl flex flex-col transition-all duration-200 ${
+          isMaximized
+            ? "h-[98vh] max-w-[99vw]"
+            : "max-h-[95vh] max-w-5xl xl:max-w-6xl 2xl:max-w-7xl"
+        }`}
+      >
         {/* Header no-print */}
-        <div className="no-print flex items-center justify-between border-b border-line px-6 py-3.5 bg-bg-elevated">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal/10 text-teal">
+        <div className="no-print flex items-center justify-between border-b border-line px-5 py-3.5 sm:px-6 bg-bg-elevated shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal/10 text-teal">
               <Award className="h-5 w-5" />
             </div>
-            <div>
-              <h2 className="text-base font-bold text-ink">
+            <div className="min-w-0">
+              <h2 className="text-base font-bold text-ink truncate">
                 Acta Oficial de Conciliación Bancaria y Tesorería
               </h2>
-              <p className="text-xs text-ink-muted">
+              <p className="text-xs text-ink-muted truncate">
                 Documento formal conforme a NIIF / NIC 7 para archivo tributario y revisoría fiscal
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {onExportExcel && (
               <button
                 type="button"
                 onClick={onExportExcel}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-bg-surface px-3 py-1.5 text-xs font-semibold text-ink hover:text-teal hover:border-teal transition cursor-pointer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-bg-surface px-2.5 py-1.5 sm:px-3 text-xs font-semibold text-ink hover:text-teal hover:border-teal transition cursor-pointer shadow-2xs"
               >
                 <FileSpreadsheet className="size-3.5 text-teal" />
-                Descargar Excel
+                <span className="hidden sm:inline">Descargar Excel</span>
               </button>
             )}
             <button
               type="button"
               onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-teal px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-deep transition shadow-xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-teal px-2.5 py-1.5 sm:px-3 text-xs font-semibold text-white hover:bg-teal-deep transition shadow-xs cursor-pointer"
             >
               <Printer className="size-3.5" />
-              Imprimir / Guardar PDF
+              <span className="hidden sm:inline">Imprimir / PDF</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsMaximized((prev) => !prev)}
+              className="rounded-lg p-1.5 text-ink-muted hover:bg-bg-subtle hover:text-ink transition cursor-pointer"
+              title={isMaximized ? "Restaurar tamaño normal" : "Maximizar pantalla completa"}
+            >
+              {isMaximized ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
             </button>
             <button
               type="button"
               onClick={onClose}
               className="rounded-lg p-1.5 text-ink-muted hover:bg-bg-subtle hover:text-ink transition cursor-pointer"
+              title="Cerrar modal"
             >
-              <X className="h-5 w-5" />
+              <X className="size-5" />
             </button>
           </div>
         </div>
@@ -162,8 +182,8 @@ export function ActaBancariaModal({
         </div>
 
         {/* Documento Imprimible Formal */}
-        <div className="overflow-y-auto p-8 text-ink print:p-0 print:text-black">
-          <div className="mx-auto max-w-3xl space-y-6 bg-white p-8 text-slate-900 shadow-sm print:shadow-none print:p-0">
+        <div className="overflow-y-auto p-8 text-ink print:p-0 print:text-black [scrollbar-width:thin]">
+          <div className={`mx-auto space-y-6 bg-white p-8 text-slate-900 shadow-sm print:shadow-none print:p-0 transition-all duration-200 ${isMaximized ? "max-w-6xl" : "max-w-4xl"}`}>
             {/* Membrete Oficial */}
             <div className="border-b-2 border-teal pb-4 text-center">
               <div className="text-[11px] font-black uppercase tracking-widest text-teal">

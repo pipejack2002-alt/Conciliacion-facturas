@@ -1,4 +1,5 @@
-import { X, Users, CheckCircle2, FileSpreadsheet, Printer, DollarSign, Briefcase, Calculator, Building } from "lucide-react";
+import { useState } from "react";
+import { X, Users, CheckCircle2, FileSpreadsheet, Printer, DollarSign, Briefcase, Calculator, Building, Maximize2, Minimize2 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { formatMoney } from "@/lib/format";
 import type { ConciliacionResult, MovLine } from "@/lib/types";
@@ -11,6 +12,8 @@ interface Props {
 }
 
 export function NominaAuditModal({ open, onClose, result, _mov = [] }: Props) {
+  const [isMaximized, setIsMaximized] = useState(false);
+
   if (!open) return null;
 
   const { company, periodLabel, rows } = result;
@@ -121,8 +124,21 @@ export function NominaAuditModal({ open, onClose, result, _mov = [] }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-xl border border-line bg-bg-surface shadow-2xl flex flex-col">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-200 ${
+        isMaximized ? "p-1 sm:p-2" : "p-3 sm:p-6"
+      }`}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className={`relative flex flex-col w-full transition-all duration-200 overflow-hidden rounded-2xl border border-line bg-bg-surface shadow-2xl ${
+          isMaximized
+            ? "h-[98vh] max-w-[99vw]"
+            : "max-h-[95vh] max-w-5xl xl:max-w-6xl 2xl:max-w-7xl"
+        }`}
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-line px-6 py-4 bg-bg-elevated">
           <div className="flex items-center gap-3">
@@ -142,7 +158,7 @@ export function NominaAuditModal({ open, onClose, result, _mov = [] }: Props) {
             <button
               type="button"
               onClick={exportNominaExcel}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-bg-elevated px-3 py-2 text-xs font-semibold text-ink hover:border-line-strong hover:bg-teal-soft/30 hover:text-teal transition"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-bg-elevated px-3 py-2 text-xs font-semibold text-ink hover:border-line-strong hover:bg-teal-soft/30 hover:text-teal transition cursor-pointer"
             >
               <FileSpreadsheet className="size-4 text-ok" />
               Excel Nómina
@@ -150,15 +166,24 @@ export function NominaAuditModal({ open, onClose, result, _mov = [] }: Props) {
             <button
               type="button"
               onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-bg-elevated px-3 py-2 text-xs font-semibold text-ink hover:border-line-strong transition"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-bg-elevated px-3 py-2 text-xs font-semibold text-ink hover:border-line-strong transition cursor-pointer"
             >
               <Printer className="size-4" />
               Imprimir
             </button>
             <button
               type="button"
+              onClick={() => setIsMaximized((prev) => !prev)}
+              className="rounded-lg p-2 text-ink-muted hover:bg-bg-subtle hover:text-ink transition cursor-pointer"
+              title={isMaximized ? "Restaurar tamaño normal" : "Maximizar a pantalla completa"}
+            >
+              {isMaximized ? <Minimize2 className="size-4.5" /> : <Maximize2 className="size-4.5" />}
+            </button>
+            <button
+              type="button"
               onClick={onClose}
-              className="rounded-lg p-2 text-ink-muted hover:bg-bg-subtle hover:text-ink transition"
+              className="rounded-lg p-2 text-ink-muted hover:bg-bg-subtle hover:text-ink transition cursor-pointer"
+              title="Cerrar"
             >
               <X className="h-5 w-5" />
             </button>
@@ -166,7 +191,7 @@ export function NominaAuditModal({ open, onClose, result, _mov = [] }: Props) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 [scrollbar-width:thin]">
           {/* Top KPI Cards */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="rounded-xl border border-line bg-bg-elevated p-4">
