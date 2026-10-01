@@ -963,6 +963,7 @@ export const BankTable = memo(function BankTable({
           allMovLines={allMovLines}
           cuentaContable={cuentaContable}
           bancoNombre={bancoNombre}
+          initialComprobante={modalRow.itemLibros?.comprobante}
         />
       )}
     </div>

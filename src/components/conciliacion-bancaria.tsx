@@ -37,6 +37,12 @@ import {
   STORAGE_MODO_BANCO_KEY,
   getInitialModoVista,
 } from "@/lib/tab-persistence";
+import {
+  getInitialBankSessionSync,
+  loadStoredBankSession,
+  saveStoredBankSession,
+  clearStoredBankSession,
+} from "@/lib/bank-cache";
 
 export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) {
   // Selector de Modo: Homologados (Caja Social, Credicorp, Banistmo) vs Universal (Cualquier Banco)
@@ -56,30 +62,35 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
     }
   }, []);
 
+  // Sesión inicial recuperada síncronamente (evita parpadeo o pérdida en F5)
+  const initialBankSession = useMemo(() => getInitialBankSessionSync(), []);
+
   // Control de modo demo vs plantilla en blanco
-  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(() => initialBankSession?.isDemoMode ?? false);
 
   // Estado de extracto bancario cargado
-  const [extractoMeta, setExtractoMeta] = useState<ParsedBankExtractResult | null>(null);
-  const [extractoItems, setExtractoItems] = useState<BankExtractItem[]>([]);
-  const [selectedSubAccount, setSelectedSubAccount] = useState<string>("default");
-  const [extractoFileName, setExtractoFileName] = useState<string>("");
+  const [extractoMeta, setExtractoMeta] = useState<ParsedBankExtractResult | null>(() => initialBankSession?.extractoMeta ?? null);
+  const [extractoItems, setExtractoItems] = useState<BankExtractItem[]>(() => initialBankSession?.extractoItems ?? []);
+  const [selectedSubAccount, setSelectedSubAccount] = useState<string>(() => initialBankSession?.selectedSubAccount ?? "default");
+  const [extractoFileName, setExtractoFileName] = useState<string>(() => initialBankSession?.extractoFileName ?? "");
   const [isExtractoLoading, setIsExtractoLoading] = useState<boolean>(false);
 
   // Estado de libros contables
-  const [customMovLines, setCustomMovLines] = useState<MovLine[] | null>(null);
-  const [customMovFileName, setCustomMovFileName] = useState<string>("");
+  const [customMovLines, setCustomMovLines] = useState<MovLine[] | null>(() => initialBankSession?.customMovLines ?? null);
+  const [customMovFileName, setCustomMovFileName] = useState<string>(() => initialBankSession?.customMovFileName ?? "");
   const [isMovLoading, setIsMovLoading] = useState<boolean>(false);
 
   // Saldos iniciales
-  const [saldoInicialExtracto, setSaldoInicialExtracto] = useState<number>(0);
-  const [saldoInicialLibros, setSaldoInicialLibros] = useState<number>(0);
+  const [saldoInicialExtracto, setSaldoInicialExtracto] = useState<number>(() => initialBankSession?.saldoInicialExtracto ?? 0);
+  const [saldoInicialLibros, setSaldoInicialLibros] = useState<number>(() => initialBankSession?.saldoInicialLibros ?? 0);
   const [saldoInputStr, setSaldoInputStr] = useState<string>(() =>
-    formatMoneyExact(0).replace("$", "").trim()
+    formatMoneyExact(initialBankSession?.saldoInicialExtracto ?? 0).replace("$", "").trim()
   );
 
   // Filtros de tabla
-  const [tabFilter, setTabFilter] = useState<"todas" | "conciliado" | "banco_pend" | "transito">("todas");
+  const [tabFilter, setTabFilter] = useState<"todas" | "conciliado" | "banco_pend" | "transito">(
+    () => initialBankSession?.tabFilter ?? "todas"
+  );
 
   // Modal de Acta Oficial de Conciliación Bancaria
   const [actaModalOpen, setActaModalOpen] = useState<boolean>(false);
@@ -88,7 +99,14 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
   const fileInputMovRef = useRef<HTMLInputElement>(null);
   const hasTriggeredConfettiRef = useRef<boolean>(false);
 
+  // Cuenta contable seleccionada para la conciliación
+  const [cuentaSeleccionada, setCuentaSeleccionada] = useState<string>(
+    () => initialBankSession?.cuentaSeleccionada ?? "todas"
+  );
+  const lastAutoDetectedKeyRef = useRef<string>("");
+
   const handleVaciarBancos = useCallback(() => {
+    void clearStoredBankSession();
     setIsDemoMode(false);
     setExtractoItems([]);
     setExtractoMeta(null);
@@ -98,6 +116,7 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
     setSaldoInicialExtracto(0);
     setSaldoInicialLibros(0);
     setSaldoInputStr("0,00");
+    setCuentaSeleccionada("todas");
     hasTriggeredConfettiRef.current = false;
   }, []);
 
@@ -113,6 +132,88 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
     setSaldoInputStr(formatMoneyExact(15000000).replace("$", "").trim());
   }, []);
 
+  // Hidratar datos de banco desde IndexedDB si la sesión en IndexedDB contiene datos más completos
+  useEffect(() => {
+    let active = true;
+    void loadStoredBankSession().then((stored) => {
+      if (!active || !stored) return;
+      if (stored.customMovLines && stored.customMovLines.length > 0) {
+        setCustomMovLines((prev) => (!prev || stored.customMovLines!.length > prev.length ? stored.customMovLines : prev));
+      }
+      if (stored.extractoItems && stored.extractoItems.length > 0) {
+        setExtractoItems((prev) => (prev.length === 0 ? stored.extractoItems : prev));
+      }
+      if (stored.extractoMeta) {
+        setExtractoMeta((prev) => prev || stored.extractoMeta);
+      }
+      if (stored.extractoFileName) {
+        setExtractoFileName((prev) => prev || stored.extractoFileName);
+      }
+      if (stored.customMovFileName) {
+        setCustomMovFileName((prev) => prev || stored.customMovFileName);
+      }
+      if (stored.saldoInicialExtracto !== undefined && stored.saldoInicialExtracto !== 0) {
+        setSaldoInicialExtracto((prev) => (prev === 0 ? stored.saldoInicialExtracto : prev));
+        setSaldoInicialLibros((prev) => (prev === 0 ? stored.saldoInicialLibros : prev));
+      }
+      if (stored.cuentaSeleccionada && stored.cuentaSeleccionada !== "todas") {
+        setCuentaSeleccionada((prev) => (prev === "todas" ? stored.cuentaSeleccionada : prev));
+      }
+      if (stored.isDemoMode !== undefined) {
+        setIsDemoMode((prev) => prev || stored.isDemoMode);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Auto-guardado debounced de sesión bancaria
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+
+    if (
+      extractoItems.length > 0 ||
+      (customMovLines && customMovLines.length > 0) ||
+      isDemoMode ||
+      extractoFileName ||
+      customMovFileName
+    ) {
+      const handler = setTimeout(() => {
+        void saveStoredBankSession({
+          extractoItems,
+          extractoMeta,
+          extractoFileName,
+          selectedSubAccount,
+          customMovLines,
+          customMovFileName,
+          saldoInicialExtracto,
+          saldoInicialLibros,
+          cuentaSeleccionada,
+          isDemoMode,
+          tabFilter,
+        });
+      }, 350);
+      return () => clearTimeout(handler);
+    }
+  }, [
+    extractoItems,
+    extractoMeta,
+    extractoFileName,
+    selectedSubAccount,
+    customMovLines,
+    customMovFileName,
+    saldoInicialExtracto,
+    saldoInicialLibros,
+    cuentaSeleccionada,
+    isDemoMode,
+    tabFilter,
+  ]);
+
   // Movimientos contables efectivos
   const effectiveMovLines = useMemo(() => {
     if (customMovLines && customMovLines.length > 0) return customMovLines;
@@ -124,10 +225,6 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
   const availableAccounts: DetectedBankAccount[] = useMemo(() => {
     return getAvailableBankAccounts(effectiveMovLines);
   }, [effectiveMovLines]);
-
-  // Cuenta contable seleccionada para la conciliación
-  const [cuentaSeleccionada, setCuentaSeleccionada] = useState<string>("todas");
-  const lastAutoDetectedKeyRef = useRef<string>("");
 
   useEffect(() => {
     setSaldoInputStr(formatMoneyExact(saldoInicialExtracto).replace("$", "").trim());
@@ -159,6 +256,9 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
     const currentKey = `${extractoMeta.bancoId || ""}_${extractoMeta.numeroCuenta || ""}_${extractoMeta.periodo || ""}_${extractoMeta.items?.length || 0}`;
     if (lastAutoDetectedKeyRef.current === currentKey) return;
     lastAutoDetectedKeyRef.current = currentKey;
+
+    // Si el usuario ya tiene una cuenta seleccionada que no es "todas", respetarla
+    if (cuentaSeleccionada !== "todas") return;
 
     if (extractoMeta.bancoId === "banco_caja_social") {
       const matchBcsc = availableAccounts.find(
@@ -200,11 +300,14 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
     if (availableAccounts.length === 1) {
       setCuentaSeleccionada(availableAccounts[0].cuenta);
     }
-  }, [extractoMeta, availableAccounts]);
+  }, [extractoMeta, availableAccounts, cuentaSeleccionada]);
 
-  // Actualizar items de extracto cuando cambia la subcuenta seleccionada
+  // Actualizar items de extracto SOLO cuando cambia explícitamente la subcuenta seleccionada por el usuario
+  const prevSubAccountRef = useRef<string>(selectedSubAccount);
   useEffect(() => {
     if (!extractoMeta) return;
+    if (prevSubAccountRef.current === selectedSubAccount) return;
+    prevSubAccountRef.current = selectedSubAccount;
 
     if (extractoMeta.cuentasDisponibles && extractoMeta.cuentasDisponibles.length > 0) {
       const chosen =

@@ -64,10 +64,10 @@ function ConciliadorApp() {
   }, [activeModule]);
 
   useEffect(() => {
-    if (!result) {
+    if (!result || mov.length === 0) {
       restoreActiveSession();
     }
-  }, [result, restoreActiveSession]);
+  }, [result, mov.length, restoreActiveSession]);
 
   return (
     <div className="min-h-screen bg-bg text-ink flex flex-col selection:bg-teal-soft selection:text-teal-deep">

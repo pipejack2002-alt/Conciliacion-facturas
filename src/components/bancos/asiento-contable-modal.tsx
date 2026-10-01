@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   X,
   FileText,
@@ -24,6 +24,7 @@ interface Props {
   allMovLines: MovLine[];
   cuentaContable?: string;
   bancoNombre?: string;
+  initialComprobante?: string;
 }
 
 export function AsientoContableModal({
@@ -33,9 +34,15 @@ export function AsientoContableModal({
   allMovLines,
   cuentaContable = "111005",
   bancoNombre = "Banco",
+  initialComprobante,
 }: Props) {
   const [copied, setCopied] = useState(false);
   const [selectedCompTab, setSelectedCompTab] = useState<string>("");
+
+  // Comprobante solicitado prioritario (pasado por prop o en row.itemLibros)
+  const targetComp = useMemo(() => {
+    return (initialComprobante || row?.itemLibros?.comprobante || "").trim();
+  }, [initialComprobante, row?.itemLibros?.comprobante]);
 
   // Obtener lista de comprobantes asociados al movimiento
   const comprobantesList = useMemo(() => {
@@ -53,25 +60,53 @@ export function AsientoContableModal({
     return [];
   }, [row]);
 
+  // Sincronizar comprobante seleccionado al abrir o cambiar de fila/comprobante
+  useEffect(() => {
+    if (open) {
+      if (targetComp) {
+        const exact = comprobantesList.find((c) => c === targetComp);
+        const match = exact || comprobantesList.find((c) => c.toLowerCase() === targetComp.toLowerCase());
+        setSelectedCompTab(match || targetComp);
+      } else if (comprobantesList.length > 0) {
+        setSelectedCompTab(comprobantesList[0]);
+      }
+    } else {
+      setSelectedCompTab("");
+    }
+  }, [open, targetComp, comprobantesList]);
+
   // Comprobante actualmente activo
   const activeComprobante = useMemo(() => {
-    if (selectedCompTab && comprobantesList.includes(selectedCompTab)) {
-      return selectedCompTab;
+    if (selectedCompTab) {
+      const exact = comprobantesList.find((c) => c === selectedCompTab);
+      if (exact) return exact;
+      const match = comprobantesList.find((c) => c.toLowerCase() === selectedCompTab.toLowerCase());
+      if (match) return match;
+      if (comprobantesList.length === 0) return selectedCompTab;
+    }
+    if (targetComp) {
+      const exact = comprobantesList.find((c) => c === targetComp);
+      if (exact) return exact;
+      const match = comprobantesList.find((c) => c.toLowerCase() === targetComp.toLowerCase());
+      if (match) return match;
+      if (comprobantesList.length === 0) return targetComp;
     }
     return comprobantesList[0] || "";
-  }, [selectedCompTab, comprobantesList]);
+  }, [selectedCompTab, targetComp, comprobantesList]);
 
   // Obtener la línea de referencia actual para el comprobante
   const currentLine = useMemo(() => {
+    if (!activeComprobante) return row?.itemLibros || null;
+
     if (row?.itemLibros && (row.itemLibros.comprobante || "").trim().toLowerCase() === activeComprobante.toLowerCase()) {
       return row.itemLibros;
     }
     if (row?.itemsLibrosLote && row.itemsLibrosLote.length > 0) {
-      return (
-        row.itemsLibrosLote.find(
-          (m) => (m.comprobante || "").trim().toLowerCase() === activeComprobante.toLowerCase()
-        ) || row.itemsLibrosLote[0]
+      const matchInLote = row.itemsLibrosLote.find(
+        (m) => (m.comprobante || "").trim().toLowerCase() === activeComprobante.toLowerCase()
       );
+      if (matchInLote) return matchInLote;
+      return row.itemsLibrosLote[0];
     }
     return row?.itemLibros || null;
   }, [row, activeComprobante]);
