@@ -124,8 +124,14 @@ function ConciliadorApp() {
 
       {/* Main Content Area */}
       <main className="flex-1 py-4 sm:py-6">
-        {activeModule === "dashboard_bi" ? (
-          result ? (
+        {/* Pestaña: Conciliador DIAN (Facturas vs Libros) */}
+        <div className={activeModule === "dian" ? "block" : "hidden"}>
+          {result ? <ResultBoard /> : <UploadPanel />}
+        </div>
+
+        {/* Pestaña: Dashboard BI */}
+        <div className={activeModule === "dashboard_bi" ? "block" : "hidden"}>
+          {result ? (
             <DashboardBi result={result} />
           ) : (
             <div className="mx-auto max-w-lg text-center py-16 px-4">
@@ -143,14 +149,13 @@ function ConciliadorApp() {
                 Ir a Cargar Archivos DIAN
               </button>
             </div>
-          )
-        ) : activeModule === "bancos" ? (
+          )}
+        </div>
+
+        {/* Pestaña: Bancos (Conciliación Bancaria y Tesorería) */}
+        <div className={activeModule === "bancos" ? "block" : "hidden"}>
           <ConciliacionBancariaView movLines={mov} />
-        ) : result ? (
-          <ResultBoard />
-        ) : (
-          <UploadPanel />
-        )}
+        </div>
       </main>
 
       {/* Footer */}

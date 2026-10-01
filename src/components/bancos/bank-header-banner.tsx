@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Landmark, Sparkles, Trash2, Download } from "lucide-react";
+import { Landmark, Sparkles, Trash2, Download, Award, FileText } from "lucide-react";
 
 interface BankHeaderBannerProps {
   modoVista: "homologado" | "universal";
@@ -11,6 +11,9 @@ interface BankHeaderBannerProps {
   onCargarDemo: () => void;
   canExport: boolean;
   onExportarExcel: () => void;
+  onGenerarActa?: () => void;
+  onExportarAsientoAjuste?: () => void;
+  hasUnrecordedNotes?: boolean;
 }
 
 export const BankHeaderBanner = memo(function BankHeaderBanner({
@@ -23,6 +26,9 @@ export const BankHeaderBanner = memo(function BankHeaderBanner({
   onCargarDemo,
   canExport,
   onExportarExcel,
+  onGenerarActa,
+  onExportarAsientoAjuste,
+  hasUnrecordedNotes,
 }: BankHeaderBannerProps) {
   return (
     <div className="space-y-4">
@@ -79,7 +85,7 @@ export const BankHeaderBanner = memo(function BankHeaderBanner({
         </div>
 
         {/* Botones de acción alineados horizontalmente */}
-        <div className="flex items-center gap-2 shrink-0 flex-nowrap">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
           {hasData && (
             <button
               type="button"
@@ -104,14 +110,39 @@ export const BankHeaderBanner = memo(function BankHeaderBanner({
             </button>
           )}
 
+          {hasData && onGenerarActa && (
+            <button
+              type="button"
+              onClick={onGenerarActa}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-teal/40 bg-teal-soft/60 px-3 py-2 text-xs font-bold text-teal hover:bg-teal hover:text-white transition cursor-pointer shadow-2xs whitespace-nowrap"
+              title="Generar Acta Oficial Imprimible de Conciliación Bancaria con firmas de Revisoría"
+            >
+              <Award className="size-3.5" />
+              <span>Acta Oficial NIIF</span>
+            </button>
+          )}
+
+          {hasData && hasUnrecordedNotes && onExportarAsientoAjuste && (
+            <button
+              type="button"
+              onClick={onExportarAsientoAjuste}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-bg-surface px-3 py-2 text-xs font-semibold text-ink hover:border-teal hover:text-teal transition cursor-pointer shadow-2xs whitespace-nowrap"
+              title="Descargar comprobante de diario listo para importar en Siigo / World Office / Helisa"
+            >
+              <FileText className="size-3.5 text-teal" />
+              <span>Asiento ERP (.xlsx)</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onExportarExcel}
             disabled={!canExport}
             className="inline-flex items-center gap-1.5 rounded-xl bg-teal px-3.5 py-2 text-xs font-semibold text-white hover:bg-teal-deep transition cursor-pointer shadow-xs disabled:opacity-50 whitespace-nowrap"
+            title="Descargar libro de auditoría y conciliación bancaria con estilos profesionales"
           >
             <Download className="size-3.5" />
-            <span>Exportar Conciliación a Excel</span>
+            <span>Exportar Excel Prémium</span>
           </button>
         </div>
       </div>

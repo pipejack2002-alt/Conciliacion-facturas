@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { formatMoneyExact, formatDate } from "@/lib/format";
 import type { BankConciliacionRow } from "@/lib/conciliar-bancos";
+import type { MovLine } from "@/lib/types";
+import { AsientoContableModal } from "./asiento-contable-modal";
 import { cn } from "@/lib/cn";
 
 export type BankSortField =
@@ -43,6 +45,9 @@ interface BankTableProps {
   extractoItemsCount: number;
   effectiveMovLinesCount: number;
   onCargarDemo: () => void;
+  allMovLines?: MovLine[];
+  cuentaContable?: string;
+  bancoNombre?: string;
 }
 
 export const BankTable = memo(function BankTable({
@@ -53,10 +58,14 @@ export const BankTable = memo(function BankTable({
   extractoItemsCount,
   effectiveMovLinesCount,
   onCargarDemo,
+  allMovLines = [],
+  cuentaContable,
+  bancoNombre,
 }: BankTableProps) {
   // Búsqueda con debounce para alto rendimiento
   const [searchInput, setSearchInput] = useState<string>("");
   const [debouncedQuery, setDebouncedQuery] = useState<string>("");
+  const [modalRow, setModalRow] = useState<BankConciliacionRow | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -625,8 +634,18 @@ export const BankTable = memo(function BankTable({
                                       </p>
                                     </div>
                                   </div>
-                                  <div className="font-mono text-xs font-extrabold text-purple-950 dark:text-purple-200 bg-purple-200/80 dark:bg-purple-900/60 px-3 py-1 rounded-lg border border-purple-300 dark:border-purple-700">
-                                    Total Lote: {formatMoneyExact(r.itemsLibrosLote.reduce((a, b) => a + (r.tipo === "retiro" ? b.credito : b.debito), 0))} · Diferencia: $0,00
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setModalRow(r)}
+                                      className="inline-flex items-center gap-1 rounded-lg bg-purple-700 hover:bg-purple-800 text-white px-2.5 py-1 text-xs font-bold transition cursor-pointer shadow-xs"
+                                    >
+                                      <FileText className="size-3.5" />
+                                      <span>Ver Asientos en Modal</span>
+                                    </button>
+                                    <div className="font-mono text-xs font-extrabold text-purple-950 dark:text-purple-200 bg-purple-200/80 dark:bg-purple-900/60 px-3 py-1 rounded-lg border border-purple-300 dark:border-purple-700">
+                                      Total: {formatMoneyExact(r.itemsLibrosLote.reduce((a, b) => a + (r.tipo === "retiro" ? b.credito : b.debito), 0))}
+                                    </div>
                                   </div>
                                 </div>
 
@@ -641,6 +660,7 @@ export const BankTable = memo(function BankTable({
                                         <th className="px-3 py-2">Detalle / Concepto en Libros</th>
                                         <th className="px-3 py-2">Cruce / Ref.</th>
                                         <th className="px-3 py-2 text-right">Monto Contabilizado</th>
+                                        <th className="px-3 py-2 text-center">Acción</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-purple-100 dark:divide-purple-900/30">
@@ -668,82 +688,256 @@ export const BankTable = memo(function BankTable({
                                           <td className="px-3 py-2 font-mono font-bold text-right text-ink">
                                             {formatMoneyExact(r.tipo === "retiro" ? c.credito : c.debito)}
                                           </td>
+                                          <td className="px-3 py-2 text-center">
+                                            <button
+                                              type="button"
+                                              onClick={() => setModalRow({ ...r, itemLibros: c })}
+                                              className="inline-flex items-center gap-1 rounded bg-purple-100 hover:bg-purple-200 text-purple-900 px-2 py-0.5 text-[10px] font-bold transition cursor-pointer"
+                                              title="Ver todas las cuentas del comprobante"
+                                            >
+                                              Asiento
+                                            </button>
+                                          </td>
                                         </tr>
                                       ))}
                                     </tbody>
                                   </table>
                                 </div>
                               </div>
-                            ) : r.itemLibros ? (
-                              <div className="rounded-xl border border-teal-300 bg-teal-50/40 dark:bg-teal-950/30 dark:border-teal-800 p-4 space-y-2 shadow-2xs">
-                                <div className="flex items-center justify-between border-b border-teal-200 dark:border-teal-800 pb-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className="rounded-lg bg-teal text-white p-1.5 shadow-2xs">
-                                      <FileText className="size-4" />
-                                    </span>
-                                    <div className="font-bold text-xs text-teal-950 dark:text-teal-200">
-                                      Rastreo de Comprobante Contable en Libros (Coincidencia 1 a 1)
+                            ) : r.itemLibros ? (() => {
+                              const compClean = (r.itemLibros.comprobante || "").trim().toLowerCase();
+                              const voucherAllLines = compClean
+                                ? allMovLines.filter((m) => (m.comprobante || "").trim().toLowerCase() === compClean)
+                                : [r.itemLibros];
+                              const hasMultipleLines = voucherAllLines.length > 1;
+                              const debSum = voucherAllLines.reduce((acc, l) => acc + (l.debito || 0), 0);
+                              const credSum = voucherAllLines.reduce((acc, l) => acc + (l.credito || 0), 0);
+                              const isCuadrado = Math.abs(debSum - credSum) < 0.05 && (debSum > 0 || credSum > 0);
+
+                              return (
+                                <div className="rounded-xl border border-teal-300 bg-teal-50/40 dark:bg-teal-950/30 dark:border-teal-800 p-4 space-y-3 shadow-2xs">
+                                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-teal-200 dark:border-teal-800 pb-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="rounded-lg bg-teal text-white p-1.5 shadow-2xs">
+                                        <FileText className="size-4" />
+                                      </span>
+                                      <div>
+                                        <div className="font-bold text-xs text-teal-950 dark:text-teal-200">
+                                          Asiento Contable en Libros · Comprobante {r.itemLibros.comprobante || "Sin número"} ({voucherAllLines.length} registros)
+                                        </div>
+                                        <div className="text-[11px] text-ink-muted">
+                                          {r.itemLibros.nombre} {r.itemLibros.nit ? `· NIT: ${r.itemLibros.nit}` : ""} · Fecha: {formatDate(r.itemLibros.fecha)}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {isCuadrado && (
+                                        <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 px-2 py-0.5 rounded-md border border-emerald-300">
+                                          Partida Doble Cuadrada
+                                        </span>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => setModalRow(r)}
+                                        className="inline-flex items-center gap-1 rounded-lg bg-teal hover:bg-teal-deep text-white px-2.5 py-1 text-xs font-bold transition cursor-pointer shadow-xs"
+                                        title="Abrir vista maximizada de este asiento contable"
+                                      >
+                                        <FileText className="size-3.5" />
+                                        <span>Maximizar Asiento</span>
+                                      </button>
                                     </div>
                                   </div>
-                                  <span className="text-[11px] font-mono font-bold text-teal bg-teal-soft/80 px-2.5 py-0.5 rounded-md border border-teal/30">
-                                    Diferencia: $0,00 · Conciliado
-                                  </span>
+
+                                  {/* Tabla del Asiento Contable Completo */}
+                                  {hasMultipleLines ? (
+                                    <div className="overflow-x-auto rounded-lg border border-teal-200 dark:border-teal-800 bg-bg-surface">
+                                      <table className="w-full text-left text-xs">
+                                        <thead className="bg-teal-100/60 dark:bg-teal-950/60 text-teal-950 dark:text-teal-200 font-semibold border-b border-teal-200 dark:border-teal-800">
+                                          <tr>
+                                            <th className="px-3 py-2">Cuenta PUC</th>
+                                            <th className="px-3 py-2">Nombre Cuenta</th>
+                                            <th className="px-3 py-2">Tercero / NIT</th>
+                                            <th className="px-3 py-2">Concepto / Glosa</th>
+                                            <th className="px-3 py-2 text-right">Débito (COP)</th>
+                                            <th className="px-3 py-2 text-right">Crédito (COP)</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-teal-100 dark:divide-teal-900/30">
+                                          {voucherAllLines.map((line, lIdx) => {
+                                            const isBank = /^(11|1250)/.test(line.cuenta.trim());
+                                            return (
+                                              <tr
+                                                key={[line.cuenta, line.debito, line.credito, lIdx].join("-")}
+                                                className={`hover:bg-teal-50/50 dark:hover:bg-teal-950/20 transition ${
+                                                  isBank ? "bg-teal-50/30 font-semibold" : ""
+                                                }`}
+                                              >
+                                                <td className="px-3 py-2 font-mono text-ink">
+                                                  <span className={isBank ? "text-teal font-bold" : ""}>{line.cuenta}</span>
+                                                </td>
+                                                <td className="px-3 py-2 font-medium text-ink max-w-44 truncate" title={line.cuentaNombre}>
+                                                  {line.cuentaNombre}
+                                                </td>
+                                                <td className="px-3 py-2 text-ink max-w-40 truncate" title={line.nombre}>
+                                                  {line.nombre}
+                                                </td>
+                                                <td className="px-3 py-2 text-ink-muted max-w-56 truncate" title={line.descripcion}>
+                                                  {line.descripcion}
+                                                </td>
+                                                <td className="px-3 py-2 font-mono font-bold text-right text-ink">
+                                                  {line.debito > 0 ? formatMoneyExact(line.debito) : "—"}
+                                                </td>
+                                                <td className="px-3 py-2 font-mono font-bold text-right text-ink">
+                                                  {line.credito > 0 ? formatMoneyExact(line.credito) : "—"}
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                        <tfoot className="bg-teal-100/40 dark:bg-teal-950/40 font-bold border-t border-teal-200 dark:border-teal-800">
+                                          <tr>
+                                            <td colSpan={4} className="px-3 py-1.5 text-right text-teal-950 dark:text-teal-200">
+                                              Sumas Iguales:
+                                            </td>
+                                            <td className="px-3 py-1.5 font-mono text-right text-teal-950 dark:text-teal-200">
+                                              {formatMoneyExact(debSum)}
+                                            </td>
+                                            <td className="px-3 py-1.5 font-mono text-right text-teal-950 dark:text-teal-200">
+                                              {formatMoneyExact(credSum)}
+                                            </td>
+                                          </tr>
+                                        </tfoot>
+                                      </table>
+                                    </div>
+                                  ) : (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs pt-1">
+                                      <div className="bg-bg-surface p-2 rounded-lg border border-line">
+                                        <span className="text-ink-muted block text-[11px]">Comprobante Contable:</span>
+                                        <span className="font-mono font-bold text-ink text-xs">{r.itemLibros.comprobante || "Sin número"}</span>
+                                      </div>
+                                      <div className="bg-bg-surface p-2 rounded-lg border border-line">
+                                        <span className="text-ink-muted block text-[11px]">Fecha en Libros:</span>
+                                        <span className="font-mono font-bold text-ink text-xs">{formatDate(r.itemLibros.fecha)}</span>
+                                      </div>
+                                      <div className="bg-bg-surface p-2 rounded-lg border border-line">
+                                        <span className="text-ink-muted block text-[11px]">Cuenta PUC:</span>
+                                        <span className="font-mono text-ink text-xs font-semibold">{r.itemLibros.cuenta} - {r.itemLibros.cuentaNombre}</span>
+                                      </div>
+                                      <div className="bg-bg-surface p-2 rounded-lg border border-line">
+                                        <span className="text-ink-muted block text-[11px]">Tercero / Beneficiario:</span>
+                                        <span className="text-ink font-semibold text-xs">{r.itemLibros.nombre} {r.itemLibros.nit ? `(NIT: ${r.itemLibros.nit})` : ""}</span>
+                                      </div>
+                                      <div className="bg-bg-surface p-2 rounded-lg border border-line sm:col-span-2">
+                                        <span className="text-ink-muted block text-[11px]">Glosa / Concepto en Libros:</span>
+                                        <span className="text-ink text-xs">{r.itemLibros.descripcion}</span>
+                                      </div>
+                                      <div className="bg-bg-surface p-2 rounded-lg border border-line">
+                                        <span className="text-ink-muted block text-[11px]">Documento Fuente / Cruce:</span>
+                                        <span className="font-mono text-ink text-xs">{r.itemLibros.cruce || r.itemLibros.referencia || "—"}</span>
+                                      </div>
+                                      <div className="bg-bg-surface p-2 rounded-lg border border-line">
+                                        <span className="text-ink-muted block text-[11px]">Monto en Contabilidad:</span>
+                                        <span className="font-mono font-bold text-teal text-xs">{formatMoneyExact(r.montoLibros)}</span>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs pt-1">
-                                  <div className="bg-bg-surface p-2 rounded-lg border border-line">
-                                    <span className="text-ink-muted block text-[11px]">Comprobante Contable:</span>
-                                    <span className="font-mono font-bold text-ink text-xs">{r.itemLibros.comprobante || "Sin número"}</span>
+                              );
+                            })() : r.estado === "nota_debito_banco" || r.estado === "nota_credito_banco" ? (
+                              <div className="rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/30 dark:border-amber-800 p-4 text-xs space-y-3 shadow-2xs">
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-amber-200 dark:border-amber-800 pb-2">
+                                  <div className="font-bold text-amber-950 dark:text-amber-200 flex items-center gap-1.5">
+                                    <AlertCircle className="size-4 text-amber-600" />
+                                    <span>Partida Pendiente en Libros · Asiento Contable Sugerido para Causación</span>
                                   </div>
-                                  <div className="bg-bg-surface p-2 rounded-lg border border-line">
-                                    <span className="text-ink-muted block text-[11px]">Fecha en Libros:</span>
-                                    <span className="font-mono font-bold text-ink text-xs">{formatDate(r.itemLibros.fecha)}</span>
-                                  </div>
-                                  <div className="bg-bg-surface p-2 rounded-lg border border-line">
-                                    <span className="text-ink-muted block text-[11px]">Cuenta PUC:</span>
-                                    <span className="font-mono text-ink text-xs font-semibold">{r.itemLibros.cuenta} - {r.itemLibros.cuentaNombre}</span>
-                                  </div>
-                                  <div className="bg-bg-surface p-2 rounded-lg border border-line">
-                                    <span className="text-ink-muted block text-[11px]">Tercero / Beneficiario:</span>
-                                    <span className="text-ink font-semibold text-xs">{r.itemLibros.nombre} {r.itemLibros.nit ? `(NIT: ${r.itemLibros.nit})` : ""}</span>
-                                  </div>
-                                  <div className="bg-bg-surface p-2 rounded-lg border border-line sm:col-span-2">
-                                    <span className="text-ink-muted block text-[11px]">Glosa / Concepto en Libros:</span>
-                                    <span className="text-ink text-xs">{r.itemLibros.descripcion}</span>
-                                  </div>
-                                  <div className="bg-bg-surface p-2 rounded-lg border border-line">
-                                    <span className="text-ink-muted block text-[11px]">Documento Fuente / Cruce:</span>
-                                    <span className="font-mono text-ink text-xs">{r.itemLibros.cruce || r.itemLibros.referencia || "—"}</span>
-                                  </div>
-                                  <div className="bg-bg-surface p-2 rounded-lg border border-line">
-                                    <span className="text-ink-muted block text-[11px]">Monto en Contabilidad:</span>
-                                    <span className="font-mono font-bold text-teal text-xs">{formatMoneyExact(r.montoLibros)}</span>
-                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setModalRow(r)}
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 text-xs font-bold transition cursor-pointer shadow-xs"
+                                  >
+                                    <FileText className="size-3.5" />
+                                    <span>Ver / Descargar Asiento</span>
+                                  </button>
                                 </div>
-                              </div>
-                            ) : r.estado === "nota_debito_banco" || r.estado === "nota_credito_banco" ? (
-                              <div className="rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/30 dark:border-amber-800 p-4 text-xs space-y-2 shadow-2xs">
-                                <div className="font-bold text-amber-950 dark:text-amber-200 flex items-center gap-1.5">
-                                  <AlertCircle className="size-4 text-amber-600" />
-                                  <span>Instrucción Contable para Causación de Partida Pendiente</span>
-                                </div>
+
                                 <p className="text-amber-900 dark:text-amber-300">
                                   {r.nota}
                                 </p>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 font-mono text-[11px]">
-                                  <div className="bg-bg-surface p-2 rounded border border-amber-200">
-                                    <span className="text-ink-muted block">Cuenta Sugerida:</span>
-                                    <span className="font-bold text-ink">
-                                      {r.esGmf ? "511595 (GMF 4x1000)" : r.esComision ? "530515 (Comisiones Bancarias)" : r.esRendimiento ? "421005 (Rendimientos Financieros)" : "111005 (Bancos)"}
-                                    </span>
-                                  </div>
-                                  <div className="bg-bg-surface p-2 rounded border border-amber-200">
-                                    <span className="text-ink-muted block">Monto en Extracto:</span>
-                                    <span className="font-bold text-amber-900">{formatMoneyExact(r.montoBanco)}</span>
-                                  </div>
-                                  <div className="bg-bg-surface p-2 rounded border border-amber-200">
-                                    <span className="text-ink-muted block">Contrapartida:</span>
-                                    <span className="font-bold text-ink">Cuenta Bancaria de Tesorería</span>
-                                  </div>
+
+                                {/* Tabla de Asiento Sugerido */}
+                                <div className="overflow-x-auto rounded-lg border border-amber-200 dark:border-amber-800 bg-bg-surface">
+                                  <table className="w-full text-left text-xs">
+                                    <thead className="bg-amber-100/60 dark:bg-amber-950/60 text-amber-950 dark:text-amber-200 font-semibold border-b border-amber-200">
+                                      <tr>
+                                        <th className="px-3 py-1.5">Cuenta PUC</th>
+                                        <th className="px-3 py-1.5">Concepto Contable</th>
+                                        <th className="px-3 py-1.5">Tercero Sugerido</th>
+                                        <th className="px-3 py-1.5 text-right">Débito (COP)</th>
+                                        <th className="px-3 py-1.5 text-right">Crédito (COP)</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-amber-100">
+                                      {r.estado === "nota_debito_banco" ? (
+                                        <>
+                                          <tr>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-amber-900">
+                                              {r.esGmf ? "51159501" : r.esComision ? "53051501" : "53059501"}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-ink">
+                                              {r.esGmf ? "GMF 4x1000" : r.esComision ? "Comisión Bancaria" : "Gasto Bancario"}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-ink-muted">
+                                              {r.esGmf ? "DIAN" : bancoNombre || "Banco"}
+                                            </td>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-right text-ink">
+                                              {formatMoneyExact(r.montoBanco)}
+                                            </td>
+                                            <td className="px-3 py-1.5 font-mono text-right text-ink-subtle">—</td>
+                                          </tr>
+                                          <tr>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-teal">
+                                              {cuentaContable || "111005"}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-ink">Bancos Moneda Nacional</td>
+                                            <td className="px-3 py-1.5 text-ink-muted">{bancoNombre || "Banco"}</td>
+                                            <td className="px-3 py-1.5 font-mono text-right text-ink-subtle">—</td>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-right text-ink">
+                                              {formatMoneyExact(r.montoBanco)}
+                                            </td>
+                                          </tr>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <tr>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-teal">
+                                              {cuentaContable || "111005"}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-ink">Bancos Moneda Nacional</td>
+                                            <td className="px-3 py-1.5 text-ink-muted">{bancoNombre || "Banco"}</td>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-right text-ink">
+                                              {formatMoneyExact(r.montoBanco)}
+                                            </td>
+                                            <td className="px-3 py-1.5 font-mono text-right text-ink-subtle">—</td>
+                                          </tr>
+                                          <tr>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-amber-900">
+                                              {r.esRendimiento ? "42100502" : "13050501"}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-ink">
+                                              {r.esRendimiento ? "Rendimientos Financieros" : "Clientes / Anticipos"}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-ink-muted">
+                                              {r.esRendimiento ? bancoNombre || "Banco" : "Clientes Varios"}
+                                            </td>
+                                            <td className="px-3 py-1.5 font-mono text-right text-ink-subtle">—</td>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-right text-ink">
+                                              {formatMoneyExact(r.montoBanco)}
+                                            </td>
+                                          </tr>
+                                        </>
+                                      )}
+                                    </tbody>
+                                  </table>
                                 </div>
                               </div>
                             ) : null}
@@ -758,6 +952,18 @@ export const BankTable = memo(function BankTable({
           </table>
         </div>
       </div>
+
+      {/* Modal Completo de Auditoría del Asiento Contable */}
+      {modalRow && (
+        <AsientoContableModal
+          open={Boolean(modalRow)}
+          onClose={() => setModalRow(null)}
+          row={modalRow}
+          allMovLines={allMovLines}
+          cuentaContable={cuentaContable}
+          bancoNombre={bancoNombre}
+        />
+      )}
     </div>
   );
 });

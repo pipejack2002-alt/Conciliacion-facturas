@@ -12,7 +12,8 @@ import {
 import { parseBankExtractFile, type ParsedBankExtractResult } from "@/lib/parse-bank-extract";
 import { readWorkbook, parseMovSheet } from "@/lib/parse-excel";
 import type { MovLine } from "@/lib/types";
-import * as XLSX from "xlsx";
+import confetti from "canvas-confetti";
+import { exportConciliacionBancariaXlsx, exportAsientoAjusteBancario } from "@/lib/export-bancos-excel";
 import { ConciliacionUniversalBancosView } from "./conciliacion-universal-bancos";
 import { BankHeaderBanner } from "./bancos/bank-header-banner";
 import { BankUploadCards } from "./bancos/bank-upload-cards";
@@ -20,6 +21,7 @@ import { BankSummaryCards } from "./bancos/bank-summary-cards";
 import { BankPendingMovements } from "./bancos/bank-pending-movements";
 import { BankExecutiveCards } from "./bancos/bank-executive-cards";
 import { BankTable } from "./bancos/bank-table";
+import { ActaBancariaModal } from "./bancos/acta-bancaria-modal";
 
 // Extracto de demostración inicial preconfigurado (solo bajo demanda al hacer clic en Cargar Ejemplo)
 const DEMO_EXTRACTO: BankExtractItem[] = [
@@ -60,8 +62,12 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
   // Filtros de tabla
   const [tabFilter, setTabFilter] = useState<"todas" | "conciliado" | "banco_pend" | "transito">("todas");
 
+  // Modal de Acta Oficial de Conciliación Bancaria
+  const [actaModalOpen, setActaModalOpen] = useState<boolean>(false);
+
   const fileInputExtractoRef = useRef<HTMLInputElement>(null);
   const fileInputMovRef = useRef<HTMLInputElement>(null);
+  const hasTriggeredConfettiRef = useRef<boolean>(false);
 
   const handleVaciarBancos = useCallback(() => {
     setIsDemoMode(false);
@@ -73,6 +79,7 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
     setSaldoInicialExtracto(0);
     setSaldoInicialLibros(0);
     setSaldoInputStr("0,00");
+    hasTriggeredConfettiRef.current = false;
   }, []);
 
   const handleCargarDemo = useCallback(() => {
@@ -357,52 +364,43 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
     }
   }
 
-  // Exportar Estado Oficial de Conciliación Bancaria a Excel
+  // Efecto visual de celebración cuando la conciliación cuadra al 100%
+  useEffect(() => {
+    if (
+      concilResult.summary.cuadrado &&
+      extractoItems.length > 0 &&
+      librosEfectivos.length > 0 &&
+      !hasTriggeredConfettiRef.current
+    ) {
+      hasTriggeredConfettiRef.current = true;
+      try {
+        confetti({
+          particleCount: 55,
+          spread: 65,
+          origin: { y: 0.65 },
+          colors: ["#0F766E", "#14B8A6", "#10B981", "#F59E0B"],
+        });
+      } catch {
+        // Silently ignore if canvas not supported
+      }
+    } else if (!concilResult.summary.cuadrado) {
+      hasTriggeredConfettiRef.current = false;
+    }
+  }, [concilResult.summary.cuadrado, extractoItems.length, librosEfectivos.length]);
+
+  // Exportar Estado Oficial de Conciliación Bancaria a Excel Prémium
   const exportarConciliacionBancaria = useCallback(() => {
-    const entidadNombre = extractoMeta
-      ? `${extractoMeta.bancoNombre} ${extractoMeta.numeroCuenta ? `(${extractoMeta.numeroCuenta})` : ""}`
-      : "ENTIDAD BANCARIA";
-
-    const wsData = [
-      ["ESTADO OFICIAL DE CONCILIACIÓN BANCARIA MENSUAL"],
-      ["Entidad Financiera:", entidadNombre],
-      ["Periodo / Fecha de Corte:", extractoMeta?.periodo || new Date().toLocaleDateString("es-CO")],
-      ["Cuenta Contable Conciliada:", cuentaSeleccionada === "todas" ? "Todas las cuentas de tesorería" : cuentaSeleccionada],
-      [],
-      ["ESTRUCTURA DE CONCILIACIÓN ARITMÉTICA (NORMA TÉCNICA NIIF / DIAN)"],
-      ["Saldo Final según Extracto Bancario:", concilResult.summary.saldoExtracto],
-      ["(+) Consignaciones en Tránsito:", concilResult.summary.consignacionesEnTransito],
-      ["(-) Cheques y Giros pendientes de cobro:", -concilResult.summary.chequesEnTransito],
-      ["(-) Notas Débito del Banco no registradas (4x1000 / Comisiones):", -concilResult.summary.notasDebitoNoRegistradas],
-      ["(+) Notas Crédito del Banco no registradas (Rendimientos):", concilResult.summary.notasCreditoNoRegistradas],
-      ["(=) Saldo Conciliado:", concilResult.summary.saldoConciliado],
-      ["Saldo Final según Libros Contables:", concilResult.summary.saldoLibros],
-      ["Diferencia de Cuadre:", concilResult.summary.diferenciaCuadre],
-      [],
-      ["DETALLE DE PARTIDAS Y AUDITORÍA DE COMPROBANTES"],
-      ["Estado", "Fecha", "Descripción", "Referencia", "Tipo", "Monto Extracto", "Monto Libros", "Diagnóstico Contable", "Comprobantes / Lote Asociado"],
-      ...concilResult.rows.map((r) => [
-        r.estado,
-        r.fecha,
-        r.descripcion,
-        r.referencia,
-        r.tipo,
-        r.montoBanco,
-        r.montoLibros,
-        r.nota,
-        r.itemsLibrosLote
-          ? r.itemsLibrosLote.map((c) => `${c.comprobante} ($${c.credito || c.debito})`).join("; ")
-          : r.itemLibros
-          ? `${r.itemLibros.comprobante || ""} - ${r.itemLibros.nombre || ""}`
-          : "—",
-      ]),
-    ];
-
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    XLSX.utils.book_append_sheet(wb, ws, "Conciliación Bancaria");
-    XLSX.writeFile(wb, `conciliacion-bancaria-${extractoMeta?.bancoId || "banco"}.xlsx`);
-  }, [extractoMeta, cuentaSeleccionada, concilResult]);
+    exportConciliacionBancariaXlsx(
+      concilResult,
+      {
+        bancoNombre: extractoMeta?.bancoNombre || (isDemoMode ? "Banco de Demostración" : "Entidad Bancaria"),
+        numeroCuenta: extractoMeta?.numeroCuenta || "",
+        periodo: extractoMeta?.periodo || "",
+        cuentaContable: cuentaSeleccionada,
+      },
+      effectiveMovLines
+    );
+  }, [concilResult, extractoMeta, isDemoMode, cuentaSeleccionada, effectiveMovLines]);
 
   if (modoVista === "universal") {
     return (
@@ -436,6 +434,17 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
         onCargarDemo={handleCargarDemo}
         canExport={concilResult.rows.length > 0}
         onExportarExcel={exportarConciliacionBancaria}
+        onGenerarActa={() => setActaModalOpen(true)}
+        onExportarAsientoAjuste={() =>
+          exportAsientoAjusteBancario(
+            concilResult.rows,
+            extractoMeta?.bancoNombre || (isDemoMode ? "Banco de Demostración" : "Banco"),
+            cuentaSeleccionada
+          )
+        }
+        hasUnrecordedNotes={Boolean(
+          concilResult.summary.notasDebitoNoRegistradas || concilResult.summary.notasCreditoNoRegistradas
+        )}
       />
 
       {/* 2. Zona Dual de Carga de Archivos */}
@@ -476,13 +485,14 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
         rows={concilResult.rows}
         summary={concilResult.summary}
         cuentaContable={cuentaSeleccionada}
-        bancoNombre={extractoMeta?.bancoNombre}
+        bancoNombre={extractoMeta?.bancoNombre || (isDemoMode ? "Banco de Demostración" : "Banco")}
+        allMovLines={effectiveMovLines}
       />
 
       {/* 5. Franja Ejecutiva de Conceptos Bancarios */}
       <BankExecutiveCards breakdown={executiveBreakdown} />
 
-      {/* 5. Tabla Detallada con Pestañas, Búsqueda Debounced y Paginación */}
+      {/* 6. Tabla Detallada con Pestañas, Búsqueda Debounced, Asiento Contable y Paginación */}
       <BankTable
         rows={concilResult.rows}
         tabFilter={tabFilter}
@@ -491,6 +501,21 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
         extractoItemsCount={extractoItems.length}
         effectiveMovLinesCount={effectiveMovLines.length}
         onCargarDemo={handleCargarDemo}
+        allMovLines={effectiveMovLines}
+        cuentaContable={cuentaSeleccionada}
+        bancoNombre={extractoMeta?.bancoNombre || (isDemoMode ? "Banco de Demostración" : "Banco")}
+      />
+
+      {/* 7. Modal de Acta Oficial Imprimible de Conciliación Bancaria NIIF */}
+      <ActaBancariaModal
+        open={actaModalOpen}
+        onClose={() => setActaModalOpen(false)}
+        result={concilResult}
+        bancoNombre={extractoMeta?.bancoNombre || (isDemoMode ? "Banco de Demostración" : "Entidad Financiera")}
+        numeroCuenta={extractoMeta?.numeroCuenta || ""}
+        periodo={extractoMeta?.periodo || ""}
+        cuentaContable={cuentaSeleccionada === "todas" ? "Todas las cuentas de tesorería" : cuentaSeleccionada}
+        onExportExcel={exportarConciliacionBancaria}
       />
     </div>
   );

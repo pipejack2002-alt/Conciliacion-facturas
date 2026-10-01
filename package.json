@@ -14,7 +14,7 @@
     "preview": "node scripts/with-app-env.mjs vite preview",
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
-    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/auth/gate-identity.test.ts src/lib/conciliar.test.ts src/lib/conciliar-bancos.test.ts src/lib/conciliar-bancos-universal.test.ts src/lib/history-store.test.ts src/lib/parse-bank-extract.test.ts src/lib/session-persistence.test.ts src/lib/sorting-filtering.test.ts src/lib/tributo-auth.test.ts src/lib/universal-parser.test.ts",
+    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/auth/gate-identity.test.ts src/lib/conciliar.test.ts src/lib/conciliar-bancos.test.ts src/lib/conciliar-bancos-universal.test.ts src/lib/export-bancos-excel.test.ts src/lib/history-store.test.ts src/lib/parse-bank-extract.test.ts src/lib/session-persistence.test.ts src/lib/sorting-filtering.test.ts src/lib/tributo-auth.test.ts src/lib/universal-parser.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
@@ -48,7 +48,9 @@
     "@tanstack/react-start": "^1.168.0",
     "@tanstack/react-table": "^8.21.0",
     "@tanstack/router-plugin": "^1.168.0",
+    "@types/canvas-confetti": "^1.9.0",
     "better-auth": "~1.6.30",
+    "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

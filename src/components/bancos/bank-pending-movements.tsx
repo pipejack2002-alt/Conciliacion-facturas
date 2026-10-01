@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   ClipboardCheck,
   Download,
@@ -7,9 +7,13 @@ import {
   CheckCircle2,
   Clock,
   Sparkles,
+  FileText,
 } from "lucide-react";
 import { formatMoneyExact, formatDate } from "@/lib/format";
 import type { BankConciliacionRow, BankConciliacionSummary } from "@/lib/conciliar-bancos";
+import type { MovLine } from "@/lib/types";
+import { exportAsientoAjusteBancario } from "@/lib/export-bancos-excel";
+import { AsientoContableModal } from "./asiento-contable-modal";
 import { cn } from "@/lib/cn";
 import * as XLSX from "xlsx";
 
@@ -18,14 +22,17 @@ interface BankPendingMovementsProps {
   summary: BankConciliacionSummary;
   cuentaContable?: string;
   bancoNombre?: string;
+  allMovLines?: MovLine[];
 }
 
 export const BankPendingMovements = memo(function BankPendingMovements({
   rows,
   summary,
   cuentaContable,
-  bancoNombre,
+  bancoNombre = "Banco",
+  allMovLines = [],
 }: BankPendingMovementsProps) {
+  const [modalRow, setModalRow] = useState<BankConciliacionRow | null>(null);
   // Filtrar exclusivamente partidas pendientes de registro en libros o partidas en tránsito
   const pendingRows = useMemo(() => {
     return rows.filter(
@@ -151,15 +158,28 @@ export const BankPendingMovements = memo(function BankPendingMovements({
         </div>
 
         {pendingRows.length > 0 && (
-          <button
-            type="button"
-            onClick={handleExportPendingExcel}
-            className="inline-flex items-center gap-2 rounded-xl bg-teal px-3.5 py-2 text-xs font-bold text-white hover:bg-teal-hover transition shadow-xs cursor-pointer"
-            title="Descargar plantilla Excel con la lista de causaciones y ajustes contables recomendados"
-          >
-            <Download className="size-3.5" />
-            <span>Exportar Partidas Pendientes (Excel)</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {(cargosPendientes.length > 0 || rendimientosPendientes.length > 0) && (
+              <button
+                type="button"
+                onClick={() => exportAsientoAjusteBancario(rows, bancoNombre, cuentaContable)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-teal/40 bg-teal-soft/60 px-3 py-2 text-xs font-bold text-teal hover:bg-teal hover:text-white transition shadow-2xs cursor-pointer whitespace-nowrap"
+                title="Descargar comprobante de diario listo para importar en Siigo / World Office / Helisa"
+              >
+                <FileText className="size-3.5" />
+                <span>Asiento ERP (.xlsx)</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleExportPendingExcel}
+              className="inline-flex items-center gap-2 rounded-xl bg-teal px-3.5 py-2 text-xs font-bold text-white hover:bg-teal-deep transition shadow-xs cursor-pointer whitespace-nowrap"
+              title="Descargar plantilla Excel con la lista de causaciones y ajustes contables recomendados"
+            >
+              <Download className="size-3.5" />
+              <span>Exportar Partidas Pendientes</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -249,6 +269,7 @@ export const BankPendingMovements = memo(function BankPendingMovements({
                 <th className="py-2.5 px-3">Referencia</th>
                 <th className="py-2.5 px-3 text-right">Valor Exacto</th>
                 <th className="py-2.5 px-3">Asiento Contable Sugerido (PUC)</th>
+                <th className="py-2.5 px-3 text-center">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line/60">
@@ -417,12 +438,37 @@ export const BankPendingMovements = memo(function BankPendingMovements({
                         </div>
                       )}
                     </td>
+
+                    {/* 8. Acción: Ver Asiento Contable */}
+                    <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => setModalRow(r)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-line bg-bg-surface px-2.5 py-1 text-xs font-semibold text-ink hover:text-teal hover:border-teal transition cursor-pointer shadow-2xs"
+                        title={isTransito ? "Ver todas las cuentas del comprobante contable" : "Ver asiento sugerido para causar en el ERP"}
+                      >
+                        <FileText className="size-3.5 text-teal" />
+                        <span>{isTransito ? "Ver Comprobante" : "Ver Asiento"}</span>
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Modal de Asiento Contable */}
+      {modalRow && (
+        <AsientoContableModal
+          open={Boolean(modalRow)}
+          onClose={() => setModalRow(null)}
+          row={modalRow}
+          allMovLines={allMovLines}
+          cuentaContable={cuentaContable}
+          bancoNombre={bancoNombre}
+        />
       )}
     </div>
   );
