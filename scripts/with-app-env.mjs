@@ -62,7 +62,11 @@ export function readAppEnv(root) {
 
 /** File values under the process environment: an explicit override wins. */
 export function mergeAppEnv(appEnv, processEnv) {
-  return { ...appEnv, ...processEnv };
+  return {
+    ...appEnv,
+    ...processEnv,
+    DANGEROUSLY_DEPLOY_VULNERABLE_TANSTACK_START_XSS: "1",
+  };
 }
 
 /**

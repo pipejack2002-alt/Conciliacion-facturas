@@ -1,3 +1,4 @@
+
 import type { MovLine } from "./types.ts";
 
 export interface BankExtractItem {
@@ -358,9 +359,10 @@ export function conciliarBancos(
 
       const isPriorYieldMatch =
         !matchesExtractoCredit &&
-        (isRendKeyword ||
+        (isInvestmentAcc ||
+          isRendKeyword ||
           isPriorMonthRef ||
-          (isInvestmentAcc && isEarlyMonth && isCausacionVoucher) ||
+          (isEarlyMonth && isCausacionVoucher) ||
           Math.abs(l.debito - saldoInicialExtracto) < 0.05);
 
       if (isPriorYieldMatch) {
