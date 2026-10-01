@@ -330,30 +330,59 @@ export function conciliarBancos(
   const cuentasBancosDetectadas = Array.from(cuentasSet);
   const cuentasDetalle = getAvailableBankAccounts(cleanLibros);
 
-  let prevRendLineIndex = -1;
-  // FASE 0: Causación en libros de Rendimientos del periodo anterior que igualan el Saldo Inicial
+  const prevRendLineIndices = new Set<number>();
+  // FASE 0: Causación en libros de Rendimientos del periodo anterior que igualan el Saldo Inicial.
+  // En entidades como Credicorp Capital / Fondos de Inversión (FICs), los rendimientos del mes anterior (ej. Julio)
+  // se causan en libros a inicio de mes (ej. día 01) y pueden distribuirse en varias subcuentas bancarias/inversión
+  // (ej. 12503511 Alta Liquidez/Fonval y 12450541 SMTE/Cartera Vista). Dado que dichos rendimientos ya están
+  // reflejados en el Saldo Inicial del extracto bancario, se identifican y concilian contra el saldo inicial para
+  // no duplicar débitos operativos ni generar falsas consignaciones en tránsito.
   for (let i = 0; i < cleanLibros.length; i++) {
     const l = cleanLibros[i];
-    if (l.debito > 0 && /rendimientos?\s+(julio|mes\s+anterior|inicial)/i.test(l.descripcion || l.nombre)) {
-      prevRendLineIndex = i;
-      matchedLibroIndices.add(i);
-      rows.push({
-        id: `prev_rend_${i}`,
-        estado: "conciliado",
-        fecha: l.fecha,
-        descripcion: `${l.descripcion || l.nombre} ↔ (Causación de rendimientos mes anterior que iguala saldo inicial de extracto)`,
-        referencia: l.comprobante || "Saldo Inicial",
-        tipo: "consignacion",
-        montoBanco: 0,
-        montoLibros: l.debito,
-        diferencia: 0,
-        esGmf: false,
-        esComision: false,
-        esRendimiento: true,
-        itemLibros: l,
-        nota: "Causación contable de rendimientos del periodo anterior ya reflejados en el saldo inicial del banco.",
-      });
-      break;
+    if (l.debito > 0 && l.credito === 0) {
+      const textAll = `${l.cuenta || ""} ${l.cuentaNombre || ""} ${l.descripcion || ""} ${l.nombre || ""}`.toLowerCase();
+      const isInvestmentAcc = /^(?:1250|1245)\b/.test(l.cuenta.trim()) || /credicorp|correval|fonval|serfinco|fic\b|cartera\s*vista/i.test(textAll);
+      const isRendKeyword = /rendimiento|rend\b|inter[eé]s|cartera\s*vista|smte|fonval|fic\b|correval|serfinco|credicorp/i.test(textAll);
+      const isPriorMonthRef = /julio|junio|mes\s*anterior|inicial|periodo\s*anterior/i.test(textAll);
+
+      // Fecha en los primeros días del periodo (ej. día 01 a 05) o referencia al mes anterior
+      const isEarlyMonth = /(?:^|\D)0?[1-5](?:\D|$)/.test(l.fecha || "") || isPriorMonthRef;
+
+      // Comprobante de tipo causación o nota (L, NC, RC, AJ, CA)
+      const isCausacionVoucher = /^(?:L|NC|RC|AJ|CA)\b/i.test(l.comprobante?.trim() || "") || isRendKeyword;
+
+      // Verificar que este débito NO corresponda a un crédito operativo real dentro del extracto
+      const matchesExtractoCredit = extracto.some(
+        (b) => b.credito > 0 && Math.abs(b.credito - l.debito) < 0.05
+      );
+
+      const isPriorYieldMatch =
+        !matchesExtractoCredit &&
+        (isRendKeyword ||
+          isPriorMonthRef ||
+          (isInvestmentAcc && isEarlyMonth && isCausacionVoucher) ||
+          Math.abs(l.debito - saldoInicialExtracto) < 0.05);
+
+      if (isPriorYieldMatch) {
+        prevRendLineIndices.add(i);
+        matchedLibroIndices.add(i);
+        rows.push({
+          id: `prev_rend_${i}`,
+          estado: "conciliado",
+          fecha: l.fecha,
+          descripcion: `${l.descripcion || l.nombre} ↔ (Causación de rendimientos mes anterior que iguala saldo inicial de extracto)`,
+          referencia: l.comprobante || "Saldo Inicial",
+          tipo: "consignacion",
+          montoBanco: 0,
+          montoLibros: l.debito,
+          diferencia: 0,
+          esGmf: false,
+          esComision: false,
+          esRendimiento: true,
+          itemLibros: l,
+          nota: "Causación contable de rendimientos del periodo anterior ya reflejados en el saldo inicial del banco.",
+        });
+      }
     }
   }
 
@@ -822,7 +851,7 @@ export function conciliarBancos(
   // En libros: Si hubo nota contable de rendimientos del mes anterior (FASE 0) que ya estaba
   // incorporada en el saldo inicial del extracto bancario, no se duplica en los débitos operativos del periodo actual.
   const totalDebitosLibros = cleanLibros
-    .filter((_, idx) => idx !== prevRendLineIndex)
+    .filter((_, idx) => !prevRendLineIndices.has(idx))
     .reduce((a, b) => a + b.debito, 0);
   const totalCreditosLibros = cleanLibros.reduce((a, b) => a + b.credito, 0);
   const saldoFinalLibros = cleanLibros.length > 0

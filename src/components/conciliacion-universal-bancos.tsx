@@ -974,7 +974,11 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                   {concilResult.summary.cuadrado ? (
                     <span className="flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-xs font-black text-white shadow-xs">
                       <CheckCircle2 className="size-3.5" />
-                      {concilResult.summary.soloRendimientos ? "Cuadrado (Solo Rendimientos)" : "Cuadrado 100%"}
+                      {(concilResult.summary.consignacionesEnTransito === 0 && concilResult.summary.chequesEnTransito === 0 && concilResult.summary.notasDebitoNoRegistradas === 0 && concilResult.summary.notasCreditoNoRegistradas === 0 && Math.abs(concilResult.summary.saldoLibros - concilResult.summary.saldoExtracto) < 0.05)
+                        ? "Cuadrado 100% (Sin Pendientes)"
+                        : (concilResult.summary.soloRendimientos || ((concilResult.summary.notasCreditoRendimientos || 0) > 0 && (concilResult.summary.notasDebitoNoRegistradas || 0) === 0 && (concilResult.summary.chequesEnTransito || 0) === 0 && (concilResult.summary.consignacionesEnTransito || 0) === 0))
+                        ? "Pendiente Causar Rendimientos"
+                        : "Conciliado con Partidas Pendientes"}
                     </span>
                   ) : (
                     <span className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1 text-xs font-black text-white shadow-xs">
@@ -994,9 +998,11 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                     )}
                   >
                     {concilResult.summary.cuadrado
-                      ? concilResult.summary.soloRendimientos
-                        ? `CUADRADO: SOLO RENDIMIENTOS (${formatMoneyExact(concilResult.summary.notasCreditoRendimientos || 0)})`
-                        : "CUADRADO PERFECTO"
+                      ? (concilResult.summary.consignacionesEnTransito === 0 && concilResult.summary.chequesEnTransito === 0 && concilResult.summary.notasDebitoNoRegistradas === 0 && concilResult.summary.notasCreditoNoRegistradas === 0 && Math.abs(concilResult.summary.saldoLibros - concilResult.summary.saldoExtracto) < 0.05)
+                        ? "CUADRADO PERFECTO (SIN PARTIDAS PENDIENTES)"
+                        : (concilResult.summary.soloRendimientos || ((concilResult.summary.notasCreditoRendimientos || 0) > 0 && (concilResult.summary.notasDebitoNoRegistradas || 0) === 0 && (concilResult.summary.chequesEnTransito || 0) === 0 && (concilResult.summary.consignacionesEnTransito || 0) === 0))
+                        ? `DIFERENCIA: ${formatMoneyExact(concilResult.summary.notasCreditoRendimientos || concilResult.summary.diferenciaExtractoLibros || 0)} (RENDIMIENTOS DEL PERIODO)`
+                        : "CONCILIADO CON PARTIDAS PENDIENTES DE AJUSTE"
                       : `DIFERENCIA: ${formatMoneyExact(concilResult.summary.diferenciaCuadre)}`}
                   </div>
                   <p
@@ -1008,9 +1014,11 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
                     )}
                   >
                     {concilResult.summary.cuadrado
-                      ? concilResult.summary.soloRendimientos
-                        ? `El saldo contable conciliado coincide al 100% con el extracto bancario. La única partida pendiente de registro contable son los rendimientos financieros (${formatMoneyExact(concilResult.summary.notasCreditoRendimientos || 0)}) que se causan al mes siguiente.`
-                        : "El saldo bancario ajustado coincide con el saldo de libros contables al 100% sin partidas huérfanas."
+                      ? (concilResult.summary.consignacionesEnTransito === 0 && concilResult.summary.chequesEnTransito === 0 && concilResult.summary.notasDebitoNoRegistradas === 0 && concilResult.summary.notasCreditoNoRegistradas === 0 && Math.abs(concilResult.summary.saldoLibros - concilResult.summary.saldoExtracto) < 0.05)
+                        ? "El saldo bancario coincide con el saldo de libros contables al 100% sin partidas pendientes ni ajustes requeridos."
+                        : (concilResult.summary.soloRendimientos || ((concilResult.summary.notasCreditoRendimientos || 0) > 0 && (concilResult.summary.notasDebitoNoRegistradas || 0) === 0 && (concilResult.summary.chequesEnTransito || 0) === 0 && (concilResult.summary.consignacionesEnTransito || 0) === 0))
+                        ? `Diferencia de ${formatMoneyExact(concilResult.summary.notasCreditoRendimientos || concilResult.summary.diferenciaExtractoLibros || 0)} que corresponde a los rendimientos del periodo que están en el extracto y aún no han sido registrados en libros contables (se causan al corte/siguiente mes).`
+                        : "El saldo bancario ajustado cuadra con libros contables a través de las partidas conciliatorias identificadas (rendimientos, notas bancarias y partidas en tránsito)."
                       : "Existen partidas pendientes por conciliar o diferencias en el saldo inicial."}
                   </p>
                 </div>

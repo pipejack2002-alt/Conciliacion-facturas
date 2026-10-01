@@ -498,5 +498,110 @@ describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuen
     const fComma = extractLibroBancos(movLines, "12503511, 12450541");
     assert.strictEqual(fComma.length, 2);
   });
+
+  it("debe conciliar el caso Credicorp con ambas subcuentas de rendimientos de julio (12503511 y 12450541 con $5.541,08) sin generar falsas consignaciones en tránsito", () => {
+    const extracto: BankExtractItem[] = [
+      {
+        id: "b1",
+        fecha: "2026-08-06",
+        descripcion: "TRASLADO FONDOS FONVAL",
+        referencia: "001",
+        debito: 25000000,
+        credito: 0,
+      },
+      {
+        id: "b2",
+        fecha: "2026-08-20",
+        descripcion: "PAGO PROVEEDORES ACH",
+        referencia: "002",
+        debito: 129730569.7,
+        credito: 0,
+      },
+      {
+        id: "b3",
+        fecha: "2026-08-31",
+        descripcion: "RENDIMIENTOS FONDO DE INVERSION COLECTIVA CREDICORP",
+        referencia: "REND-AGO",
+        debito: 0,
+        credito: 1959190.59,
+      },
+    ];
+
+    const libros: MovLine[] = [
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL ALTA LIQUIDEZ",
+        comprobante: "L 001",
+        fecha: "2026-08-01",
+        nit: "860068182",
+        nombre: "CREDICORP CAPITAL COLOMBIA",
+        descripcion: "RENDIMIENTOS JULIO 2026 FONVAL",
+        cruce: "",
+        debito: 2367723.42,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "12450541",
+        cuentaNombre: "SERFINCO CARTERA COLECTIVA SMTE CARTERA VISTA",
+        comprobante: "L 002",
+        fecha: "2026-08-01",
+        nit: "860068182",
+        nombre: "CREDICORP CAPITAL COLOMBIA",
+        descripcion: "RENDIMIENTOS JULIO 2026 CARTERA VISTA",
+        cruce: "",
+        debito: 5541.08,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL",
+        comprobante: "G 001",
+        fecha: "2026-08-06",
+        nit: "900",
+        nombre: "PROVEEDOR",
+        descripcion: "TRASLADO FONDOS FONVAL",
+        cruce: "",
+        debito: 0,
+        credito: 25000000,
+        observacion: "",
+      },
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL",
+        comprobante: "G 002",
+        fecha: "2026-08-20",
+        nit: "901",
+        nombre: "PAGO PROVEEDORES",
+        descripcion: "PAGO PROVEEDORES ACH",
+        cruce: "",
+        debito: 0,
+        credito: 129730569.7,
+        observacion: "",
+      },
+    ];
+
+    const saldoInicial = 329354431.03;
+    const res = conciliarBancos(extracto, libros, saldoInicial, saldoInicial);
+
+    // Verificaciones críticas solicitadas por el usuario:
+    // 1. Los 5.541,08 NO deben aparecer como consignaciones en tránsito
+    assert.strictEqual(res.summary.consignacionesEnTransito, 0, "No debe haber consignaciones en tránsito falsas");
+    assert.strictEqual(res.summary.chequesEnTransito, 0);
+    assert.strictEqual(res.summary.notasDebitoNoRegistradas, 0);
+
+    // 2. La única diferencia deben ser los rendimientos de agosto (1.959.190,59)
+    assert.strictEqual(res.summary.soloRendimientos, true, "soloRendimientos debe ser true");
+    assert.strictEqual(res.summary.cuadrado, true, "Debe estar cuadrado");
+    assert.strictEqual(res.summary.notasCreditoRendimientos, 1959190.59);
+    assert.ok(Math.abs(res.summary.diferenciaCuadre) < 0.01, "Diferencia de cuadre debe ser 0");
+
+    // 3. Saldo conciliado coincide con saldo final extracto
+    const saldoFinalEsperado = saldoInicial + 1959190.59 - 25000000 - 129730569.7;
+    assert.ok(Math.abs(res.summary.saldoExtracto - saldoFinalEsperado) < 0.01);
+    assert.ok(Math.abs(res.summary.saldoConciliado - saldoFinalEsperado) < 0.01);
+  });
 });
+
 

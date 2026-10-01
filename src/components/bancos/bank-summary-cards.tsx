@@ -77,7 +77,11 @@ export const BankSummaryCards = memo(function BankSummaryCards({
             ) : summary.cuadrado ? (
               <span className="flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-xs font-black text-white shadow-xs">
                 <CheckCircle2 className="size-3.5" />
-                {summary.soloRendimientos ? "Cuadrado (Solo Rendimientos)" : "Cuadrado 100%"}
+                {(summary.consignacionesEnTransito === 0 && summary.chequesEnTransito === 0 && summary.notasDebitoNoRegistradas === 0 && summary.notasCreditoNoRegistradas === 0 && Math.abs(summary.saldoLibros - summary.saldoExtracto) < 0.05)
+                  ? "Cuadrado 100% (Sin Pendientes)"
+                  : (summary.soloRendimientos || ((summary.notasCreditoRendimientos || 0) > 0 && (summary.notasDebitoNoRegistradas || 0) === 0 && (summary.chequesEnTransito || 0) === 0 && (summary.consignacionesEnTransito || 0) === 0))
+                  ? "Pendiente Causar Rendimientos"
+                  : "Conciliado con Partidas Pendientes"}
               </span>
             ) : (
               <span className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1 text-xs font-black text-white shadow-xs">
@@ -107,10 +111,12 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 : isSoloLibros
                 ? "PENDIENTE: CARGAR EXTRACTO"
                 : summary.cuadrado
-                ? summary.soloRendimientos
-                  ? `CUADRADO: SOLO RENDIMIENTOS (${formatMoneyExact(summary.notasCreditoRendimientos || 0)})`
-                  : "CUADRADO PERFECTO"
-                : `DIFERENCIA: ${formatMoneyExact(summary.diferenciaCuadre)}`}
+                ? (summary.consignacionesEnTransito === 0 && summary.chequesEnTransito === 0 && summary.notasDebitoNoRegistradas === 0 && summary.notasCreditoNoRegistradas === 0 && Math.abs(summary.saldoLibros - summary.saldoExtracto) < 0.05)
+                  ? "CUADRADO PERFECTO (SIN PARTIDAS PENDIENTES)"
+                  : (summary.soloRendimientos || ((summary.notasCreditoRendimientos || 0) > 0 && (summary.notasDebitoNoRegistradas || 0) === 0 && (summary.chequesEnTransito || 0) === 0 && (summary.consignacionesEnTransito || 0) === 0))
+                  ? `DIFERENCIA: ${formatMoneyExact(summary.notasCreditoRendimientos || summary.diferenciaExtractoLibros || 0)} (RENDIMIENTOS DEL PERIODO)`
+                  : "CONCILIADO CON PARTIDAS PENDIENTES DE AJUSTE"
+                : `DIFERENCIA NETA PENDIENTE: ${formatMoneyExact(summary.diferenciaCuadre)}`}
             </div>
             <p
               className={cn(
@@ -131,9 +137,11 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 : isSoloLibros
                 ? `Se cargó el libro auxiliar con ${librosEfectivosCount} registros contables, pero aún falta cargar el extracto bancario (PDF o Excel) para realizar la conciliación.`
                 : summary.cuadrado
-                ? summary.soloRendimientos
-                  ? `El saldo contable conciliado coincide al 100% con el extracto bancario. La única partida pendiente de registro contable son los rendimientos financieros (${formatMoneyExact(summary.notasCreditoRendimientos || 0)}) que se causan al mes siguiente.`
-                  : "El saldo bancario ajustado coincide con el saldo de libros contables al 100% sin partidas huérfanas."
+                ? (summary.consignacionesEnTransito === 0 && summary.chequesEnTransito === 0 && summary.notasDebitoNoRegistradas === 0 && summary.notasCreditoNoRegistradas === 0 && Math.abs(summary.saldoLibros - summary.saldoExtracto) < 0.05)
+                  ? "El saldo bancario coincide con el saldo de libros contables al 100% sin partidas pendientes ni ajustes requeridos."
+                  : (summary.soloRendimientos || ((summary.notasCreditoRendimientos || 0) > 0 && (summary.notasDebitoNoRegistradas || 0) === 0 && (summary.chequesEnTransito || 0) === 0 && (summary.consignacionesEnTransito || 0) === 0))
+                  ? `Diferencia de ${formatMoneyExact(summary.notasCreditoRendimientos || summary.diferenciaExtractoLibros || 0)} que corresponde a los rendimientos del periodo que están en el extracto y aún no han sido registrados en libros contables (se causan al corte/siguiente mes).`
+                  : "El saldo bancario ajustado cuadra con libros contables a través de las partidas conciliatorias identificadas (rendimientos, notas bancarias y partidas en tránsito)."
                 : "Existen partidas pendientes por identificar, cheques en tránsito o notas bancarias pendientes de registro contable."}
             </p>
           </div>
@@ -334,7 +342,13 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 {summary.cuadrado ? (
                   <>
                     <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
-                    <span>DIFERENCIA NETA DE CONCILIACIÓN: CUADRADA AL 100%</span>
+                    <span>
+                      {(summary.consignacionesEnTransito === 0 && summary.chequesEnTransito === 0 && summary.notasDebitoNoRegistradas === 0 && summary.notasCreditoNoRegistradas === 0 && Math.abs(summary.saldoLibros - summary.saldoExtracto) < 0.05)
+                        ? "DIFERENCIA NETA DE CONCILIACIÓN: CUADRADA AL 100% (SIN PARTIDAS PENDIENTES)"
+                        : (summary.soloRendimientos || ((summary.notasCreditoRendimientos || 0) > 0 && (summary.notasDebitoNoRegistradas || 0) === 0 && (summary.chequesEnTransito || 0) === 0 && (summary.consignacionesEnTransito || 0) === 0))
+                        ? `CONCILIACIÓN CUADRADA (DIFERENCIA EN RENDIMIENTOS: $ ${formatMoneyExact(summary.notasCreditoRendimientos || summary.diferenciaExtractoLibros || 0)})`
+                        : "DIFERENCIA NETA DE CONCILIACIÓN: CONCILIADA CON PARTIDAS EN TRÁNSITO / AJUSTES"}
+                    </span>
                   </>
                 ) : (
                   <>
