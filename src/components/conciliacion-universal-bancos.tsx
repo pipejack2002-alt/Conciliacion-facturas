@@ -23,6 +23,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  History,
 } from "lucide-react";
 import { formatMoneyExact, formatDate } from "@/lib/format";
 import {
@@ -1216,41 +1217,106 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
               </div>
             </div>
 
-            {/* Card 3: Rendimientos Financieros */}
-            <div className="rounded-2xl border border-line bg-bg-surface p-4 shadow-2xs hover:shadow-xs transition">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="rounded-lg bg-teal-500/10 p-1.5 text-teal">
-                    <TrendingUp className="size-4" />
-                  </span>
-                  <span className="text-xs font-bold text-ink uppercase tracking-wider">
-                    Rendimientos (+)
+            {/* Card 3: Rendimientos Financieros (Separado: Periodo Actual vs Periodo Anterior) */}
+            <div
+              className={cn(
+                "rounded-2xl border bg-bg-surface p-4 shadow-2xs hover:shadow-xs transition flex flex-col justify-between",
+                (executiveBreakdown.rendimientos.periodoAnterior?.count || 0) > 0
+                  ? "border-teal/50 bg-linear-to-b from-teal-soft/10 via-bg-surface to-bg-surface"
+                  : "border-line"
+              )}
+            >
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-lg bg-teal-500/10 p-1.5 text-teal">
+                      <TrendingUp className="size-4" />
+                    </span>
+                    <span className="text-xs font-bold text-ink uppercase tracking-wider">
+                      Rendimientos (+)
+                    </span>
+                  </div>
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px] font-extrabold border",
+                      (executiveBreakdown.rendimientos.periodoActual?.pendiente || 0) === 0 &&
+                        (executiveBreakdown.rendimientos.periodoActual?.count || 0) > 0
+                        ? "bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300"
+                        : (executiveBreakdown.rendimientos.periodoActual?.pendiente || 0) > 0
+                        ? "bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950 dark:text-amber-300"
+                        : "bg-bg-subtle text-ink-subtle border-line"
+                    )}
+                  >
+                    {(executiveBreakdown.rendimientos.periodoActual?.pendiente || 0) === 0 &&
+                    (executiveBreakdown.rendimientos.periodoActual?.count || 0) > 0
+                      ? "✓ 100% Contabilizado"
+                      : (executiveBreakdown.rendimientos.periodoActual?.pendiente || 0) > 0
+                      ? `⚠️ ${formatMoneyExact(executiveBreakdown.rendimientos.periodoActual.pendiente)} Por Causar`
+                      : "Sin Rendimientos"}
                   </span>
                 </div>
-                <span
-                  className={cn(
-                    "rounded-full px-2 py-0.5 text-[10px] font-extrabold border",
-                    executiveBreakdown.rendimientos.pendiente === 0 && executiveBreakdown.rendimientos.count > 0
-                      ? "bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300"
-                      : executiveBreakdown.rendimientos.pendiente > 0
-                      ? "bg-blue-100 text-blue-900 border-blue-300 dark:bg-blue-950 dark:text-blue-300"
-                      : "bg-bg-subtle text-ink-subtle border-line"
+
+                {/* Valor Principal: Rendimiento del Periodo Actual (Extracto) */}
+                <div className="font-mono text-lg font-black text-teal">
+                  +{formatMoneyExact(executiveBreakdown.rendimientos.periodoActual?.total || executiveBreakdown.rendimientos.total)}
+                </div>
+                <div className="text-[11px] text-ink-muted flex items-center justify-between mt-0.5">
+                  <span>Periodo actual ({executiveBreakdown.rendimientos.periodoActual?.count || 0} abono)</span>
+                  {(executiveBreakdown.rendimientos.periodoActual?.pendiente || 0) > 0 && (
+                    <span className="text-amber-700 dark:text-amber-400 font-bold text-[10px]">
+                      Falta causar: {formatMoneyExact(executiveBreakdown.rendimientos.periodoActual.pendiente)}
+                    </span>
                   )}
-                >
-                  {executiveBreakdown.rendimientos.pendiente === 0 && executiveBreakdown.rendimientos.count > 0
-                    ? "✓ 100% Contabilizado"
-                    : executiveBreakdown.rendimientos.pendiente > 0
-                    ? `⚠️ ${formatMoneyExact(executiveBreakdown.rendimientos.pendiente)} Por Causar`
-                    : "Sin Rendimientos"}
+                </div>
+
+                {/* Desglose de Rendimientos Periodo Anterior (Libros) */}
+                {(executiveBreakdown.rendimientos.periodoAnterior?.count || 0) > 0 && (
+                  <div className="mt-2.5 pt-2 border-t border-teal/20 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] font-bold">
+                      <span className="flex items-center gap-1 text-teal">
+                        <History className="size-3" />
+                        Periodo Anterior (Libros):
+                      </span>
+                      <span className="font-mono font-bold text-ink">
+                        +{formatMoneyExact(executiveBreakdown.rendimientos.periodoAnterior.total)}
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      {executiveBreakdown.rendimientos.periodoAnterior.items.map((it, idx) => {
+                        const val = it.montoBanco > 0 ? it.montoBanco : it.montoLibros;
+                        const ctaName =
+                          it.itemLibros?.cuentaNombre ||
+                          it.itemLibros?.cuenta ||
+                          it.referencia ||
+                          "Rendimiento anterior";
+                        const comp = it.itemLibros?.comprobante || `Subcuenta ${idx + 1}`;
+                        return (
+                          <div
+                            key={it.id}
+                            className="flex items-center justify-between text-[10px] bg-teal-soft/25 dark:bg-teal-soft/10 px-2 py-0.5 rounded border border-teal/15"
+                          >
+                            <span className="truncate max-w-[155px] text-ink font-medium" title={it.descripcion}>
+                              • {comp}: {ctaName}
+                            </span>
+                            <span className="font-mono font-bold text-teal whitespace-nowrap">
+                              +{formatMoneyExact(val)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-2 text-[10px] text-ink-muted flex items-center justify-between pt-1 border-t border-line/40">
+                <span>
+                  {(executiveBreakdown.rendimientos.periodoAnterior?.count || 0) > 0
+                    ? "Separados por periodo"
+                    : `${executiveBreakdown.rendimientos.count} abonos de intereses`}
                 </span>
-              </div>
-              <div className="font-mono text-lg font-black text-teal">
-                +{formatMoneyExact(executiveBreakdown.rendimientos.total)}
-              </div>
-              <div className="mt-1 text-[11px] text-ink-muted flex items-center justify-between">
-                <span>{executiveBreakdown.rendimientos.count} abonos de intereses</span>
-                <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                  Reg: {formatMoneyExact(executiveBreakdown.rendimientos.registrado)}
+                <span className="font-semibold text-teal">
+                  Total ambos: {formatMoneyExact(executiveBreakdown.rendimientos.totalConsolidadoAmbosPeriodos || executiveBreakdown.rendimientos.total)}
                 </span>
               </div>
             </div>

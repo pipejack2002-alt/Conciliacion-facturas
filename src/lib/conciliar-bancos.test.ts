@@ -601,6 +601,20 @@ describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuen
     const saldoFinalEsperado = saldoInicial + 1959190.59 - 25000000 - 129730569.7;
     assert.ok(Math.abs(res.summary.saldoExtracto - saldoFinalEsperado) < 0.01);
     assert.ok(Math.abs(res.summary.saldoConciliado - saldoFinalEsperado) < 0.01);
+
+    // 4. Desglose ejecutivo de rendimientos (Separación de periodo actual vs anterior solicitada por el usuario):
+    const exec = getBankExecutiveBreakdown(res.rows);
+    // Periodo actual: únicamente los 1.959.190,59 del extracto
+    assert.strictEqual(exec.rendimientos.periodoActual.count, 1);
+    assert.strictEqual(exec.rendimientos.periodoActual.total, 1959190.59);
+    assert.strictEqual(exec.rendimientos.periodoActual.pendiente, 1959190.59);
+    // Periodo anterior: los dos comprobantes causados en libros (2.367.723,42 + 5.541,08 = 2.373.264,50)
+    assert.strictEqual(exec.rendimientos.periodoAnterior.count, 2);
+    assert.ok(Math.abs(exec.rendimientos.periodoAnterior.total - 2373264.50) < 0.01);
+    assert.strictEqual(exec.rendimientos.periodoAnterior.items.length, 2);
+    // El valor principal de la tarjeta destaca el periodo actual y no la suma revuelta
+    assert.strictEqual(exec.rendimientos.total, 1959190.59);
+    assert.ok(Math.abs(exec.rendimientos.totalConsolidadoAmbosPeriodos - 4332455.09) < 0.01);
   });
 });
 

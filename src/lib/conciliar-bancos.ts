@@ -30,6 +30,8 @@ export interface BankConciliacionRow {
   esGmf: boolean;
   esComision: boolean;
   esRendimiento: boolean;
+  esRendimientoPeriodoAnterior?: boolean;
+  esRendimientoPeriodoActual?: boolean;
   itemBanco?: BankExtractItem;
   itemLibros?: MovLine;
   itemsLibrosLote?: MovLine[];
@@ -380,6 +382,8 @@ export function conciliarBancos(
           esGmf: false,
           esComision: false,
           esRendimiento: true,
+          esRendimientoPeriodoAnterior: true,
+          esRendimientoPeriodoActual: false,
           itemLibros: l,
           nota: "Causación contable de rendimientos del periodo anterior ya reflejados en el saldo inicial del banco.",
         });
@@ -738,6 +742,8 @@ export function conciliarBancos(
             esGmf,
             esComision,
             esRendimiento,
+            esRendimientoPeriodoAnterior: false,
+            esRendimientoPeriodoActual: esRendimiento,
             itemBanco: bItem,
             itemLibros: lItem,
             nota: `Conciliado por valor idéntico dentro de la ventana de compensación.`,
@@ -773,6 +779,8 @@ export function conciliarBancos(
       esGmf,
       esComision,
       esRendimiento,
+      esRendimientoPeriodoAnterior: false,
+      esRendimientoPeriodoActual: esRendimiento,
       itemBanco: bItem,
       nota,
     });
@@ -806,6 +814,8 @@ export function conciliarBancos(
       esGmf,
       esComision,
       esRendimiento,
+      esRendimientoPeriodoAnterior: false,
+      esRendimientoPeriodoActual: esRendimiento,
       itemLibros: lItem,
       nota,
     });
@@ -922,10 +932,16 @@ export interface BankConceptBreakdown {
   items: BankConciliacionRow[];
 }
 
+export interface BankRendimientosBreakdown extends BankConceptBreakdown {
+  periodoActual: BankConceptBreakdown;
+  periodoAnterior: BankConceptBreakdown;
+  totalConsolidadoAmbosPeriodos: number;
+}
+
 export interface BankExecutiveBreakdown {
   gmf: BankConceptBreakdown;
   comisiones: BankConceptBreakdown;
-  rendimientos: BankConceptBreakdown;
+  rendimientos: BankRendimientosBreakdown;
   lotesAch: {
     total: number;
     countLotes: number;
@@ -962,6 +978,26 @@ export function getBankExecutiveBreakdown(rows: BankConciliacionRow[]): BankExec
     };
   };
 
+  const rendimientoAnteriorRows = rendimientoRows.filter(
+    (r) => r.esRendimientoPeriodoAnterior || r.id.startsWith("prev_rend_")
+  );
+  const rendimientoActualRows = rendimientoRows.filter(
+    (r) => !r.esRendimientoPeriodoAnterior && !r.id.startsWith("prev_rend_")
+  );
+
+  const rendActualBreakdown = calcBreakdown(rendimientoActualRows);
+  const rendAnteriorBreakdown = calcBreakdown(rendimientoAnteriorRows);
+  const totalConsolidadoAmbosPeriodos = rendActualBreakdown.total + rendAnteriorBreakdown.total;
+
+  const rendimientosBreakdown: BankRendimientosBreakdown = {
+    ...(rendActualBreakdown.count > 0 || rendAnteriorBreakdown.count === 0
+      ? rendActualBreakdown
+      : rendAnteriorBreakdown),
+    periodoActual: rendActualBreakdown,
+    periodoAnterior: rendAnteriorBreakdown,
+    totalConsolidadoAmbosPeriodos,
+  };
+
   let lotesTotal = 0;
   let lotesCompCount = 0;
   for (const r of loteRows) {
@@ -972,7 +1008,7 @@ export function getBankExecutiveBreakdown(rows: BankConciliacionRow[]): BankExec
   return {
     gmf: calcBreakdown(gmfRows),
     comisiones: calcBreakdown(comisionRows),
-    rendimientos: calcBreakdown(rendimientoRows),
+    rendimientos: rendimientosBreakdown,
     lotesAch: {
       total: lotesTotal,
       countLotes: loteRows.length,
