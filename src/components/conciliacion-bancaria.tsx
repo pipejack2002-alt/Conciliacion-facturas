@@ -33,9 +33,28 @@ const DEMO_EXTRACTO: BankExtractItem[] = [
   { id: "b6", fecha: "2026-07-31", descripcion: "RENDIMIENTO FINANCIERO CUENTA DE AHORROS", referencia: "REND-0731", debito: 0, credito: 24350 },
 ];
 
+import {
+  STORAGE_MODO_BANCO_KEY,
+  getInitialModoVista,
+} from "@/lib/tab-persistence";
+
 export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) {
   // Selector de Modo: Homologados (Caja Social, Credicorp, Banistmo) vs Universal (Cualquier Banco)
-  const [modoVista, setModoVista] = useState<"homologado" | "universal">("homologado");
+  const [modoVista, setModoVistaState] = useState<"homologado" | "universal">(getInitialModoVista);
+
+  const setModoVista = useCallback((m: "homologado" | "universal") => {
+    setModoVistaState(m);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(STORAGE_MODO_BANCO_KEY, m);
+        const url = new URL(window.location.href);
+        url.searchParams.set("modo_banco", m);
+        window.history.replaceState(null, "", url.toString());
+      } catch {
+        // Silently ignore
+      }
+    }
+  }, []);
 
   // Control de modo demo vs plantilla en blanco
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);

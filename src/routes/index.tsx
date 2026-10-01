@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { UploadPanel } from "@/components/upload-panel";
 import { ResultBoard } from "@/components/result-board";
@@ -14,6 +14,12 @@ import { cn } from "@/lib/cn";
 
 export const Route = createFileRoute("/")({ component: ProtectedConciliadorApp });
 
+import {
+  type ActiveModuleId,
+  STORAGE_ACTIVE_MODULE_KEY,
+  getInitialActiveModule,
+} from "@/lib/tab-persistence";
+
 function ProtectedConciliadorApp() {
   return (
     <TributoAuthGuardian>
@@ -26,7 +32,36 @@ function ConciliadorApp() {
   const result = useConciliacion((s) => s.result);
   const mov = useConciliacion((s) => s.mov);
   const restoreActiveSession = useConciliacion((s) => s.restoreActiveSession);
-  const [activeModule, setActiveModule] = useState<"dian" | "dashboard_bi" | "bancos">("dian");
+  const [activeModule, setActiveModuleState] = useState<ActiveModuleId>(getInitialActiveModule);
+
+  const setActiveModule = useCallback((mod: ActiveModuleId) => {
+    setActiveModuleState(mod);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(STORAGE_ACTIVE_MODULE_KEY, mod);
+        const url = new URL(window.location.href);
+        url.searchParams.set("modulo", mod);
+        window.history.replaceState(null, "", url.toString());
+      } catch {
+        // Silently ignore
+      }
+    }
+  }, []);
+
+  // Sincronizar URL inicial para que F5 siempre tenga el parámetro
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const url = new URL(window.location.href);
+        if (!url.searchParams.has("modulo")) {
+          url.searchParams.set("modulo", activeModule);
+          window.history.replaceState(null, "", url.toString());
+        }
+      } catch {
+        // Silently ignore
+      }
+    }
+  }, [activeModule]);
 
   useEffect(() => {
     if (!result) {
