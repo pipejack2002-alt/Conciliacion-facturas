@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { FileText, FileSpreadsheet, Upload, RefreshCw } from "lucide-react";
-import { formatMoney, formatMoneyExact } from "@/lib/format";
+import { formatMoneyExact } from "@/lib/format";
 import type { ParsedBankExtractResult } from "@/lib/parse-bank-extract";
 import type { DetectedBankAccount } from "@/lib/conciliar-bancos";
 

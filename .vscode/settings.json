@@ -19,6 +19,6 @@
   "[javascriptreact]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-  "problems.decorations.enabled": false,
-  "explorer.decorations.badges": false
+  "problems.decorations.enabled": true,
+  "explorer.decorations.badges": true
 }

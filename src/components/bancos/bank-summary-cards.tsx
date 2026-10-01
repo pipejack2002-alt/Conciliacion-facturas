@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { CheckCircle2, AlertCircle, DollarSign, FileSpreadsheet, ArrowUpRight, ArrowDownLeft, Scale } from "lucide-react";
+import { CheckCircle2, AlertCircle, ArrowUpRight, ArrowDownLeft, Scale } from "lucide-react";
 import { formatMoneyExact } from "@/lib/format";
 import type { BankConciliacionSummary } from "@/lib/conciliar-bancos";
 import { cn } from "@/lib/cn";

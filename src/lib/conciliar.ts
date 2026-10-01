@@ -283,7 +283,7 @@ function levenshtein(a: string, b: string): number {
   return prev[n];
 }
 
-function extractPrefixedFolios(blob: string): { pref: string; folio: string }[] {
+function _extractPrefixedFolios(blob: string): { pref: string; folio: string }[] {
   const out: { pref: string; folio: string }[] = [];
   const up = blob.toUpperCase();
   for (const m of up.matchAll(/\b([A-Z0-9]{2,8})[-.\s]*0*(\d{1,12})\b/g)) {
@@ -342,7 +342,7 @@ function collectHits(
     // (ej. Documento soporte emitido P 004 cruzado con causación P 002 / P 001)
     const crucesSet = new Set(lines.map((l) => l.cruce).filter(Boolean));
     if (crucesSet.size > 0) {
-      const existingBases = new Set(lines.map((l) => l.base));
+      const _existingBases = new Set(lines.map((l) => l.base));
       const cruceMatches = indexed.filter((l) => {
         if (!l.cruce || !crucesSet.has(l.cruce)) return false;
         if (cpNitK && l.nitK && l.nitK !== cpNitK) return false;

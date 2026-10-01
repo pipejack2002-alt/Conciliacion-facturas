@@ -8,7 +8,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useConciliacion } from "@/lib/store";
 import { TributoAuthGuardian, TributoUserBadge } from "@/components/tributo-auth-guardian";
 import { ToastHost } from "@/components/audit-chrome";
-import { ShieldCheck, FileCheck, BarChart3, Landmark } from "lucide-react";
+import { FileCheck, BarChart3, Landmark } from "lucide-react";
 import { AppLogo } from "@/components/app-logo";
 import { cn } from "@/lib/cn";
 

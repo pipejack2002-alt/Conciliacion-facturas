@@ -2,7 +2,6 @@ import { getDocumentProxy, extractText } from "unpdf";
 import * as XLSX from "xlsx";
 import type { BankExtractItem } from "./conciliar-bancos.ts";
 import { parsePdfBankExtract, type BankSubAccount } from "./parse-bank-extract.ts";
-import type { MovLine } from "./types.ts";
 
 export interface UniversalColumnMapping {
   headerRow: number;
@@ -196,8 +195,8 @@ export function detectUniversalBankColumns(rawRows: any[][]): UniversalColumnMap
   let creditoCol = headers.findIndex(
     (h) => h.includes("cred") || h.includes("dep") || h.includes("abono") || h.includes("ingreso") || h.includes("entrada")
   );
-  let valorCol = headers.findIndex((h) => h.includes("valor") || h.includes("monto") || h.includes("importe") || h.includes("neto"));
-  let saldoCol = headers.findIndex((h) => h.includes("saldo") || h.includes("balance"));
+  const valorCol = headers.findIndex((h) => h.includes("valor") || h.includes("monto") || h.includes("importe") || h.includes("neto"));
+  const saldoCol = headers.findIndex((h) => h.includes("saldo") || h.includes("balance"));
 
   // Fallbacks razonables
   if (fechaCol === -1) fechaCol = 0;

@@ -283,21 +283,21 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
   // 2. Fondos de Inversión Colectiva (Alta Liquidez)
   let ficAltaCta = "";
   const ficAltaItems: BankExtractItem[] = [];
-  let ficAltaSaldoIni = altaRowMatch ? cleanMoneyNumber(altaRowMatch[1]) : 0;
-  let ficAltaSaldoFin = altaRowMatch ? cleanMoneyNumber(altaRowMatch[6]) : 0;
-  const ficAltaRend = altaRowMatch ? cleanMoneyNumber(altaRowMatch[4]) : 0;
-  const ficAltaRetefuente = altaRowMatch ? cleanMoneyNumber(altaRowMatch[5]) : 0;
+  const ficAltaSaldoIni = altaRowMatch ? cleanMoneyNumber(altaRowMatch[1]) : 0;
+  const ficAltaSaldoFin = altaRowMatch ? cleanMoneyNumber(altaRowMatch[6]) : 0;
+  const _ficAltaRend = altaRowMatch ? cleanMoneyNumber(altaRowMatch[4]) : 0;
+  const _ficAltaRetefuente = altaRowMatch ? cleanMoneyNumber(altaRowMatch[5]) : 0;
 
   // 3. Fondos de Inversión Colectiva (Vista)
   let ficVistaCta = "";
   const ficVistaItems: BankExtractItem[] = [];
-  let ficVistaSaldoIni = vistaRowMatch ? cleanMoneyNumber(vistaRowMatch[1]) : 0;
-  let ficVistaSaldoFin = vistaRowMatch ? cleanMoneyNumber(vistaRowMatch[6]) : 0;
+  const ficVistaSaldoIni = vistaRowMatch ? cleanMoneyNumber(vistaRowMatch[1]) : 0;
+  const ficVistaSaldoFin = vistaRowMatch ? cleanMoneyNumber(vistaRowMatch[6]) : 0;
   const ficVistaRend = vistaRowMatch ? cleanMoneyNumber(vistaRowMatch[4]) : 0;
 
   // 4. Totales Portafolio
-  let portafolioSaldoIni = totalRowMatch ? cleanMoneyNumber(totalRowMatch[1]) : ficAltaSaldoIni + ficVistaSaldoIni;
-  let portafolioSaldoFin = totalRowMatch ? cleanMoneyNumber(totalRowMatch[6]) : ficAltaSaldoFin + ficVistaSaldoFin;
+  const portafolioSaldoIni = totalRowMatch ? cleanMoneyNumber(totalRowMatch[1]) : ficAltaSaldoIni + ficVistaSaldoIni;
+  const portafolioSaldoFin = totalRowMatch ? cleanMoneyNumber(totalRowMatch[6]) : ficAltaSaldoFin + ficVistaSaldoFin;
 
   let currentSection: "none" | "admin" | "fic_vista" | "fic_alta" = "none";
 
@@ -829,8 +829,8 @@ export function parseExcelBankExtract(data: ArrayBuffer | Uint8Array | string): 
   let iRef = headerRow.findIndex((h) => h.includes("ref") || h.includes("doc") || h.includes("comprobante"));
   let iDeb = headerRow.findIndex((h) => h.includes("deb") || h.includes("retiro") || h.includes("cargo") || h.includes("egreso"));
   let iCred = headerRow.findIndex((h) => h.includes("cred") || h.includes("dep") || h.includes("abono") || h.includes("ingreso"));
-  let iVal = headerRow.findIndex((h) => h.includes("valor") || h.includes("monto") || h.includes("importe"));
-  let iSaldo = headerRow.findIndex((h) => h.includes("saldo") || h.includes("balance"));
+  const iVal = headerRow.findIndex((h) => h.includes("valor") || h.includes("monto") || h.includes("importe"));
+  const iSaldo = headerRow.findIndex((h) => h.includes("saldo") || h.includes("balance"));
 
   if (iFecha === -1) iFecha = 0;
   if (iDesc === -1) iDesc = 1;

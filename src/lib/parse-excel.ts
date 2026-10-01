@@ -257,7 +257,7 @@ export function parseDianSheet(wb: XLSX.WorkBook, sheetName?: string): DianDoc[]
       })
     : [];
 
-  let out = extractDianDocsFromRows(rows);
+  const out = extractDianDocsFromRows(rows);
   if (!out.length && wb.SheetNames && wb.SheetNames.length > 1) {
     for (const name of wb.SheetNames) {
       if (name === chosenSheet) continue;
@@ -413,7 +413,7 @@ export function parseMovSheet(
       })
     : [];
 
-  let out = parseRowsToMov(rows, options);
+  const out = parseRowsToMov(rows, options);
 
   // Si la hoja seleccionada no produjo movimientos y el archivo tiene otras hojas, intentar en las demás
   if (!out.length && wb.SheetNames && wb.SheetNames.length > 1) {

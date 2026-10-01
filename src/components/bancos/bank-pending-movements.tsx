@@ -2,13 +2,11 @@ import { memo, useMemo } from "react";
 import {
   ClipboardCheck,
   Download,
-  AlertTriangle,
   ArrowUpRight,
   ArrowDownLeft,
   CheckCircle2,
   Clock,
   Sparkles,
-  Info,
 } from "lucide-react";
 import { formatMoneyExact, formatDate } from "@/lib/format";
 import type { BankConciliacionRow, BankConciliacionSummary } from "@/lib/conciliar-bancos";

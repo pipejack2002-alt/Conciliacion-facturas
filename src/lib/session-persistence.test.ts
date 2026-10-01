@@ -35,7 +35,6 @@ import {
   useConciliacion,
   loadActiveSession,
   saveActiveSession,
-  clearActiveSession,
 } from "./store.ts";
 import { saveHistoryEntry } from "./history-store.ts";
 import type { ConciliacionResult } from "./types.ts";

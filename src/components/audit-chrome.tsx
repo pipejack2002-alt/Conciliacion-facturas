@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, FileSpreadsheet, RefreshCw, X } from "lucide-react";
 import { parseDianSheet, parseMovSheet, readWorkbook } from "@/lib/parse-excel";
-import { formatMoneyExact } from "@/lib/format";
 import { useConciliacion } from "@/lib/store";
 import type { AuditDelta } from "@/lib/reviews";
 

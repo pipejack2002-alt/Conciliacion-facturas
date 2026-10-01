@@ -548,7 +548,6 @@ interface InteractiveDropCardProps {
   label: string;
   hint: string;
   badgeText?: string;
-  _badgeText?: string;
   file: File | null;
   sheets?: string[];
   selectedSheet?: string;
@@ -627,7 +626,7 @@ function InteractiveDropCard({
                 : "bg-bg-subtle text-ink-muted border-line"
             )}
           >
-            .XLSX
+            {badgeText || ".XLSX"}
           </span>
         </div>
 

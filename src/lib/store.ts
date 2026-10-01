@@ -1,3 +1,4 @@
+
 import { create } from "zustand";
 import type { AuditDelta, Review } from "./reviews.ts";
 import {
@@ -325,7 +326,8 @@ export const useConciliacion = create<State>((set, get) => ({
     autoPersist(get);
   },
   replaceDian: async (dian, name) => {
-    let { mov, movName, result } = get();
+    let { mov } = get();
+    const { movName, result } = get();
     if (!mov.length) {
       const cached = await loadCachedFiles();
       if (cached && cached.mov && cached.mov.length) {
@@ -343,7 +345,8 @@ export const useConciliacion = create<State>((set, get) => ({
     get().setFiles(dian, mov, { dian: name, mov: movName || "Movimiento Contable" });
   },
   replaceMov: async (mov, name) => {
-    let { dian, dianName, result } = get();
+    let { dian } = get();
+    const { dianName, result } = get();
     if (!dian.length) {
       const cached = await loadCachedFiles();
       if (cached && cached.dian && cached.dian.length) {

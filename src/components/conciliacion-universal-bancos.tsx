@@ -24,7 +24,7 @@ import {
   ArrowUp,
   ArrowDown,
 } from "lucide-react";
-import { formatMoney, formatMoneyExact, formatDate } from "@/lib/format";
+import { formatMoneyExact, formatDate } from "@/lib/format";
 import {
   conciliarBancos,
   extractLibroBancos,

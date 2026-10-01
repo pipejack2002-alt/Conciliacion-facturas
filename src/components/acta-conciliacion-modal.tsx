@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Printer, Building2, ShieldCheck, Award, FileText, CheckCircle2 } from "lucide-react";
+import { X, Printer, Award } from "lucide-react";
 import { formatMoney } from "@/lib/format";
 import type { ConciliacionResult } from "@/lib/types";
 
@@ -23,13 +23,11 @@ export function ActaConciliacionModal({ open, onClose, result, dianName, movName
   const { company, periodLabel, totals, rows, orphans } = result;
 
   const totalDian = totals.valorDian || 0;
-  const totalLibros = (totals.valorDian - totals.valorPendiente - totals.valorDiferencia) || 0;
   const totalDocs = totals.recibidos || 1;
   const pctConciliado = Math.min(100, Math.round((totals.conciliados / totalDocs) * 100));
 
   const conciliatedRows = rows.filter((r) => r.estado === "conciliado" || r.estado === "totalizado");
   const pendingAudit = rows.filter((r) => r.prioridad === "audit" && (r.estado === "pendiente" || r.estado === "posible_typo"));
-  const differences = rows.filter((r) => r.estado === "diferencia");
 
   const handlePrint = () => {
     window.print();

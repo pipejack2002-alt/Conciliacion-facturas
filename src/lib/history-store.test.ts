@@ -4,7 +4,6 @@
 import { test, describe, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import {
-  getActiveUserKey,
   getScopedStorageKey,
   getHistoryEntries,
   saveHistoryEntry,
