@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import {
   TRIBUTO_LOGIN_URL,

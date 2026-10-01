@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useState } from "react";
 import { Copy } from "lucide-react";
 import { useConciliacion, type TabId } from "@/lib/store";
