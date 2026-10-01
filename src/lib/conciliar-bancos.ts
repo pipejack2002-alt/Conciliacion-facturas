@@ -10,7 +10,6 @@ export interface BankExtractItem {
   credito: number; // Entrada / Abono al banco
   saldo?: number;
 }
-
 export type EstadoConciliacionBancaria =
   | "conciliado"
   | "partida_en_transito_libros" // Está en libros, falta en el banco (ej. cheque girado y no cobrado)
