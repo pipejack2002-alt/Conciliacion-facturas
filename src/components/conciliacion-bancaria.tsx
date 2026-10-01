@@ -279,9 +279,17 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
           /credicorp|correval|fonval|serfinco|fic/i.test(a.cuentaNombre)
       );
       if (credAccounts.length > 0) {
-        // Ordenar por volumen de movimientos (la cuenta principal de mayor actividad primero)
-        credAccounts.sort((a, b) => b.totalMovimientos - a.totalMovimientos);
-        setCuentaSeleccionada(credAccounts[0].cuenta);
+        if (selectedSubAccount === "alta_liquidez") {
+          const matchAlta = credAccounts.find((a) => a.cuenta.startsWith("12503511"));
+          setCuentaSeleccionada(matchAlta ? matchAlta.cuenta : credAccounts[0].cuenta);
+        } else if (selectedSubAccount === "vista") {
+          const matchVista = credAccounts.find((a) => a.cuenta.startsWith("12450541"));
+          setCuentaSeleccionada(matchVista ? matchVista.cuenta : credAccounts[0].cuenta);
+        } else if (credAccounts.length > 1) {
+          setCuentaSeleccionada("credicorp_all");
+        } else {
+          setCuentaSeleccionada(credAccounts[0].cuenta);
+        }
         return;
       }
     }
@@ -299,7 +307,7 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
     if (availableAccounts.length === 1) {
       setCuentaSeleccionada(availableAccounts[0].cuenta);
     }
-  }, [extractoMeta, availableAccounts, cuentaSeleccionada]);
+  }, [extractoMeta, availableAccounts, cuentaSeleccionada, selectedSubAccount]);
 
   // Actualizar items de extracto SOLO cuando cambia explícitamente la subcuenta seleccionada por el usuario
   const prevSubAccountRef = useRef<string>(selectedSubAccount);
@@ -318,6 +326,27 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
         setSaldoInicialExtracto(chosen.saldoInicial);
         setSaldoInicialLibros(chosen.saldoInicial);
       }
+
+      // Sincronizar cuenta contable automáticamente si es Credicorp
+      if (extractoMeta.bancoId === "credicorp") {
+        const credAccounts = availableAccounts.filter(
+          (a) =>
+            a.cuenta.startsWith("12503511") ||
+            a.cuenta.startsWith("12450541") ||
+            /credicorp|correval|fonval|serfinco|fic/i.test(a.cuentaNombre)
+        );
+        if (credAccounts.length > 1) {
+          if (chosen.id === "consolidado") {
+            setCuentaSeleccionada("credicorp_all");
+          } else if (chosen.id === "alta_liquidez") {
+            const matchAlta = credAccounts.find((a) => a.cuenta.startsWith("12503511"));
+            if (matchAlta) setCuentaSeleccionada(matchAlta.cuenta);
+          } else if (chosen.id === "vista") {
+            const matchVista = credAccounts.find((a) => a.cuenta.startsWith("12450541"));
+            if (matchVista) setCuentaSeleccionada(matchVista.cuenta);
+          }
+        }
+      }
     } else {
       setExtractoItems(extractoMeta.items);
       if (extractoMeta.saldoInicial !== undefined) {
@@ -325,7 +354,7 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
         setSaldoInicialLibros(extractoMeta.saldoInicial);
       }
     }
-  }, [extractoMeta, selectedSubAccount]);
+  }, [extractoMeta, selectedSubAccount, availableAccounts]);
 
   // Filtrar movimientos de libros por la cuenta seleccionada
   const librosBancos = useMemo(() => {
