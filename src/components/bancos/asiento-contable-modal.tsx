@@ -252,7 +252,7 @@ export function AsientoContableModal({
               <Layers className="size-3.5 text-purple-600" />
               Comprobantes en Lote ({comprobantesList.length}):
             </span>
-            <div className="flex items-center gap-1.5 flex-wrap max-h-24 overflow-y-auto py-0.5 scrollbar-thin [scrollbar-width:thin] [scrollbar-color:rgba(147,51,234,0.3)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-purple-500/30 hover:[&::-webkit-scrollbar-thumb]:bg-purple-500/60 [&::-webkit-scrollbar-thumb]:rounded-full">
+            <div className="flex items-center gap-1.5 flex-wrap max-h-24 overflow-y-auto py-0.5 custom-scrollbar-purple">
               {comprobantesList.map((comp) => (
                 <button
                   key={comp}
@@ -332,7 +332,7 @@ export function AsientoContableModal({
                   </span>
                 </div>
 
-                <div className="overflow-x-auto rounded-xl border border-line bg-bg-surface scrollbar-thin [scrollbar-width:thin] [scrollbar-color:rgba(217,119,6,0.3)_transparent] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-bg-subtle/50 [&::-webkit-scrollbar-thumb]:bg-amber-500/30 hover:[&::-webkit-scrollbar-thumb]:bg-amber-500/60 [&::-webkit-scrollbar-thumb]:rounded-full">
+                <div className="overflow-x-auto rounded-xl border border-line bg-bg-surface custom-scrollbar-amber">
                   <table className="w-full min-w-[760px] text-left text-xs">
                     <thead className="bg-bg-subtle text-ink-muted font-bold border-b border-line">
                       <tr>
@@ -491,7 +491,7 @@ export function AsientoContableModal({
                   No se encontraron líneas auxiliares adicionales para el comprobante {activeComprobante}.
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-xl border border-line bg-bg-surface scrollbar-thin [scrollbar-width:thin] [scrollbar-color:rgba(15,118,110,0.3)_transparent] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-bg-subtle/50 [&::-webkit-scrollbar-thumb]:bg-teal/30 hover:[&::-webkit-scrollbar-thumb]:bg-teal/60 [&::-webkit-scrollbar-thumb]:rounded-full">
+                <div className="overflow-x-auto rounded-xl border border-line bg-bg-surface custom-scrollbar">
                   <table className="w-full min-w-[850px] text-left text-xs">
                     <thead className="bg-bg-subtle text-ink-muted font-bold border-b border-line">
                       <tr>

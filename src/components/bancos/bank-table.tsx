@@ -682,7 +682,7 @@ export const BankTable = memo(function BankTable({
                                             <span className="font-semibold">{c.nombre || "—"}</span>
                                             {c.nit && <span className="text-[10px] text-ink-subtle block font-mono">NIT: {c.nit}</span>}
                                           </td>
-                                          <td className="px-3 py-2 text-ink-muted max-w-65 truncate" title={c.descripcion}>
+                                          <td className="px-3 py-2 text-ink-muted max-w-64 truncate" title={c.descripcion}>
                                             {c.descripcion}
                                           </td>
                                           <td className="px-3 py-2 font-mono text-ink-subtle">
@@ -773,7 +773,7 @@ export const BankTable = memo(function BankTable({
                                   )}
 
                                   {/* Tabla del Asiento Contable Completo */}
-                                  <div className="overflow-x-auto rounded-lg border border-teal-200 dark:border-teal-800 bg-bg-surface scrollbar-thin [scrollbar-width:thin] [scrollbar-color:rgba(15,118,110,0.3)_transparent] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-bg-subtle/50 [&::-webkit-scrollbar-thumb]:bg-teal/30 hover:[&::-webkit-scrollbar-thumb]:bg-teal/60 [&::-webkit-scrollbar-thumb]:rounded-full">
+                                  <div className="overflow-x-auto rounded-lg border border-teal-200 dark:border-teal-800 bg-bg-surface custom-scrollbar">
                                     <table className="w-full min-w-[760px] text-left text-xs">
                                       <thead className="bg-teal-100/60 dark:bg-teal-950/60 text-teal-950 dark:text-teal-200 font-semibold border-b border-teal-200 dark:border-teal-800">
                                         <tr>
