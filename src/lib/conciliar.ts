@@ -13,7 +13,7 @@ import { digitsOnly } from "./format.ts";
 
 const APP_RESPONSE = /application response/i;
 const NOMINA = /nomina|nómina/i;
-const NOTA_CREDITO = /nota\s+de\s+cr[eé]dito/i;
+const NOTA_CREDITO = /nota\s*(?:de\s*)?cr[eé]dito/i;
 const FACTURA = /factura/i;
 const SOPORTE = /soporte/i;
 
@@ -393,15 +393,43 @@ function collectHits(
   const typed: IndexedLine[] = [];
   let seenToken = "";
   for (const l of sameNit) {
+    // 1. Excluir egresos, pagos bancarios o tesorería (comprobantes G, CE, cuenta 11, pago de proveedores)
+    if (
+      l.kind === "pago" ||
+      l.kind === "recaudo" ||
+      compLetter(l.base) === "G" ||
+      /^(G|CE|EGR|PAG)/i.test(l.base) ||
+      /^11/.test(l.cuenta)
+    ) {
+      continue;
+    }
+
+    // 2. Verificar que el comprobante contenga causación real (gasto, costo, inventario o activo)
+    const compLines = indexed.filter((x) => x.base === l.base);
+    const hasExpenseOrAsset = compLines.some((x) => /^(5|6|7|14|15|17|2408)/.test(x.cuenta));
+    const isOnlyPaymentOrAdvance = compLines.every((x) => /^(11|1330|2205)/.test(x.cuenta));
+    if (isOnlyPaymentOrAdvance && !hasExpenseOrAsset) {
+      continue;
+    }
+
     const up = l.blob.replace(/[\s\-_.]/g, "");
     if (p && up.includes(p)) {
       const re = new RegExp(`${p}0*(\\d{3,12})`);
       const m = up.match(re);
       if (m) {
         const candFolio = stripZeros(m[1]);
+
+        // 3. Si candFolio es otra factura real en el reporte DIAN, no es un error de digitación
+        const candKey = (p || "") + candFolio;
+        if (takenExact.has(candKey) || takenExact.has(candFolio)) {
+          continue;
+        }
+
         const dist = levenshtein(f, candFolio);
-        if (dist >= 1 && dist <= 2) {
-          const amtOk = closeAmount(l.amt, doc.total || 0) || amountsMatch(doc.total || 0, doc.iva || 0, l.amt);
+        // Distancia 1 para números cortos (<= 5 caracteres); distancia 2 solo para folios largos (>= 6 dígitos)
+        const maxDist = f.length >= 6 ? 2 : 1;
+        if (dist >= 1 && dist <= maxDist) {
+          const amtOk = closeAmount(l.amt, doc.total || 0);
           if (amtOk) {
             typed.push(l);
             seenToken = `${p}-${candFolio}`;
@@ -598,7 +626,16 @@ function findCruzes(rows: ConciliacionRow[]): CruceNC[] {
     const nit = nitKey(nc.nitContraparte);
     const cand = facts
       .filter((f) => !usedF.has(f.id) && nitKey(f.nitContraparte) === nit && closeAmount(f.totalDian, nc.totalDian))
-      .sort((a, b) => Math.abs(a.totalDian - nc.totalDian) - Math.abs(b.totalDian - nc.totalDian));
+      .sort((a, b) => {
+        const fNumA = stripZeros(a.folio);
+        const fNumB = stripZeros(b.folio);
+        const ncText = `${nc.numero} ${nc.alerta || ""}`.toUpperCase();
+        const aMentioned = Boolean(fNumA && fNumA.length >= 3 && ncText.includes(fNumA));
+        const bMentioned = Boolean(fNumB && fNumB.length >= 3 && ncText.includes(fNumB));
+        if (aMentioned && !bMentioned) return -1;
+        if (!aMentioned && bMentioned) return 1;
+        return Math.abs(a.totalDian - nc.totalDian) - Math.abs(b.totalDian - nc.totalDian);
+      });
     const f = cand[0];
     if (!f) continue;
     usedF.add(f.id);
@@ -948,6 +985,15 @@ export function conciliar(
           } else {
             // Un pago (2205 débito contra banco) o una constitución de anticipo (1330 débito contra 2205 crédito sin gasto)
             // NO es la causación de una factura de compra. La factura debe quedar pendiente si no se ha registrado su costo/gasto.
+            if (
+              l.kind === "pago" ||
+              l.kind === "recaudo" ||
+              compLetter(l.base) === "G" ||
+              /^(G|CE|EGR|PAG)/i.test(l.base) ||
+              /^11/.test(l.cuenta)
+            ) {
+              continue;
+            }
             const compLines = indexed.filter((x) => x.base === l.base);
             const hasExpenseOrAsset = compLines.some((x) => /^(5|6|7|14|15|17|2408)/.test(x.cuenta));
             const isOnlyPaymentOrAdvance = compLines.every((x) => /^(11|1330|2205)/.test(x.cuenta));
@@ -977,8 +1023,31 @@ export function conciliar(
     if (f && n) {
       f.linked.push({ id: n.id, numero: n.numero, tipo: n.tipo, total: n.totalDian });
       n.linked.push({ id: f.id, numero: f.numero, tipo: f.tipo, total: f.totalDian });
-      if (f.estado === "pendiente") f.estado = "cruce_nc";
-      if (n.estado === "pendiente") n.estado = "cruce_nc";
+
+      // Si la factura cruza con una Nota Crédito en DIAN, su estado oficial es cruce_nc.
+      // Anula cualquier asignación espuria de typo contra pagos (ej. egreso G) u otras facturas.
+      if (f.estado === "pendiente" || f.estado === "posible_typo") {
+        f.estado = "cruce_nc";
+        if (f.matchVia?.startsWith("posible digitación") || f.hits.some((h) => compLetter(h.comprobante) === "G" || h.comprobante.startsWith("G") || /^11/.test(h.cuenta))) {
+          f.hits = [];
+          f.comprobantes = [];
+          f.totalSiigo = 0;
+          f.diferencia = 0;
+          f.matchVia = "";
+        }
+        f.alerta = `Cruza con Nota Crédito ${n.numero} ($${n.totalDian.toLocaleString("es-CO")}) que anula o compensa la operación.`;
+      }
+      if (n.estado === "pendiente" || n.estado === "posible_typo") {
+        n.estado = "cruce_nc";
+        if (n.matchVia?.startsWith("posible digitación") || n.hits.some((h) => compLetter(h.comprobante) === "G" || h.comprobante.startsWith("G") || /^11/.test(h.cuenta))) {
+          n.hits = [];
+          n.comprobantes = [];
+          n.totalSiigo = 0;
+          n.diferencia = 0;
+          n.matchVia = "";
+        }
+        n.alerta = `Nota Crédito cruza con Factura ${f.numero} ($${f.totalDian.toLocaleString("es-CO")}). Operación compensada.`;
+      }
     }
   }
 

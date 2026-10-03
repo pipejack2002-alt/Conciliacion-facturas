@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { AlertTriangle, Check, Copy, Sparkles, X } from "lucide-react";
+import { AlertTriangle, Check, Copy, Sparkles, X, ShieldCheck } from "lucide-react";
 import { BadgeEstado } from "../badge-estado";
 import { reviewOf, useConciliacion } from "@/lib/store";
 import { daysAgo, formatDate, formatMoneyExact } from "@/lib/format";
@@ -88,7 +88,9 @@ export function DetailDrawer({
           <div
             className={cn(
               "mb-4 rounded-xl border p-3.5 text-xs shadow-xs",
-              insight.tipo === "trm_diferencia"
+              insight.tipo === "contado_exento"
+                ? "border-emerald-300 bg-emerald-50/95 text-emerald-950 ring-1 ring-emerald-200"
+                : insight.tipo === "trm_diferencia"
                 ? "border-sky-300 bg-sky-50/90 text-sky-950"
                 : insight.tipo === "comision_bancaria"
                 ? "border-emerald-300 bg-emerald-50/90 text-emerald-950"
@@ -100,10 +102,17 @@ export function DetailDrawer({
             <div className="flex items-center gap-1.5 font-bold mb-1.5 text-sm">
               {insight.tipo === "riesgo_fiscal_radian" ? (
                 <AlertTriangle className="size-4 shrink-0 text-rose-600" />
+              ) : insight.tipo === "contado_exento" ? (
+                <ShieldCheck className="size-4 shrink-0 text-emerald-600" />
               ) : (
                 <Sparkles className="size-4 shrink-0 text-current" />
               )}
-              {insight.tipo === "riesgo_fiscal_radian" ? "Alerta Fiscal Preventiva:" : "Sugerencia Tributaria:"} {insight.etiqueta}
+              {insight.tipo === "riesgo_fiscal_radian"
+                ? "Alerta Fiscal Preventiva:"
+                : insight.tipo === "contado_exento"
+                ? "Régimen DIAN Contado:"
+                : "Sugerencia Tributaria:"}{" "}
+              {insight.etiqueta}
             </div>
             <p className="leading-relaxed opacity-95 text-xs">{insight.detalle}</p>
           </div>

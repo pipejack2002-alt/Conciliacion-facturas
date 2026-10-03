@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { ArrowUp, ArrowDown, AlertTriangle, Sparkles, Copy } from "lucide-react";
+import { ArrowUp, ArrowDown, AlertTriangle, Sparkles, Copy, ShieldCheck } from "lucide-react";
 import { BadgeEstado } from "../badge-estado";
 import { reviewOf, useConciliacion, type Review } from "@/lib/store";
 import { daysAgo, formatDate, formatMoneyExact } from "@/lib/format";
@@ -802,7 +802,9 @@ export function DocTable({
                     <span
                       className={cn(
                         "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold border shadow-2xs whitespace-nowrap",
-                        insight.tipo === "redondeo"
+                        insight.tipo === "contado_exento"
+                          ? "bg-emerald-50 text-emerald-900 border-emerald-300 font-semibold"
+                          : insight.tipo === "redondeo"
                           ? "bg-slate-100 text-slate-800 border-slate-300"
                           : insight.tipo === "retefuente"
                           ? "bg-amber-100 text-amber-950 border-amber-400"
@@ -820,6 +822,8 @@ export function DocTable({
                     >
                       {insight.tipo === "riesgo_fiscal_radian" ? (
                         <AlertTriangle className="size-2.5 shrink-0 text-rose-600" />
+                      ) : insight.tipo === "contado_exento" ? (
+                        <ShieldCheck className="size-2.5 shrink-0 text-emerald-600" />
                       ) : (
                         <Sparkles className="size-2.5 shrink-0 text-current" />
                       )}

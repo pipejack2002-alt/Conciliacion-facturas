@@ -11,7 +11,8 @@ export interface TaxInsight {
     | "posible_duplicado"
     | "trm_diferencia"
     | "comision_bancaria"
-    | "riesgo_fiscal_radian";
+    | "riesgo_fiscal_radian"
+    | "contado_exento";
   etiqueta: string;
   detalle: string;
   tarifa?: string;
@@ -176,9 +177,9 @@ export function getTaxInsight(row: ConciliacionRow): TaxInsight | null {
     // A las facturas de contado o pago inmediato NO se les exige la emisión de eventos RADIAN.
     if (isContado(row)) {
       return {
-        tipo: "redondeo",
-        etiqueta: "Operación de Contado (Sin Eventos)",
-        detalle: `Factura cancelada de contado o pago inmediato (${formatMoney(row.totalDian)}). Conforme al Art. 771-2 del E.T. y Res. 000085 DIAN, NO requiere acuses de recibo ni eventos RADIAN; es costo deducible e IVA descontable de forma directa.`,
+        tipo: "contado_exento",
+        etiqueta: "Contado (No requiere acuses)",
+        detalle: `Factura cancelada de contado o pago inmediato (${formatMoney(row.totalDian)}). Conforme al Art. 771-2 del E.T. y Res. 000085 DIAN, NO requiere acuses de recibo ni eventos RADIAN; es costo deducible e IVA descontable de forma directa. Pendiente de registrar en libros contables.`,
         probabilidad: "alta",
       };
     }

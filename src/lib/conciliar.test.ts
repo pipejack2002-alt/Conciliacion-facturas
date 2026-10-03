@@ -297,7 +297,7 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
     const insightContado = getTaxInsight(rowContadoExplicito);
     assert.ok(insightContado);
     assert.notStrictEqual(insightContado.tipo, "riesgo_fiscal_radian");
-    assert.strictEqual(insightContado.etiqueta, "Operación de Contado (Sin Eventos)");
+    assert.strictEqual(insightContado.etiqueta, "Contado (No requiere acuses)");
     assert.ok(insightContado.detalle.includes("NO requiere acuses"));
 
     // Caso 6: Proveedor intrínseco de combustible / caja menor
@@ -326,7 +326,7 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
     const insightRetail = getTaxInsight(rowRetail);
     assert.ok(insightRetail);
     assert.notStrictEqual(insightRetail.tipo, "riesgo_fiscal_radian");
-    assert.strictEqual(insightRetail.etiqueta, "Operación de Contado (Sin Eventos)");
+    assert.strictEqual(insightRetail.etiqueta, "Contado (No requiere acuses)");
   });
 
   it("debe dejar como pendiente (por registrar) facturas cuando en libros solo hay ajustes de rendimientos (PUC 12)", () => {
@@ -1036,5 +1036,123 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
 
     assert.strictEqual(soloRow.linked.length, 0);
     assert.strictEqual(soloRow.alerta.includes("HFYF11935212"), false);
+  });
+
+  it("debe asignar cruce_nc a facturas que anulan con Nota Crédito y no cruzarlas erróneamente con egresos G como typos", () => {
+    const nitRectificadora = "900046161";
+    const dianDocs: DianDoc[] = [
+      // Factura FV-1723
+      {
+        grupo: "Recibido",
+        tipo: "Factura electrónica",
+        prefijo: "FV",
+        folio: "1723",
+        cufe: "CUFE-FV-1723",
+        fechaEmision: "2026-09-02",
+        fechaRecepcion: "2026-09-02",
+        nitEmisor: nitRectificadora,
+        nombreEmisor: "RECTIFICADORA UNIVERSAL DE LA COSTA S.A.S.",
+        nitReceptor: "901260460",
+        nombreReceptor: "EMPRESA S.A.S.",
+        estadoDian: "Aceptado",
+        iva: 801610,
+        total: 5020610,
+      },
+      // Nota Crédito NCE-44 que anula FV-1723
+      {
+        grupo: "Recibido",
+        tipo: "Nota crédito",
+        prefijo: "NCE",
+        folio: "44",
+        cufe: "CUFE-NCE-44",
+        fechaEmision: "2026-09-02",
+        fechaRecepcion: "2026-09-02",
+        nitEmisor: nitRectificadora,
+        nombreEmisor: "RECTIFICADORA UNIVERSAL DE LA COSTA S.A.S.",
+        nitReceptor: "901260460",
+        nombreReceptor: "EMPRESA S.A.S.",
+        estadoDian: "Aceptado",
+        iva: 801610,
+        total: 5020610,
+      },
+      // Factura FV-1724
+      {
+        grupo: "Recibido",
+        tipo: "Factura electrónica",
+        prefijo: "FV",
+        folio: "1724",
+        cufe: "CUFE-FV-1724",
+        fechaEmision: "2026-09-02",
+        fechaRecepcion: "2026-09-02",
+        nitEmisor: nitRectificadora,
+        nombreEmisor: "RECTIFICADORA UNIVERSAL DE LA COSTA S.A.S.",
+        nitReceptor: "901260460",
+        nombreReceptor: "EMPRESA S.A.S.",
+        estadoDian: "Aceptado",
+        iva: 612370,
+        total: 3835370,
+      },
+      // Nota Crédito NCE-45 que anula FV-1724
+      {
+        grupo: "Recibido",
+        tipo: "Nota crédito",
+        prefijo: "NCE",
+        folio: "45",
+        cufe: "CUFE-NCE-45",
+        fechaEmision: "2026-09-02",
+        fechaRecepcion: "2026-09-02",
+        nitEmisor: nitRectificadora,
+        nombreEmisor: "RECTIFICADORA UNIVERSAL DE LA COSTA S.A.S.",
+        nitReceptor: "901260460",
+        nombreReceptor: "EMPRESA S.A.S.",
+        estadoDian: "Aceptado",
+        iva: 612370,
+        total: 3835370,
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      // Comprobante de Egreso (G) pagando una factura vieja FV-1716
+      {
+        cuenta: "22050501",
+        cuentaNombre: "PROVEEDORES NACIONALES",
+        comprobante: "G 001 00000003420 001",
+        fecha: "2026-09-03",
+        nit: nitRectificadora,
+        nombre: "RECTIFICADORA UNIVERSAL DE LA COSTA S.A.S.",
+        descripcion: "ABONO FACTURA FV-1716",
+        cruce: "FV-1716",
+        debito: 4863950,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "11100512",
+        cuentaNombre: "BANCOLOMBIA",
+        comprobante: "G 001 00000003420 002",
+        fecha: "2026-09-03",
+        nit: nitRectificadora,
+        nombre: "RECTIFICADORA UNIVERSAL DE LA COSTA S.A.S.",
+        descripcion: "RECTIFICADORA UNIVERSAL",
+        cruce: "",
+        debito: 0,
+        credito: 4863950,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "SEP 2026");
+    const row1723 = res.rows.find((r) => r.numero === "FV-1723")!;
+    const row1724 = res.rows.find((r) => r.numero === "FV-1724")!;
+
+    // No deben ser posible_typo ni cruzar con el egreso G
+    assert.notStrictEqual(row1723.estado, "posible_typo");
+    assert.strictEqual(row1723.estado, "cruce_nc");
+    assert.strictEqual(row1723.linked[0]?.numero, "NCE-44");
+    assert.strictEqual(row1723.comprobantes.includes("G 001 00000003420"), false);
+
+    assert.notStrictEqual(row1724.estado, "posible_typo");
+    assert.strictEqual(row1724.estado, "cruce_nc");
+    assert.strictEqual(row1724.linked[0]?.numero, "NCE-45");
   });
 });
