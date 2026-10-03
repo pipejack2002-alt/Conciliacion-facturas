@@ -1155,4 +1155,78 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
     assert.strictEqual(row1724.estado, "cruce_nc");
     assert.strictEqual(row1724.linked[0]?.numero, "NCE-45");
   });
+
+  it("debe detectar error de digitación (posible_typo / Revisar factura) cuando el auxiliar se equivoca en un dígito al causar la compra", () => {
+    const nitProveedor = "901333444";
+    const dianDocs: DianDoc[] = [
+      {
+        grupo: "Recibido",
+        tipo: "Factura electrónica",
+        prefijo: "FE",
+        folio: "5021",
+        cufe: "CUFE-FE-5021",
+        fechaEmision: "2026-09-10",
+        fechaRecepcion: "2026-09-10",
+        nitEmisor: nitProveedor,
+        nombreEmisor: "REPUESTOS Y MOTORES S.A.S.",
+        nitReceptor: "901260460",
+        nombreReceptor: "EMPRESA S.A.S.",
+        estadoDian: "Aceptado",
+        iva: 190000,
+        total: 1190000,
+      },
+    ];
+
+    // En libros causaron la compra (P 001) con costo (cuenta 5135) pero digitaron FE-5022 por error
+    const movLines: MovLine[] = [
+      {
+        cuenta: "51350501",
+        cuentaNombre: "MANTENIMIENTO Y REPARACIONES",
+        comprobante: "P 001 00000008890 001",
+        fecha: "2026-09-11",
+        nit: nitProveedor,
+        nombre: "REPUESTOS Y MOTORES S.A.S.",
+        descripcion: "CAUSACION FACTURA FE-5022 REPUESTOS",
+        cruce: "FE-5022",
+        debito: 1000000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "24080101",
+        cuentaNombre: "IVA DESCONTABLE 19%",
+        comprobante: "P 001 00000008890 002",
+        fecha: "2026-09-11",
+        nit: nitProveedor,
+        nombre: "REPUESTOS Y MOTORES S.A.S.",
+        descripcion: "IVA FE-5022",
+        cruce: "FE-5022",
+        debito: 190000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "22050501",
+        cuentaNombre: "PROVEEDORES NACIONALES",
+        comprobante: "P 001 00000008890 003",
+        fecha: "2026-09-11",
+        nit: nitProveedor,
+        nombre: "REPUESTOS Y MOTORES S.A.S.",
+        descripcion: "CUENTA POR PAGAR FE-5022",
+        cruce: "FE-5022",
+        debito: 0,
+        credito: 1190000,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "SEP 2026");
+    const row = res.rows.find((r) => r.numero === "FE-5021")!;
+
+    assert.ok(row, "Debe existir la fila de la factura FE-5021");
+    assert.strictEqual(row.estado, "posible_typo");
+    assert.ok(row.alerta.includes("FE-5022"));
+    assert.ok(row.alerta.includes("Posible error al digitar el número de factura"));
+    assert.strictEqual(row.totalSiigo, 1190000);
+  });
 });
