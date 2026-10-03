@@ -215,6 +215,18 @@ function autoPersist(get: () => State) {
 
 const initialActive = typeof window !== "undefined" ? loadActiveSession() : null;
 
+// Cargar archivos cacheados en IndexedDB inmediatamente en el cliente al inicializar el módulo
+if (typeof window !== "undefined") {
+  void loadCachedFiles().then((cached) => {
+    if (cached && (cached.dian?.length || cached.mov?.length)) {
+      useConciliacion.setState({
+        dian: cached.dian?.length ? cached.dian : useConciliacion.getState().dian,
+        mov: cached.mov?.length ? cached.mov : useConciliacion.getState().mov,
+      });
+    }
+  });
+}
+
 export const useConciliacion = create<State>((set, get) => ({
   dian: [],
   mov: [],
@@ -236,17 +248,23 @@ export const useConciliacion = create<State>((set, get) => ({
   restoreActiveSession: () => {
     const active = loadActiveSession();
     if (active && active.result) {
+      const current = get();
+      const isSameResult =
+        current.result &&
+        current.result.company?.nit === active.result.company?.nit &&
+        current.result.rows?.length === active.result.rows?.length;
+
       set({
-        dianName: active.dianName || "",
-        movName: active.movName || "",
-        result: active.result,
-        tab: active.tab || get().tab || "cola",
-        sort: active.sort || get().sort || "prioridad",
-        sortDirection: active.sortDirection || get().sortDirection || "asc",
-        columnFilters: active.columnFilters || get().columnFilters || {},
-        groupByProveedor: active.groupByProveedor ?? get().groupByProveedor,
-        hideRevisados: active.hideRevisados ?? get().hideRevisados,
-        reviews: active.reviews || get().reviews || {},
+        dianName: active.dianName || current.dianName || "",
+        movName: active.movName || current.movName || "",
+        result: isSameResult ? current.result : active.result,
+        tab: active.tab || current.tab || "cola",
+        sort: active.sort || current.sort || "prioridad",
+        sortDirection: active.sortDirection || current.sortDirection || "asc",
+        columnFilters: active.columnFilters || current.columnFilters || {},
+        groupByProveedor: active.groupByProveedor ?? current.groupByProveedor,
+        hideRevisados: active.hideRevisados ?? current.hideRevisados,
+        reviews: active.reviews || current.reviews || {},
       });
       // Cargar archivos raw desde IndexedDB en segundo plano
       void loadCachedFiles().then((cached) => {

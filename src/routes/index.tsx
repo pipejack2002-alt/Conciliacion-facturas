@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { UploadPanel } from "@/components/upload-panel";
 import { ResultBoard } from "@/components/result-board";
@@ -63,11 +63,14 @@ function ConciliadorApp() {
     }
   }, [activeModule]);
 
+  // Restaurar sesión activa una sola vez al montar el componente (evita bucles infinitos de re-render / React error #185)
+  const hasRestoredRef = useRef(false);
   useEffect(() => {
-    if (!result || mov.length === 0) {
+    if (!hasRestoredRef.current) {
+      hasRestoredRef.current = true;
       restoreActiveSession();
     }
-  }, [result, mov.length, restoreActiveSession]);
+  }, [restoreActiveSession]);
 
   return (
     <div className="min-h-screen bg-bg text-ink flex flex-col selection:bg-teal-soft selection:text-teal-deep">
