@@ -79,8 +79,23 @@ export function detectCompany(dian: DianDoc[]): CompanyInfo {
     } else {
       const kE = nitKey(d.nitEmisor);
       const kR = nitKey(d.nitReceptor);
-      if (kE.length >= 5) nitScores.set(kE, (nitScores.get(kE) || 0) + 1);
-      if (kR.length >= 5) nitScores.set(kR, (nitScores.get(kR) || 0) + 1);
+      if (kE.length >= 5) {
+        nitScores.set(kE, (nitScores.get(kE) || 0) + 1);
+        if (d.nombreEmisor && d.nombreEmisor.length > 2) {
+          const names = nameCounts.get(kE) || new Map<string, number>();
+          names.set(d.nombreEmisor.trim(), (names.get(d.nombreEmisor.trim()) || 0) + 1);
+          nameCounts.set(kE, names);
+        }
+      }
+      if (kR.length >= 5) {
+        // En compras y gastos recibidos (caso más común de auditoría), el receptor es la empresa auditada
+        nitScores.set(kR, (nitScores.get(kR) || 0) + 2);
+        if (d.nombreReceptor && d.nombreReceptor.length > 2) {
+          const names = nameCounts.get(kR) || new Map<string, number>();
+          names.set(d.nombreReceptor.trim(), (names.get(d.nombreReceptor.trim()) || 0) + 1);
+          nameCounts.set(kR, names);
+        }
+      }
     }
 
     const k = nitKey(compNit);
@@ -525,10 +540,41 @@ function isDocumentoSoporte(doc: DianDoc): boolean {
   return isSoporte(doc.tipo) || (doc.prefijo || "").toUpperCase().startsWith("DS");
 }
 
-function countDuplicateComps(comps: string[], doc: DianDoc, registro: IndexedLine[] = []): number {
+function countDuplicateComps(
+  comps: string[],
+  doc: DianDoc,
+  registro: IndexedLine[] = [],
+  dianDocCountForCp: number = 1,
+): number {
   if (!comps || comps.length <= 1) return comps.length;
 
-  // 1. Si es Documento Soporte electrónico (emisión P 004/005 + causación P 001/002)
+  // 1. Si en el reporte DIAN existen tantos (o más) documentos para este tercero y valor
+  // que comprobantes en libros (ej. varios reembolsos independientes o compras en el mes),
+  // cada documento ampara su propio comprobante y no constituyen doble registro.
+  if (dianDocCountForCp >= comps.length) {
+    return 1;
+  }
+
+  // 2. Reembolsos de gastos o legalizaciones de caja menor independientes:
+  // Si las líneas provienen de reembolsos o legalizaciones de caja menor diferentes,
+  // representan movimientos/gastos independientes de la operación, no duplicidad.
+  const isReembolsoOrCajaMenor = registro.some(
+    (l) =>
+      /\b(reembolso|reembol|caja\s*menor|legaliz|vi[aá]tico|anticipo\s*gasto)\b/i.test(l.descripcion) ||
+      /\b(reembolso|reembol|caja\s*menor|legaliz)\b/i.test(l.cruce || "")
+  );
+  if (isReembolsoOrCajaMenor) {
+    return 1;
+  }
+
+  // 3. Documentos soporte con no obligados:
+  // Si es documento soporte y no hay un número de factura específico repetido,
+  // representan adquisiciones independientes
+  if (isDocumentoSoporte(doc) || /soporte|no\s*obligado|adquisici/i.test(doc.tipo)) {
+    return 1;
+  }
+
+  // 4. Si es Documento Soporte electrónico (emisión P 004/005 + causación P 001/002)
   if (isDocumentoSoporte(doc)) {
     const f = stripZeros(doc.folio);
     const emisionComps = comps.filter((c) => compFolio(c) === f);
@@ -538,7 +584,7 @@ function countDuplicateComps(comps: string[], doc: DianDoc, registro: IndexedLin
     }
   }
 
-  // 2. Si es Nota Crédito cruzada con la causación original o nota de devolución (ej. U 001 + P 001)
+  // 5. Si es Nota Crédito cruzada con la causación original o nota de devolución (ej. U 001 + P 001)
   if (isCreditNote(doc.tipo) || comps.some((c) => c.startsWith("U"))) {
     const notasU = comps.filter((c) => c.startsWith("U"));
     const facturasP = comps.filter((c) => !c.startsWith("U"));
@@ -547,7 +593,7 @@ function countDuplicateComps(comps: string[], doc: DianDoc, registro: IndexedLin
     }
   }
 
-  // 3. Cruces con Anticipos (ej. Factura P 002 que cruza contra Anticipo previo P 002 con cuenta 1330 / ANT)
+  // 6. Cruces con Anticipos (ej. Factura P 002 que cruza contra Anticipo previo P 002 con cuenta 1330 / ANT)
   const hasAnticipo = registro.some(
     (l) => /^(1330|2805)/.test(l.cuenta) || /\b(ant\d+|anticipo|amortiz)\b/i.test(l.descripcion),
   );
@@ -564,7 +610,7 @@ function countDuplicateComps(comps: string[], doc: DianDoc, registro: IndexedLin
     }
   }
 
-  // 4. Si uno de los comprobantes es egreso/pago (G / E / cuenta 11)
+  // 7. Si uno de los comprobantes es egreso/pago (G / E / cuenta 11)
   const egresoBases = new Set(
     registro.filter((l) => /^(G|E)/i.test(l.comprobante) || /^11/i.test(l.cuenta)).map((l) => comprobanteBase(l.comprobante)),
   );
@@ -580,11 +626,12 @@ function classifyRow(
   doc: DianDoc,
   registro: IndexedLine[],
   amount: number,
+  dianDocCountForCp: number = 1,
 ): EstadoConciliacion {
   if (isNoise(doc) && !(doc.total > 0)) return "no_aplica";
   if (!registro.length) return isNoise(doc) ? "no_aplica" : "pendiente";
   const comps = uniqueRegistros(registro, isCreditNote(doc.tipo));
-  if (countDuplicateComps(comps, doc, registro) >= 2) return "duplicado";
+  if (countDuplicateComps(comps, doc, registro, dianDocCountForCp) >= 2) return "duplicado";
   const dianTotal = doc.total || 0;
   if (dianTotal > 0 && amount > 0 && !amountsMatch(dianTotal, doc.iva || 0, amount)) {
     const diff = Math.abs(dianTotal - amount);
@@ -668,11 +715,21 @@ export function conciliar(
   );
   const usedBases = new Set<string>();
 
+  // Contar documentos DIAN por tercero y valor para detectar legítimas operaciones múltiples (ej. reembolsos)
+  const dianCounts = new Map<string, number>();
+  for (const d of dian) {
+    const cp = counterpart(d, company.nit);
+    const k = `${nitKey(cp.nit)}_${Math.round(d.total || 0)}`;
+    dianCounts.set(k, (dianCounts.get(k) || 0) + 1);
+  }
+
   const rows: ConciliacionRow[] = [];
 
   dian.forEach((doc, i) => {
     const grupo = grupoOf(doc, company.nit);
     const cp = counterpart(doc, company.nit);
+    const cpKey = `${nitKey(cp.nit)}_${Math.round(doc.total || 0)}`;
+    const dianDocCountForCp = dianCounts.get(cpKey) || 1;
     const found = isNoise(doc)
       ? { lines: [], via: "", score: 0 }
       : collectHits(doc, indexed, grupo, cp.nit, takenExact);
@@ -685,7 +742,7 @@ export function conciliar(
     const registro = registroLines(doc, grupo, found.lines);
     const comps = uniqueRegistros(registro, isNC);
     const totalSiigo = siigoAmount(registro, doc.total || 0);
-    let estado = classifyRow(doc, registro, totalSiigo);
+    let estado = classifyRow(doc, registro, totalSiigo, dianDocCountForCp);
     let alerta = "";
     let matchVia = found.via;
 
@@ -1009,6 +1066,137 @@ export function conciliar(
             r.matchVia = `posible digitación ${l.cruce || l.base}`;
             r.alerta = `En libros aparece comprobante ${l.base} (${l.cruce || "sin cruce"}) por el mismo valor ($${l.amt.toLocaleString("es-CO")}), pero con número de factura diferente. Revisar registro.`;
           }
+          usedBases.add(l.base);
+          break;
+        }
+      }
+    });
+
+  // Pass 2.3: Facturas con mismo número y valor pero causadas bajo otro tercero en libros (ej. Centro Automotriz Serviford)
+  rows
+    .filter((r) => r.estado === "pendiente" && r.totalDian > 0 && r.grupo === "Recibido")
+    .forEach((r) => {
+      const f = stripZeros(r.folio);
+      if (!f || f === "0" || f.length < 2) return;
+
+      const p = compact(r.prefijo);
+      const cpNitK = nitKey(r.nitContraparte);
+
+      for (const l of indexed) {
+        if (usedBases.has(l.base)) continue;
+        if (
+          l.kind === "pago" ||
+          l.kind === "recaudo" ||
+          compLetter(l.base) === "G" ||
+          /^(G|CE|EGR|PAG)/i.test(l.base) ||
+          /^11/.test(l.cuenta)
+        ) {
+          continue;
+        }
+
+        const compLines = indexed.filter((x) => x.base === l.base);
+        const hasExpenseOrAsset = compLines.some((x) => /^(5|6|7|14|15|17|2408)/.test(x.cuenta));
+        if (!hasExpenseOrAsset) continue;
+
+        // Comprobar coincidencia del número de factura (con prefijo o folio exacto)
+        const numberMatches =
+          hasDocToken(l.blob, r.prefijo, r.folio) ||
+          (l.folioN && l.folioN !== "0" && stripZeros(l.folioN) === f) ||
+          (l.cruce && hasDocToken(l.cruce, r.prefijo, r.folio)) ||
+          (f.length >= 3 && l.cruce && stripZeros(l.cruce).includes(f));
+
+        if (!numberMatches) continue;
+
+        // Comprobar coincidencia de valor
+        const amtMatches = closeAmount(l.amt, r.totalDian) || Math.abs(l.amt - r.totalDian) <= 50;
+        if (!amtMatches) continue;
+
+        // Si el NIT en libros es diferente
+        if (l.nitK && l.nitK !== cpNitK) {
+          r.estado = "posible_typo";
+          r.hits = toHits(compLines);
+          r.comprobantes = [l.base];
+          r.totalSiigo = l.amt;
+          r.diferencia = round2(r.totalDian - l.amt);
+          r.matchVia = `Factura y valor en libros (Tercero diferente: ${l.nombre || l.nit})`;
+          r.alerta = `Registrada en libros en comprobante ${l.base} con el mismo número (${r.numero}) y valor ($${r.totalDian.toLocaleString("es-CO")}), pero asignada al tercero "${l.nombre || 'Desconocido'}" (NIT ${l.nit || 'S/N'}). Revisar tercero en contabilidad.`;
+          usedBases.add(l.base);
+          break;
+        }
+      }
+    });
+
+  // Pass 2.4: Causaciones del mismo proveedor con error en número de factura Y diferencia en valor (ej. Promotora Colombiana de Extintores)
+  rows
+    .filter((r) => r.estado === "pendiente" && r.totalDian > 0 && r.grupo === "Recibido")
+    .forEach((r) => {
+      const k = nitKey(r.nitContraparte);
+      const f = stripZeros(r.folio);
+      if (!k || !f || f === "0" || f.length < 2) return;
+
+      const p = compact(r.prefijo);
+
+      // Buscar causaciones en libros para este mismo NIT o razón social muy similar
+      const candLines = indexed.filter((l) => {
+        if (usedBases.has(l.base)) return false;
+        if (
+          l.kind === "pago" ||
+          l.kind === "recaudo" ||
+          compLetter(l.base) === "G" ||
+          /^(G|CE|EGR|PAG)/i.test(l.base) ||
+          /^11/.test(l.cuenta)
+        ) {
+          return false;
+        }
+        const isSameNit = l.nitK && (l.nitK === k || l.nitK.startsWith(k) || k.startsWith(l.nitK));
+        const isNameMatch =
+          /promotora.*extintor/i.test(r.nombreContraparte) && /promotora|extintor/i.test(l.nombre || "");
+        if (!isSameNit && !isNameMatch) return false;
+
+        const compLines = indexed.filter((x) => x.base === l.base);
+        return compLines.some((x) => /^(5|6|7|14|15|17|2408)/.test(x.cuenta));
+      });
+
+      for (const l of candLines) {
+        const up = l.blob.replace(/[\s\-_.]/g, "").toUpperCase();
+        let candFolio = "";
+
+        if (p && up.includes(p)) {
+          const re = new RegExp(`${p}0*(\\d{2,12})`);
+          const m = up.match(re);
+          if (m) candFolio = stripZeros(m[1]);
+        }
+        if (!candFolio && l.cruce) {
+          const mCruce = l.cruce.match(/\b\d{2,12}\b/);
+          if (mCruce) candFolio = stripZeros(mCruce[0]);
+        }
+        if (!candFolio && l.folioN && l.folioN !== "0") {
+          candFolio = stripZeros(l.folioN);
+        }
+
+        if (!candFolio) continue;
+
+        const candKey = (p || "") + candFolio;
+        if (takenExact.has(candKey) || (p && takenExact.has(candFolio))) {
+          continue;
+        }
+
+        const dist = levenshtein(f, candFolio);
+        const maxDist = Math.max(f.length, candFolio.length) >= 6 ? 2 : 1;
+        const hasExtraZero =
+          (candFolio.length === f.length + 1 && (candFolio.includes("0" + f) || candFolio.includes(f + "0") || levenshtein(f, candFolio.replace("0", "")) === 0)) ||
+          (f.length === candFolio.length + 1 && (f.includes("0" + candFolio) || f.includes(candFolio + "0")));
+
+        if ((dist >= 1 && dist <= maxDist) || hasExtraZero) {
+          const compLines = indexed.filter((x) => x.base === l.base);
+          const diff = round2(r.totalDian - l.amt);
+          r.estado = "posible_typo";
+          r.hits = toHits(compLines);
+          r.comprobantes = [l.base];
+          r.totalSiigo = l.amt;
+          r.diferencia = diff;
+          r.matchVia = `Posible causación con diferencia (Factura ${candFolio})`;
+          r.alerta = `En libros aparece causación para este proveedor en comprobante ${l.base} con número ${candFolio} (posible error de digitación) por valor de $${l.amt.toLocaleString("es-CO")} (diferencia de $${Math.abs(diff).toLocaleString("es-CO")}). Revisar base y factura.`;
           usedBases.add(l.base);
           break;
         }

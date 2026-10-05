@@ -1229,4 +1229,224 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
     assert.ok(row.alerta.includes("Posible error al digitar el número de factura"));
     assert.strictEqual(row.totalSiigo, 1190000);
   });
+
+  it("debe conciliar reembolsos independientes sin marcarlos erróneamente como doble registro", () => {
+    const nitGasto = "901234888";
+    const dianDocs: DianDoc[] = [
+      {
+        tipo: "Documento soporte en adquisiciones con no obligados",
+        cufe: "CUFE-DS-01",
+        folio: "101",
+        prefijo: "DS",
+        fechaEmision: "2026-09-02",
+        fechaRecepcion: "2026-09-02",
+        nitEmisor: nitGasto,
+        nombreEmisor: "TRANSPORTE Y LOGISTICA EXPRESS",
+        nitReceptor: "900123456",
+        nombreReceptor: "EMPRESA MODELO S.A.S.",
+        iva: 0,
+        total: 85000,
+        estadoDian: "Aceptado",
+        grupo: "Recibido",
+      },
+      {
+        tipo: "Documento soporte en adquisiciones con no obligados",
+        cufe: "CUFE-DS-02",
+        folio: "102",
+        prefijo: "DS",
+        fechaEmision: "2026-09-18",
+        fechaRecepcion: "2026-09-18",
+        nitEmisor: nitGasto,
+        nombreEmisor: "TRANSPORTE Y LOGISTICA EXPRESS",
+        nitReceptor: "900123456",
+        nombreReceptor: "EMPRESA MODELO S.A.S.",
+        iva: 0,
+        total: 85000,
+        estadoDian: "Aceptado",
+        grupo: "Recibido",
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      // Reembolso 1 (Semana 1)
+      {
+        cuenta: "51953501",
+        cuentaNombre: "TAXIS Y BUSES",
+        comprobante: "P 001 00000001010 001",
+        fecha: "2026-09-02",
+        nit: nitGasto,
+        nombre: "TRANSPORTE Y LOGISTICA EXPRESS",
+        descripcion: "REEMBOLSO DE GASTOS SEMANA 1 TRANSPORTE",
+        cruce: "DS-101",
+        debito: 85000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "22050501",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "P 001 00000001010 002",
+        fecha: "2026-09-02",
+        nit: nitGasto,
+        nombre: "TRANSPORTE Y LOGISTICA EXPRESS",
+        descripcion: "REEMBOLSO DE GASTOS SEMANA 1",
+        cruce: "DS-101",
+        debito: 0,
+        credito: 85000,
+        observacion: "",
+      },
+      // Reembolso 2 (Semana 3)
+      {
+        cuenta: "51953501",
+        cuentaNombre: "TAXIS Y BUSES",
+        comprobante: "P 001 00000001020 001",
+        fecha: "2026-09-18",
+        nit: nitGasto,
+        nombre: "TRANSPORTE Y LOGISTICA EXPRESS",
+        descripcion: "REEMBOLSO DE GASTOS SEMANA 3 TRANSPORTE",
+        cruce: "DS-102",
+        debito: 85000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "22050501",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "P 001 00000001020 002",
+        fecha: "2026-09-18",
+        nit: nitGasto,
+        nombre: "TRANSPORTE Y LOGISTICA EXPRESS",
+        descripcion: "REEMBOLSO DE GASTOS SEMANA 3",
+        cruce: "DS-102",
+        debito: 0,
+        credito: 85000,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "SEP 2026");
+    assert.strictEqual(res.totals.duplicados, 0, "No debe marcar falsos duplicados en reembolsos independientes");
+    assert.strictEqual(res.rows[0].estado, "conciliado");
+    assert.strictEqual(res.rows[1].estado, "conciliado");
+  });
+
+  it("debe detectar y sugerir factura registrada con mismo número y valor pero bajo otro tercero (Centro Automotriz Serviford)", () => {
+    const dianDocs: DianDoc[] = [
+      {
+        tipo: "Factura electrónica de venta",
+        cufe: "CUFE-SERVIFORD-4510",
+        folio: "4510",
+        prefijo: "FE",
+        fechaEmision: "2026-09-14",
+        fechaRecepcion: "2026-09-14",
+        nitEmisor: "900888111",
+        nombreEmisor: "CENTRO AUTOMOTRIZ SERVIFORD S.A.S.",
+        nitReceptor: "900123456",
+        nombreReceptor: "EMPRESA MODELO S.A.S.",
+        iva: 92605,
+        total: 580000,
+        estadoDian: "Aceptado",
+        grupo: "Recibido",
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      {
+        cuenta: "51451001",
+        cuentaNombre: "MANTENIMIENTO EQUIPO DE TRANSPORTE",
+        comprobante: "P 001 00000007800 001",
+        fecha: "2026-09-14",
+        nit: "1020304050", // Causada erróneamente bajo el NIT del conductor/reembolso
+        nombre: "CARLOS MARIO - REEMBOLSO CAJA",
+        descripcion: "MANTENIMIENTO CAMIONETA FE-4510",
+        cruce: "FE-4510",
+        debito: 580000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "22050501",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "P 001 00000007800 002",
+        fecha: "2026-09-14",
+        nit: "1020304050",
+        nombre: "CARLOS MARIO - REEMBOLSO CAJA",
+        descripcion: "FE-4510",
+        cruce: "FE-4510",
+        debito: 0,
+        credito: 580000,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "SEP 2026");
+    const row = res.rows[0];
+
+    assert.ok(row, "Debe existir la fila");
+    assert.strictEqual(row.estado, "posible_typo", "Debe sugerirse como Revisar factura");
+    assert.ok(row.alerta.includes("CARLOS MARIO - REEMBOLSO CAJA"));
+    assert.ok(row.alerta.includes("1020304050"));
+    assert.ok(row.alerta.includes("asignada al tercero"));
+    assert.strictEqual(row.totalSiigo, 580000);
+  });
+
+  it("debe sugerir causación con posible error de digitación en factura y diferencia en costo (Promotora Colombiana de Extintores)", () => {
+    const nitExtintores = "860555444";
+    const dianDocs: DianDoc[] = [
+      {
+        tipo: "Factura electrónica de venta",
+        cufe: "CUFE-EXTINTOR-1240",
+        folio: "1240",
+        prefijo: "FE",
+        fechaEmision: "2026-09-20",
+        fechaRecepcion: "2026-09-20",
+        nitEmisor: nitExtintores,
+        nombreEmisor: "PROMOTORA COLOMBIANA DE EXTINTORES S.A.S.",
+        nitReceptor: "900123456",
+        nombreReceptor: "EMPRESA MODELO S.A.S.",
+        iva: 159664,
+        total: 1000000,
+        estadoDian: "Aceptado",
+        grupo: "Recibido",
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      {
+        cuenta: "51952501",
+        cuentaNombre: "ELEMENTOS DE SEGURIDAD INDUSTRIAL",
+        comprobante: "P 001 00000009200 001",
+        fecha: "2026-09-20",
+        nit: nitExtintores,
+        nombre: "PROMOTORA COLOMBIANA DE EXTINTORES S.A.S.",
+        descripcion: "RECARGA EXTINTORES FE-12400", // Un cero de más en la factura y valor causado con 270.000 de diferencia
+        cruce: "FE-12400",
+        debito: 1270000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "22050501",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "P 001 00000009200 002",
+        fecha: "2026-09-20",
+        nit: nitExtintores,
+        nombre: "PROMOTORA COLOMBIANA DE EXTINTORES S.A.S.",
+        descripcion: "CUENTA POR PAGAR FE-12400",
+        cruce: "FE-12400",
+        debito: 0,
+        credito: 1270000,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "SEP 2026");
+    const row = res.rows[0];
+
+    assert.ok(row, "Debe existir la fila");
+    assert.strictEqual(row.estado, "posible_typo", "Debe sugerirse como Revisar factura");
+    assert.ok(row.alerta.includes("12400"));
+    assert.ok(row.alerta.includes("diferencia de $270.000"));
+    assert.strictEqual(row.totalSiigo, 1270000);
+  });
 });
