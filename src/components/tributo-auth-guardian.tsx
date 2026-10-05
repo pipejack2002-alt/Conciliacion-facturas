@@ -26,6 +26,7 @@ import {
   LogOut,
   UserCheck,
 } from "lucide-react";
+import { syncUserHistoryWithCloud } from "@/lib/history-store";
 
 interface TributoAuthContextValue {
   session: TributoAuthSession | null;
@@ -70,6 +71,8 @@ export function TributoAuthGuardian({ children }: TributoAuthGuardianProps) {
         if (isMounted) {
           setSession(existingSession);
           setIsLoading(false);
+          const uKey = existingSession.user?.email || (existingSession.user?.id ? String(existingSession.user.id) : "");
+          if (uKey) void syncUserHistoryWithCloud(uKey);
         }
         return;
       }
@@ -103,6 +106,8 @@ export function TributoAuthGuardian({ children }: TributoAuthGuardianProps) {
             setSession(optimisticSession);
             setIsLoading(false);
             setError(null);
+            const userKey = claims.email || (claims.userId ? String(claims.userId) : "");
+            if (userKey) void syncUserHistoryWithCloud(userKey);
           }
 
           // Validación criptográfica en segundo plano de la firma HMAC con el servidor de TributoApp
@@ -113,6 +118,8 @@ export function TributoAuthGuardian({ children }: TributoAuthGuardianProps) {
                 // Confirmado 100%: Guardar de forma persistente y limpiar la URL
                 saveSession(result.session.user, urlToken);
                 cleanUrlToken();
+                const userKey = result.session.user?.email || (result.session.user?.id ? String(result.session.user.id) : "");
+                if (userKey) void syncUserHistoryWithCloud(userKey);
               } else {
                 // Token falsificado, firma inválida o expirado en servidor: EXPULSIÓN INMEDIATA
                 clearStoredSession();
@@ -172,6 +179,8 @@ export function TributoAuthGuardian({ children }: TributoAuthGuardianProps) {
       if (result.success && result.session) {
         const saved = saveSession(result.session.user, trimmed);
         setSession(saved);
+        const userKey = saved.user?.email || (saved.user?.id ? String(saved.user.id) : "");
+        if (userKey) void syncUserHistoryWithCloud(userKey);
         setShowManualInput(false);
         setManualToken("");
         setIsVerifyingManual(false);

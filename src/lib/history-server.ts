@@ -21,8 +21,113 @@ interface ClearHistoryPayload {
   userId: string;
 }
 
+interface CloudStatusPayload {
+  userId?: string;
+}
+
+export interface CloudStatusResult {
+  success: boolean;
+  isConfigured: boolean;
+  provider: string;
+  mode: "persistent" | "ephemeral" | "error";
+  userEntriesCount: number;
+  hasDatabaseUrl: boolean;
+  error?: string;
+}
+
+let tableReadyPromise: Promise<void> | null = null;
+
 /**
- * Obtiene el historial de conciliaciones de la base de datos (Neon/PGLite)
+ * Asegura que la tabla de historial exista en cualquier backend SQL (Neon, Supabase, Postgres o PGLite)
+ * sin requerir pasos manuales de migración en consola.
+ */
+async function ensureHistoryTableReady(sql: any): Promise<void> {
+  if (tableReadyPromise) return tableReadyPromise;
+
+  tableReadyPromise = (async () => {
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS historial_conciliaciones (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          user_email TEXT,
+          company_nit TEXT,
+          company_name TEXT,
+          period_label TEXT,
+          dian_name TEXT,
+          mov_name TEXT,
+          entry_timestamp BIGINT NOT NULL,
+          totals JSONB NOT NULL,
+          result JSONB NOT NULL,
+          reviews JSONB,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_historial_conciliaciones_user_ts 
+          ON historial_conciliaciones (user_id, entry_timestamp DESC);
+      `;
+    } catch (err) {
+      console.warn("[history-server] Auto-creación de tabla historial_conciliaciones:", err);
+      tableReadyPromise = null;
+    }
+  })();
+
+  return tableReadyPromise;
+}
+
+/**
+ * Obtiene el diagnóstico del estado de la base de datos en la nube y la persistencia activa.
+ */
+export const getCloudStatusServerFn = createServerFn({ method: "POST" })
+  .validator((d: CloudStatusPayload) => d)
+  .handler(async ({ data }): Promise<CloudStatusResult> => {
+    const rawDatabaseUrl =
+      typeof process !== "undefined" ? process.env.DATABASE_URL : undefined;
+    const hasDatabaseUrl = Boolean(rawDatabaseUrl && rawDatabaseUrl.trim());
+    const isVercel = Boolean(typeof process !== "undefined" && process.env.VERCEL);
+
+    try {
+      const sql = await getSql();
+      await ensureHistoryTableReady(sql);
+
+      let userEntriesCount = 0;
+      if (data.userId && data.userId.trim()) {
+        const normalized = data.userId.trim().toLowerCase();
+        const countRes = await sql<{ count: string | number }>`
+          SELECT count(*) as count FROM historial_conciliaciones WHERE user_id = ${normalized}
+        `;
+        userEntriesCount = Number(countRes[0]?.count || 0);
+      }
+
+      return {
+        success: true,
+        isConfigured: hasDatabaseUrl,
+        provider: hasDatabaseUrl
+          ? "PostgreSQL / Neon (Multi-Dispositivo)"
+          : isVercel
+            ? "PGLite Efímero (Memoria Vercel)"
+            : "PGLite (Local Dev)",
+        mode: hasDatabaseUrl ? "persistent" : "ephemeral",
+        userEntriesCount,
+        hasDatabaseUrl,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        isConfigured: hasDatabaseUrl,
+        provider: hasDatabaseUrl ? "PostgreSQL / Neon (Error)" : "Desconectado",
+        mode: "error",
+        userEntriesCount: 0,
+        hasDatabaseUrl,
+        error: err?.message || "Error al conectar con la base de datos",
+      };
+    }
+  });
+
+/**
+ * Obtiene el historial de conciliaciones de la base de datos (Neon/Postgres/PGLite)
  * aislado estrictamente por el identificador del usuario activo.
  */
 export const getUserHistoryServerFn = createServerFn({ method: "POST" })
@@ -33,6 +138,7 @@ export const getUserHistoryServerFn = createServerFn({ method: "POST" })
 
     try {
       const sql = await getSql();
+      await ensureHistoryTableReady(sql);
       const normalizedUserId = userId.trim().toLowerCase();
 
       const rows = await sql<{
@@ -57,20 +163,43 @@ export const getUserHistoryServerFn = createServerFn({ method: "POST" })
         LIMIT 50
       `;
 
-      return rows.map((r) => ({
-        id: r.id,
-        timestamp: Number(r.entry_timestamp),
-        company: {
-          nit: r.company_nit || "",
-          nombre: r.company_name || "",
-        },
-        periodLabel: r.period_label || "",
-        dianName: r.dian_name || "",
-        movName: r.mov_name || "",
-        totals: r.totals,
-        result: r.result,
-        reviews: r.reviews || undefined,
-      })) as HistoryEntry[];
+      return rows.map((r) => {
+        let parsedTotals = r.totals;
+        if (typeof parsedTotals === "string") {
+          try {
+            parsedTotals = JSON.parse(parsedTotals);
+          } catch {}
+        }
+
+        let parsedResult = r.result;
+        if (typeof parsedResult === "string") {
+          try {
+            parsedResult = JSON.parse(parsedResult);
+          } catch {}
+        }
+
+        let parsedReviews = r.reviews;
+        if (typeof parsedReviews === "string") {
+          try {
+            parsedReviews = JSON.parse(parsedReviews);
+          } catch {}
+        }
+
+        return {
+          id: r.id,
+          timestamp: Number(r.entry_timestamp),
+          company: {
+            nit: r.company_nit || "",
+            nombre: r.company_name || "",
+          },
+          periodLabel: r.period_label || "",
+          dianName: r.dian_name || "",
+          movName: r.mov_name || "",
+          totals: parsedTotals,
+          result: parsedResult,
+          reviews: parsedReviews || undefined,
+        };
+      }) as HistoryEntry[];
     } catch (err) {
       console.error("[history-server] Error al consultar historial en la nube:", err);
       return [];
@@ -90,10 +219,14 @@ export const saveUserHistoryServerFn = createServerFn({ method: "POST" })
 
     try {
       const sql = await getSql();
+      await ensureHistoryTableReady(sql);
       const normalizedUserId = userId.trim().toLowerCase();
-      const totalsJson = JSON.stringify(entry.totals);
-      const resultJson = JSON.stringify(entry.result);
+      const totalsJson = JSON.stringify(entry.totals || {});
+      const resultJson = JSON.stringify(entry.result || {});
       const reviewsJson = entry.reviews ? JSON.stringify(entry.reviews) : null;
+
+      const companyNit = entry.company?.nit || null;
+      const companyNombre = entry.company?.nombre || null;
 
       await sql`
         INSERT INTO historial_conciliaciones (
@@ -103,8 +236,8 @@ export const saveUserHistoryServerFn = createServerFn({ method: "POST" })
           ${entry.id},
           ${normalizedUserId},
           ${userEmail || null},
-          ${entry.company.nit || null},
-          ${entry.company.nombre || null},
+          ${companyNit},
+          ${companyNombre},
           ${entry.periodLabel || null},
           ${entry.dianName || null},
           ${entry.movName || null},
@@ -145,6 +278,7 @@ export const deleteUserHistoryServerFn = createServerFn({ method: "POST" })
 
     try {
       const sql = await getSql();
+      await ensureHistoryTableReady(sql);
       const normalizedUserId = userId.trim().toLowerCase();
 
       await sql`
@@ -169,6 +303,7 @@ export const clearUserHistoryServerFn = createServerFn({ method: "POST" })
 
     try {
       const sql = await getSql();
+      await ensureHistoryTableReady(sql);
       const normalizedUserId = userId.trim().toLowerCase();
 
       await sql`

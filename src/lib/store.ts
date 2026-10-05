@@ -11,7 +11,7 @@ import {
   saveSnapshot,
 } from "./reviews.ts";
 import { conciliar } from "./conciliar.ts";
-import { saveHistoryEntry, getHistoryEntries, type HistoryEntry } from "./history-store.ts";
+import { saveHistoryEntry, getHistoryEntries, getActiveUserKey, type HistoryEntry } from "./history-store.ts";
 import type { ConciliacionResult, DianDoc, MovLine } from "./types.ts";
 import {
   clearCachedFiles,
@@ -304,7 +304,8 @@ export const useConciliacion = create<State>((set, get) => ({
       }));
     const delta = delta0 ? { ...delta0, stillMarked } : stillMarked.length ? { at: new Date().toISOString(), confirmed: [], stillOpen: [], newIssues: [], stillMarked } : null;
     saveSnapshot(result);
-    saveHistoryEntry(result, names.dian, names.mov, reviews);
+    const userKey = getActiveUserKey();
+    saveHistoryEntry(result, names.dian, names.mov, reviews, userKey);
     // Guardar en caché persistente IndexedDB
     void saveCachedFiles(dian, mov);
     set({

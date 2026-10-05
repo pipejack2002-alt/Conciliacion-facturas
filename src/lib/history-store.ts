@@ -95,9 +95,60 @@ export function getHistoryEntries(userKey?: string): HistoryEntry[] {
       }
     }
 
+    // Si sigue vacía y el usuario no es 'invitado', verificar si hay sesiones hechas como 'invitado' en esta máquina
+    const activeKey = userKey || getActiveUserKey();
+    if (activeKey !== "invitado") {
+      const invitadoKey = getScopedStorageKey("invitado");
+      const invitadoRaw = localStorage.getItem(invitadoKey);
+      if (invitadoRaw) {
+        const invitadoParsed = JSON.parse(invitadoRaw);
+        if (Array.isArray(invitadoParsed) && invitadoParsed.length > 0) {
+          localStorage.setItem(key, invitadoRaw);
+          return invitadoParsed;
+        }
+      }
+    }
+
     return [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * Consulta el estado de persistencia de la base de datos en la nube.
+ */
+export async function getCloudStatus(userKey?: string): Promise<{
+  isConfigured: boolean;
+  provider: string;
+  mode: "persistent" | "ephemeral" | "error";
+  userEntriesCount: number;
+  hasDatabaseUrl: boolean;
+  error?: string;
+}> {
+  const activeUser = userKey || getActiveUserKey();
+  try {
+    const srv = await getHistoryServer();
+    if (!srv) {
+      return {
+        isConfigured: false,
+        provider: "Local (Sin conexión servidor)",
+        mode: "ephemeral",
+        userEntriesCount: 0,
+        hasDatabaseUrl: false,
+      };
+    }
+    const res = await srv.getCloudStatusServerFn({ data: { userId: activeUser } });
+    return res;
+  } catch (err: any) {
+    return {
+      isConfigured: false,
+      provider: "Desconectado",
+      mode: "error",
+      userEntriesCount: 0,
+      hasDatabaseUrl: false,
+      error: err?.message || "Error al verificar conexión",
+    };
   }
 }
 
@@ -109,6 +160,10 @@ export function getHistoryEntries(userKey?: string): HistoryEntry[] {
 export async function syncUserHistoryWithCloud(userKey?: string): Promise<HistoryEntry[]> {
   const activeUser = userKey || getActiveUserKey();
   const localEntries = getHistoryEntries(activeUser);
+
+  if (!activeUser || activeUser === "invitado") {
+    return localEntries;
+  }
 
   try {
     const srv = await getHistoryServer();

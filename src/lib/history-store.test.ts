@@ -9,6 +9,7 @@ import {
   saveHistoryEntry,
   deleteHistoryEntry,
   clearAllHistory,
+  getCloudStatus,
   type HistoryEntry,
 } from "./history-store.ts";
 import type { ConciliacionResult } from "./types.ts";
@@ -212,5 +213,25 @@ describe("Historial Multi-Usuario con Aislamiento y Sincronización", () => {
     const savedInScoped = JSON.parse((globalThis as any).localStorage.getItem(scopedKey)!);
     assert.equal(savedInScoped.length, 1);
     assert.equal(savedInScoped[0].id, "LEGACY_1");
+  });
+
+  test("debe migrar sesiones creadas como invitado al iniciar sesión por primera vez", () => {
+    // Guardar una sesión en modo invitado
+    saveHistoryEntry(mockResultCompanyA, "DIAN_INV.xlsx", "MOV_INV.xlsx", undefined, "invitado");
+    assert.equal(getHistoryEntries("invitado").length, 1);
+
+    // Usuario autenticado ingresa sin historial previo en esta máquina
+    const userLogueado = "contador@empresa.com";
+    const entries = getHistoryEntries(userLogueado);
+
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].company.nombre, "EMPRESA ALFA S.A.S.");
+  });
+
+  test("getCloudStatus debe responder con estructura de diagnóstico válida", async () => {
+    const status = await getCloudStatus("test_user@tributoapp.me");
+    assert.ok(typeof status.isConfigured === "boolean");
+    assert.ok(typeof status.hasDatabaseUrl === "boolean");
+    assert.ok(typeof status.provider === "string");
   });
 });

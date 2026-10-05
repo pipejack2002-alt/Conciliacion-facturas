@@ -10,17 +10,19 @@ import {
   Download,
   Upload,
   Search,
-  Cloud,
   RefreshCw,
   UserCheck,
   ShieldCheck,
   Maximize2,
   Minimize2,
+  Database,
+  AlertCircle,
 } from "lucide-react";
 import { formatMoney } from "@/lib/format";
 import {
   getHistoryEntries,
   syncUserHistoryWithCloud,
+  getCloudStatus,
   deleteHistoryEntry,
   clearAllHistory,
   exportHistoryJson,
@@ -46,6 +48,15 @@ export function HistoryModal({ open, onClose, onSelectEntry }: Props) {
   const [isMaximized, setIsMaximized] = useState(false);
   const [feedback, setFeedback] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState<{
+    isConfigured: boolean;
+    provider: string;
+    mode: "persistent" | "ephemeral" | "error";
+    userEntriesCount: number;
+    hasDatabaseUrl: boolean;
+    error?: string;
+  } | null>(null);
+  const [showCloudGuide, setShowCloudGuide] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -54,7 +65,12 @@ export function HistoryModal({ open, onClose, onSelectEntry }: Props) {
       setEntries(getHistoryEntries(activeUserKey));
       setFeedback(null);
 
-      // 2. Sincronizar en segundo plano con la base de datos en la nube
+      // 2. Consultar diagnóstico de estado en la nube
+      getCloudStatus(activeUserKey)
+        .then((st) => setCloudStatus(st))
+        .catch(() => {});
+
+      // 3. Sincronizar en segundo plano con la base de datos en la nube
       setIsSyncing(true);
       syncUserHistoryWithCloud(activeUserKey)
         .then((synced) => {
@@ -75,9 +91,23 @@ export function HistoryModal({ open, onClose, onSelectEntry }: Props) {
     setIsSyncing(true);
     setFeedback(null);
     try {
-      const synced = await syncUserHistoryWithCloud(activeUserKey);
+      const [synced, st] = await Promise.all([
+        syncUserHistoryWithCloud(activeUserKey),
+        getCloudStatus(activeUserKey),
+      ]);
       setEntries(synced);
-      setFeedback({ msg: "✅ Historial sincronizado con la nube exitosamente.", type: "ok" });
+      setCloudStatus(st);
+      if (st.hasDatabaseUrl) {
+        setFeedback({
+          msg: `✅ Historial sincronizado con la nube (${st.provider}). ${synced.length} sesiones disponibles en todos sus dispositivos.`,
+          type: "ok",
+        });
+      } else {
+        setFeedback({
+          msg: `⚠️ Modo local en este equipo: Se guardaron ${synced.length} sesiones. Para sincronizar automáticamente entre varios computadores, configure DATABASE_URL en Vercel.`,
+          type: "err",
+        });
+      }
     } catch {
       setFeedback({ msg: "⚠️ No se pudo conectar a la base de datos en la nube. Mostrando caché local.", type: "err" });
     } finally {
@@ -167,10 +197,22 @@ export function HistoryModal({ open, onClose, onSelectEntry }: Props) {
                 <h2 className="text-lg font-bold text-ink">
                   Historial de Sesiones Multi-Empresa
                 </h2>
-                <span className="inline-flex items-center gap-1 rounded-full bg-teal-soft/80 border border-teal/30 px-2 py-0.5 text-[10px] font-semibold text-teal-deep">
-                  <Cloud className="size-3 text-teal" />
-                  Nube Sincronizada
-                </span>
+                {cloudStatus?.hasDatabaseUrl ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle2 className="size-3 text-emerald-500" />
+                    Nube Multi-Dispositivo Activa
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowCloudGuide((prev) => !prev)}
+                    className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-500/20 transition cursor-pointer"
+                    title="Haga clic para ver cómo habilitar la sincronización entre varios computadores"
+                  >
+                    <AlertCircle className="size-3 text-amber-500" />
+                    <span>Guardado Local · ¿Sincronizar entre varios equipos?</span>
+                  </button>
+                )}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <p className="text-xs text-ink-muted">
@@ -254,6 +296,56 @@ export function HistoryModal({ open, onClose, onSelectEntry }: Props) {
             </button>
           </div>
         </div>
+
+        {/* Banner Explicativo de Sincronización Multi-Dispositivo */}
+        {showCloudGuide && (
+          <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-4 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-2 flex-1">
+                <div className="flex items-center gap-2">
+                  <Database className="size-4 text-teal" />
+                  <h4 className="text-xs font-bold text-ink uppercase tracking-wider">
+                    Sincronización en la Nube para tu Usuario ({user?.email || activeUserKey})
+                  </h4>
+                </div>
+                <p className="text-xs text-ink-muted leading-relaxed">
+                  Actualmente el historial se está guardando localmente en este navegador. Para que todas tus conciliaciones aparezcan <b>automáticamente al iniciar sesión en cualquier otro computador o portátil</b>:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-xs">
+                  <div className="rounded-xl border border-line bg-bg-surface p-3 space-y-1">
+                    <span className="font-bold text-teal block">1. Base de Datos Gratis</span>
+                    <p className="text-ink-muted text-[11px] leading-relaxed">
+                      Crea una base de datos PostgreSQL gratuita en 1 minuto en <a href="https://neon.tech" target="_blank" rel="noopener noreferrer" className="text-teal underline font-semibold">Neon.tech</a> o <a href="https://supabase.com" target="_blank" rel="noopener noreferrer" className="text-teal underline font-semibold">Supabase</a>.
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-line bg-bg-surface p-3 space-y-1">
+                    <span className="font-bold text-teal block">2. Configura en Vercel</span>
+                    <p className="text-ink-muted text-[11px] leading-relaxed">
+                      En tu panel de Vercel: <b>Settings &gt; Environment Variables</b>, agrega la variable <code className="bg-bg-elevated px-1 py-0.5 rounded font-mono text-[10px] text-teal">DATABASE_URL</code> con tu enlace de conexión.
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-line bg-bg-surface p-3 space-y-1">
+                    <span className="font-bold text-teal block">3. ¡Sincronización Total!</span>
+                    <p className="text-ink-muted text-[11px] leading-relaxed">
+                      Las tablas se crean solas de forma automática. Al iniciar sesión en cualquier máquina con tu cuenta, verás tu historial unificado.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 pt-1 text-[11px] text-ink-subtle">
+                  <span>💡 <b>¿Necesitas transferir tus sesiones ya mismo?</b> Usa los botones de <b>Exportar</b> e <b>Importar</b> de la barra superior para mover tus archivos de conciliación en formato JSON a otro equipo al instante.</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCloudGuide(false)}
+                className="text-ink-muted hover:text-ink p-1 rounded transition cursor-pointer"
+                title="Cerrar guía"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Search & feedback bar */}
         <div className="border-b border-line bg-bg-subtle/40 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3">
