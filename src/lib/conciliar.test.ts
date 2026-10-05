@@ -1510,4 +1510,248 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
     assert.strictEqual(row.totalSiigo, 112500);
     assert.strictEqual(row.diferencia, 0);
   });
+
+  it("debe detectar transposición de dígitos adyacentes en el número de factura como posible_typo (ej. 8329 vs 8392)", () => {
+    const nit = "900555444";
+    const dianDocs: DianDoc[] = [
+      {
+        tipo: "01",
+        prefijo: "FE",
+        folio: "8392",
+        cufe: "CUFE8392TEST",
+        fechaEmision: "2026-09-15",
+        fechaRecepcion: "2026-09-15",
+        nitEmisor: nit,
+        nombreEmisor: "TECNOLOGIA GLOBAL S.A.S.",
+        nitReceptor: "901000111",
+        nombreReceptor: "EMPRESA PRUEBA",
+        iva: 190000,
+        total: 1190000,
+        formaPago: "1",
+        estadoDian: "Aceptado",
+        grupo: "Recibido",
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      {
+        cuenta: "513505",
+        cuentaNombre: "SERVICIOS TECNOLOGICOS",
+        comprobante: "P 001 0000005544 001",
+        fecha: "2026-09-15",
+        nit,
+        nombre: "TECNOLOGIA GLOBAL S.A.S.",
+        descripcion: "CAUSACION FE 8329 SERV TEC",
+        cruce: "8329",
+        debito: 1190000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "220505",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "P 001 0000005544 002",
+        fecha: "2026-09-15",
+        nit,
+        nombre: "TECNOLOGIA GLOBAL S.A.S.",
+        descripcion: "CAUSACION FE 8329 SERV TEC",
+        cruce: "8329",
+        debito: 0,
+        credito: 1190000,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "SEP 2026");
+    const row = res.rows[0];
+
+    assert.ok(row, "Debe existir la fila");
+    assert.strictEqual(row.estado, "posible_typo", "Debe sugerirse como Revisar factura por transposición de dígitos");
+    assert.ok(row.alerta.includes("8329"));
+    assert.strictEqual(row.totalSiigo, 1190000);
+    assert.strictEqual(row.diferencia, 0);
+  });
+
+  it("debe sugerir factura DIAN sin prefijo registrada con prefijo contable común FV o FAC", () => {
+    const nit = "800111222";
+    const dianDocs: DianDoc[] = [
+      {
+        tipo: "01",
+        prefijo: "",
+        folio: "5420",
+        cufe: "CUFE5420NOPREF",
+        fechaEmision: "2026-09-20",
+        fechaRecepcion: "2026-09-20",
+        nitEmisor: nit,
+        nombreEmisor: "DISTRIBUIDORA DEL CARIBE S.A.S.",
+        nitReceptor: "901000111",
+        nombreReceptor: "EMPRESA PRUEBA",
+        iva: 0,
+        total: 450000,
+        formaPago: "1",
+        estadoDian: "Aceptado",
+        grupo: "Recibido",
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      {
+        cuenta: "513595",
+        cuentaNombre: "OTROS GASTOS",
+        comprobante: "P 001 0000009988 001",
+        fecha: "2026-09-20",
+        nit,
+        nombre: "DISTRIBUIDORA DEL CARIBE S.A.S.",
+        descripcion: "CAUSACION FV5420 MERCANCIA",
+        cruce: "FV5420",
+        debito: 450000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "220505",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "P 001 0000009988 002",
+        fecha: "2026-09-20",
+        nit,
+        nombre: "DISTRIBUIDORA DEL CARIBE S.A.S.",
+        descripcion: "CAUSACION FV5420 MERCANCIA",
+        cruce: "FV5420",
+        debito: 0,
+        credito: 450000,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "SEP 2026");
+    const row = res.rows[0];
+
+    assert.ok(row, "Debe existir la fila");
+    assert.strictEqual(row.estado, "conciliado", "Debe conciliar directamente factura sin prefijo en DIAN causada con prefijo común FV");
+    assert.strictEqual(row.totalSiigo, 450000);
+    assert.strictEqual(row.diferencia, 0);
+  });
+
+  it("debe sugerir como posible_typo factura DIAN sin prefijo con error en un dígito en libros (ej. 5420 vs FV5421)", () => {
+    const nit = "800111222";
+    const dianDocs: DianDoc[] = [
+      {
+        tipo: "01",
+        prefijo: "",
+        folio: "5420",
+        cufe: "CUFE5420TYPO",
+        fechaEmision: "2026-09-20",
+        fechaRecepcion: "2026-09-20",
+        nitEmisor: nit,
+        nombreEmisor: "DISTRIBUIDORA DEL CARIBE S.A.S.",
+        nitReceptor: "901000111",
+        nombreReceptor: "EMPRESA PRUEBA",
+        iva: 0,
+        total: 450000,
+        formaPago: "1",
+        estadoDian: "Aceptado",
+        grupo: "Recibido",
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      {
+        cuenta: "513595",
+        cuentaNombre: "OTROS GASTOS",
+        comprobante: "P 001 0000009988 001",
+        fecha: "2026-09-20",
+        nit,
+        nombre: "DISTRIBUIDORA DEL CARIBE S.A.S.",
+        descripcion: "CAUSACION FV5421 MERCANCIA", // 5421 vs 5420
+        cruce: "FV5421",
+        debito: 450000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "220505",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "P 001 0000009988 002",
+        fecha: "2026-09-20",
+        nit,
+        nombre: "DISTRIBUIDORA DEL CARIBE S.A.S.",
+        descripcion: "CAUSACION FV5421 MERCANCIA",
+        cruce: "FV5421",
+        debito: 0,
+        credito: 450000,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "SEP 2026");
+    const row = res.rows[0];
+
+    assert.ok(row, "Debe existir la fila");
+    assert.strictEqual(row.estado, "posible_typo", "Debe sugerirse como Revisar factura");
+    assert.ok(row.alerta.includes("5421"));
+    assert.strictEqual(row.totalSiigo, 450000);
+    assert.strictEqual(row.diferencia, 0);
+  });
+
+  it("debe sugerir causación con similitud de nombre corporativo por tokens algorítmicos sin regex cableado", () => {
+    const nitDian = "900123999";
+    const nitLibros = "900123999-1"; // NIT con guión o sufijo sucursal
+    const dianDocs: DianDoc[] = [
+      {
+        tipo: "01",
+        prefijo: "SETT",
+        folio: "9040",
+        cufe: "CUFESETT9040",
+        fechaEmision: "2026-09-18",
+        fechaRecepcion: "2026-09-18",
+        nitEmisor: nitDian,
+        nombreEmisor: "SUMINISTROS INDUSTRIALES Y FERRETEROS DEL VALLE S.A.S.",
+        nitReceptor: "901000111",
+        nombreReceptor: "EMPRESA PRUEBA",
+        iva: 19000,
+        total: 119000,
+        formaPago: "1",
+        estadoDian: "Aceptado",
+        grupo: "Recibido",
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      {
+        cuenta: "513595",
+        cuentaNombre: "GASTOS GENERALES",
+        comprobante: "P 001 0000007788 001",
+        fecha: "2026-09-18",
+        nit: nitLibros,
+        nombre: "SUMINISTROS INDUSTRIALES FERRETEROS",
+        descripcion: "COMPRA SETT 90400 DIF COSTO", // typo 90400 vs 9040
+        cruce: "90400",
+        debito: 115000, // diferencia de costo
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "220505",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "P 001 0000007788 002",
+        fecha: "2026-09-18",
+        nit: nitLibros,
+        nombre: "SUMINISTROS INDUSTRIALES FERRETEROS",
+        descripcion: "COMPRA SETT 90400 DIF COSTO",
+        cruce: "90400",
+        debito: 0,
+        credito: 115000,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "SEP 2026");
+    const row = res.rows[0];
+
+    assert.ok(row, "Debe existir la fila");
+    assert.strictEqual(row.estado, "posible_typo", "Debe coincidir por tokens de nombre sin requerir regex cableado");
+    assert.strictEqual(row.totalSiigo, 115000);
+    assert.strictEqual(row.diferencia, 4000);
+    assert.ok(row.alerta.includes("90400"));
+  });
 });

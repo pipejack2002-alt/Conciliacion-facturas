@@ -396,7 +396,13 @@ export function conciliarBancos(
     if (matchedExtractoIds.has(bItem.id)) continue;
     const isRetiro = bItem.debito > 0;
     const montoBanco = isRetiro ? bItem.debito : bItem.credito;
-    const refClean = (bItem.referencia || "").replace(/\D/g, "");
+    let refClean = (bItem.referencia || "").replace(/\D/g, "");
+    if (refClean.length < 4) {
+      const descMatch = (bItem.descripcion || "").match(/\b\d{4,12}\b/);
+      if (descMatch) {
+        refClean = descMatch[0];
+      }
+    }
 
     if (refClean.length >= 4) {
       for (let i = 0; i < cleanLibros.length; i++) {
@@ -405,7 +411,16 @@ export function conciliarBancos(
         const montoLibro = isRetiro ? lItem.credito : lItem.debito;
 
         const libroRefClean = (lItem.referencia || lItem.cruce || lItem.comprobante || "").replace(/\D/g, "");
-        if (libroRefClean.includes(refClean) || refClean.includes(libroRefClean)) {
+        const sRef = refClean.replace(/^0+/, "");
+        const sLibro = libroRefClean.replace(/^0+/, "");
+        const refMatches =
+          libroRefClean.includes(refClean) ||
+          refClean.includes(libroRefClean) ||
+          (sRef.length >= 3 && sRef === sLibro) ||
+          (sRef.length >= 4 && sLibro.includes(sRef)) ||
+          (sLibro.length >= 4 && sRef.includes(sLibro));
+
+        if (refMatches) {
           if (Math.abs(montoBanco - montoLibro) <= 0.05) {
             matchedExtractoIds.add(bItem.id);
             matchedLibroIndices.add(i);

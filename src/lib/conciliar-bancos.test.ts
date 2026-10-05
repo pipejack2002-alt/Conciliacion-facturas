@@ -616,6 +616,43 @@ describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuen
     assert.strictEqual(exec.rendimientos.total, 1959190.59);
     assert.ok(Math.abs(exec.rendimientos.totalConsolidadoAmbosPeriodos - 4332455.09) < 0.01);
   });
+
+  it("debe conciliar movimiento bancario cuya referencia tiene ceros a la izquierda o viene en la descripción", () => {
+    const extracto: BankExtractItem[] = [
+      {
+        id: "b1",
+        fecha: "2026-09-10",
+        descripcion: "TRANSFERENCIA ACH ABONO FACTURA 49812",
+        referencia: "000049812",
+        debito: 3500000,
+        credito: 0,
+        saldo: 10000000,
+      },
+    ];
+
+    const libros: MovLine[] = [
+      {
+        cuenta: "111005",
+        cuentaNombre: "BANCOLOMBIA",
+        comprobante: "G 001 00049812",
+        fecha: "2026-09-10",
+        nit: "900111222",
+        nombre: "PROVEEDOR S.A.S.",
+        descripcion: "PAGO FACTURA 49812",
+        referencia: "49812",
+        cruce: "49812",
+        debito: 0,
+        credito: 3500000,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliarBancos(extracto, libros);
+    assert.strictEqual(res.summary.totalConciliados, 1);
+    assert.strictEqual(res.rows[0].estado, "conciliado");
+    assert.strictEqual(res.rows[0].montoBanco, 3500000);
+    assert.strictEqual(res.rows[0].diferencia, 0);
+  });
 });
 
 

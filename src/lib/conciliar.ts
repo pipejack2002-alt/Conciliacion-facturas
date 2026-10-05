@@ -298,6 +298,60 @@ function levenshtein(a: string, b: string): number {
   return prev[n];
 }
 
+function isTransposition(a: string, b: string): boolean {
+  if (a.length !== b.length || a === b) return false;
+  let diffCount = 0;
+  const diffIdx: number[] = [];
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      diffCount++;
+      diffIdx.push(i);
+      if (diffCount > 2) return false;
+    }
+  }
+  return (
+    diffCount === 2 &&
+    Math.abs(diffIdx[0] - diffIdx[1]) === 1 &&
+    a[diffIdx[0]] === b[diffIdx[1]] &&
+    a[diffIdx[1]] === b[diffIdx[0]]
+  );
+}
+
+function extractNameTokens(name?: string): string[] {
+  if (!name) return [];
+  const STOP = new Set([
+    "SAS", "S.A.S", "S.A.S.", "LTDA", "L.T.D.A", "SA", "S.A", "S.A.", "CIA", "C.I.A",
+    "COLOMBIA", "COLOMBIANA", "SOCIEDAD", "EMPRESA", "GRUPO", "DISTRIBUIDORA", "COMERCIALIZADORA",
+    "SERVICIOS", "INVERSIONES", "NACIONAL", "INTERNACIONAL", "DE", "LA", "EL", "LOS", "LAS", "Y", "DEL", "EN", "POR"
+  ]);
+  return name
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !STOP.has(w));
+}
+
+function isSimilarCompanyName(a?: string, b?: string): boolean {
+  if (!a || !b) return false;
+  const tokensA = extractNameTokens(a);
+  const tokensB = extractNameTokens(b);
+  if (!tokensA.length || !tokensB.length) return false;
+  let shared = 0;
+  for (const ta of tokensA) {
+    if (tokensB.some((tb) => tb === ta || (ta.length >= 6 && (tb.includes(ta) || ta.includes(tb))))) {
+      shared++;
+    }
+  }
+  return (
+    shared >= 2 ||
+    (tokensA.length === 1 && shared === 1 && tokensA[0].length >= 5) ||
+    (tokensB.length === 1 && shared === 1 && tokensB[0].length >= 5)
+  );
+}
+
+
 function _extractPrefixedFolios(blob: string): { pref: string; folio: string }[] {
   const out: { pref: string; folio: string }[] = [];
   const up = blob.toUpperCase();
@@ -429,9 +483,11 @@ function collectHits(
 
     const up = l.blob.replace(/[\s\-_.]/g, "");
 
-    // A. Prefijo exacto y posible typo en el folio (ej. FE-1240 vs FE-12400 o FE-1241)
-    if (p && up.includes(p)) {
-      const re = new RegExp(`${p}0*(\\d{3,12})`);
+    // A. Prefijo exacto (o común) y posible typo/transposición en el folio (ej. FE-1240 vs FE-12400, transposición 8392 vs 8329)
+    const effectivePref = p || "FE";
+    if (up.includes(effectivePref) || (p && up.includes(p))) {
+      const activePref = p && up.includes(p) ? p : effectivePref;
+      const re = new RegExp(`${activePref}0*(\\d{3,12})`);
       const m = up.match(re);
       if (m) {
         const candFolio = stripZeros(m[1]);
@@ -440,13 +496,37 @@ function collectHits(
         const candKey = (p || "") + candFolio;
         if (!takenExact.has(candKey) && !takenExact.has(candFolio)) {
           const dist = levenshtein(f, candFolio);
-          // Distancia 1 para números cortos (<= 5 caracteres); distancia 2 solo para folios largos (>= 6 dígitos)
+          const isTransp = isTransposition(f, candFolio);
+          // Distancia 1 o transposición para números cortos (<= 5 caracteres); distancia 2 solo para folios largos (>= 6 dígitos)
           const maxDist = f.length >= 6 ? 2 : 1;
-          if (dist >= 1 && dist <= maxDist) {
+          if ((dist >= 1 && dist <= maxDist) || isTransp) {
             const amtOk = closeAmount(l.amt, doc.total || 0);
             if (amtOk) {
               typed.push(l);
-              seenToken = `${p}-${candFolio}`;
+              seenToken = p ? `${p}-${candFolio}` : `factura ${candFolio}`;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // A2. Folio con posible typo/transposición directo desde cruce o folioN cuando el valor coincide exactamente
+    if (!typed.length && f.length >= 3) {
+      const candFromCruce = l.cruce ? stripZeros(l.cruce.replace(/\D/g, "")) : "";
+      const candFromFolioN = l.folioN && l.folioN !== "0" ? stripZeros(l.folioN) : "";
+      const candsToCheck = [candFromCruce, candFromFolioN].filter((c) => c && c.length >= 3 && c !== f);
+      for (const candFolio of candsToCheck) {
+        const candKey = (p || "") + candFolio;
+        if (!takenExact.has(candKey) && !takenExact.has(candFolio)) {
+          const dist = levenshtein(f, candFolio);
+          const isTransp = isTransposition(f, candFolio);
+          const maxDist = Math.max(f.length, candFolio.length) >= 6 ? 2 : 1;
+          if ((dist >= 1 && dist <= maxDist) || isTransp) {
+            const amtOk = closeAmount(l.amt, doc.total || 0);
+            if (amtOk) {
+              typed.push(l);
+              seenToken = p ? `${p}-${candFolio}` : `factura ${candFolio}`;
               break;
             }
           }
@@ -455,22 +535,24 @@ function collectHits(
     }
 
     // B. Folio exacto (o en tokens de texto) pero con error/typo en el prefijo (ej. PJE3 vs PJ3, o falta una letra)
-    if (!typed.length && f.length >= 4) {
+    if (!typed.length && f.length >= 3) {
       const rawText = `${l.descripcion} ${l.cruce} ${l.observacion}`.toUpperCase();
       const tokens = rawText.match(/\b[A-Z0-9]{2,20}\b/g) || [];
       for (const t of tokens) {
         if (t.includes(f)) {
           const idx = t.indexOf(f);
-          const candPref = t.slice(0, idx).replace(/[-_.]/g, "");
+          const candPref = (t.slice(0, idx) || t.slice(idx + f.length)).replace(/[-_.]/g, "");
           const candKey = candPref + f;
           if (candPref && (takenExact.has(candKey) || takenExact.has(candPref))) {
             continue;
           }
           const distP = p ? levenshtein(p, candPref) : 99;
+          const isCommonPref = /^(FE|FV|FAC|FVE|FP|COM|FCP|FACV|DS|DSE)$/i.test(candPref);
           const isPrefTypo =
             distP <= 1 ||
             candPref === "" ||
             candPref === "FE" ||
+            isCommonPref ||
             (p && candPref.length >= 2 && (p.includes(candPref) || candPref.includes(p)));
           if (isPrefTypo) {
             const amtOk = closeAmount(l.amt, doc.total || 0);
@@ -562,6 +644,24 @@ function amountsMatch(dianTotal: number, iva: number, siigo: number): boolean {
   for (const r of rates) {
     if (closeAmount(siigo, dianTotal * (1 - r))) return true;
     if (net > 0 && closeAmount(siigo, net * (1 - r))) return true;
+  }
+  // Retenciones combinadas comunes en Colombia: ReteFuente (1%, 2.5%, 3.5%, 4%) + ReteIVA (15% del IVA) y ReteICA
+  const ivaVal = iva || (dianTotal - base19);
+  const reteIva = ivaVal * 0.15;
+  for (const r of [0.01, 0.025, 0.035, 0.04]) {
+    const conReteIva = dianTotal - (dianTotal * r) - reteIva;
+    if (closeAmount(siigo, conReteIva)) return true;
+    if (net > 0) {
+      const netConReteIva = net - (net * r) - reteIva;
+      if (closeAmount(siigo, netConReteIva)) return true;
+    }
+  }
+  // ReteICA estándar (4.14, 6.9, 9.66, 11.04 por mil)
+  for (const ica of [0.00414, 0.0069, 0.00966, 0.01104]) {
+    if (closeAmount(siigo, dianTotal * (1 - ica))) return true;
+    for (const r of [0.025, 0.035]) {
+      if (closeAmount(siigo, dianTotal * (1 - r - ica))) return true;
+    }
   }
   return false;
 }
@@ -1182,8 +1282,7 @@ export function conciliar(
           return false;
         }
         const isSameNit = l.nitK && (l.nitK === k || l.nitK.startsWith(k) || k.startsWith(l.nitK));
-        const isNameMatch =
-          /promotora.*extintor/i.test(r.nombreContraparte) && /promotora|extintor/i.test(l.nombre || "");
+        const isNameMatch = isSimilarCompanyName(r.nombreContraparte, l.nombre);
         if (!isSameNit && !isNameMatch) return false;
 
         const compLines = indexed.filter((x) => x.base === l.base);
@@ -1225,12 +1324,13 @@ export function conciliar(
         }
 
         const dist = levenshtein(f, candFolio);
+        const isTransp = isTransposition(f, candFolio);
         const maxDist = Math.max(f.length, candFolio.length) >= 6 ? 2 : 1;
         const hasExtraZero =
           (candFolio.length === f.length + 1 && (candFolio.includes("0" + f) || candFolio.includes(f + "0") || levenshtein(f, candFolio.replace("0", "")) === 0)) ||
           (f.length === candFolio.length + 1 && (f.includes("0" + candFolio) || f.includes(candFolio + "0")));
 
-        if ((dist >= 1 && dist <= maxDist) || hasExtraZero) {
+        if ((dist >= 1 && dist <= maxDist) || isTransp || hasExtraZero) {
           const compLines = indexed.filter((x) => x.base === l.base);
           const diff = round2(r.totalDian - l.amt);
           r.estado = "posible_typo";
