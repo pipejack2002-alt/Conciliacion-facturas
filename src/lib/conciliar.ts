@@ -469,12 +469,14 @@ function collectHits(
           const distP = p ? levenshtein(p, candPref) : 99;
           const isPrefTypo =
             distP <= 1 ||
+            candPref === "" ||
+            candPref === "FE" ||
             (p && candPref.length >= 2 && (p.includes(candPref) || candPref.includes(p)));
           if (isPrefTypo) {
             const amtOk = closeAmount(l.amt, doc.total || 0);
             if (amtOk) {
               typed.push(l);
-              seenToken = `${candPref || p}-${f}`;
+              seenToken = candPref ? `${candPref}-${f}` : `factura ${f} (sin prefijo)`;
               break;
             }
           }
@@ -1133,7 +1135,8 @@ export function conciliar(
           hasDocToken(l.blob, r.prefijo, r.folio) ||
           (l.folioN && l.folioN !== "0" && stripZeros(l.folioN) === f) ||
           (l.cruce && hasDocToken(l.cruce, r.prefijo, r.folio)) ||
-          (f.length >= 3 && l.cruce && stripZeros(l.cruce).includes(f));
+          (f.length >= 3 && l.cruce && stripZeros(l.cruce).includes(f)) ||
+          (f.length >= 4 && l.blob.includes(f));
 
         if (!numberMatches) continue;
 

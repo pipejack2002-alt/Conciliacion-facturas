@@ -131,7 +131,43 @@ export function DetailDrawer({
           <Field label="Diferencia" value={formatMoneyExact(row.diferencia)} />
           <Field label="Cruce" value={row.matchVia || "sin match"} copyable={Boolean(row.matchVia)} />
         </dl>
-        {row.alerta ? (
+        {row.estado === "posible_typo" && (
+          <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50/95 p-3.5 text-xs text-amber-950 shadow-xs">
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-sm text-amber-900">
+                <Sparkles className="size-4 shrink-0 text-amber-600" />
+                Sugerencia de Conciliación Inteligente
+              </div>
+              <span className="rounded bg-amber-200/80 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-900">
+                Revisar Factura
+              </span>
+            </div>
+            <p className="leading-relaxed text-xs text-amber-900/90 font-medium">
+              {row.alerta}
+            </p>
+            {review?.done && review.action === "validada" ? (
+              <div className="mt-2.5 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200">
+                <Check className="size-3.5 text-emerald-600" />
+                Sugerencia aceptada y validada en auditoría
+              </div>
+            ) : (
+              <div className="mt-3 flex items-center gap-2 pt-2 border-t border-amber-200/60">
+                <button
+                  type="button"
+                  onClick={() => {
+                    markValidated(row, "validada");
+                    flash("Sugerencia aceptada y marcada como validada");
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-2xs transition cursor-pointer"
+                >
+                  <Check className="size-3.5" />
+                  Aceptar Sugerencia y Validar
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {row.alerta && row.estado !== "posible_typo" ? (
           <p className="mt-4 rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn">{row.alerta}</p>
         ) : null}
         {row.linked.length ? (

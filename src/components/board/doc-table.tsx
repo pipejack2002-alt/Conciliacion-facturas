@@ -893,12 +893,22 @@ export function DocTable({
                       </div>
                     ) : null}
                     {r.alerta ? (
-                      <div
-                        className="mt-0.5 line-clamp-2 text-[11px] text-amber-800 font-medium leading-snug select-text max-w-75"
-                        title={r.alerta}
-                      >
-                        {r.alerta}
-                      </div>
+                      r.estado === "posible_typo" ? (
+                        <div
+                          className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900 border border-amber-200/90 leading-snug select-text max-w-80 shadow-2xs"
+                          title={r.alerta}
+                        >
+                          <Sparkles className="size-3 text-amber-600 shrink-0" />
+                          <span className="truncate">{r.alerta}</span>
+                        </div>
+                      ) : (
+                        <div
+                          className="mt-0.5 line-clamp-2 text-[11px] text-amber-800 font-medium leading-snug select-text max-w-75"
+                          title={r.alerta}
+                        >
+                          {r.alerta}
+                        </div>
+                      )
                     ) : null}
                   </div>
                 </div>
