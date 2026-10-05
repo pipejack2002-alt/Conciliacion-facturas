@@ -428,27 +428,55 @@ function collectHits(
     }
 
     const up = l.blob.replace(/[\s\-_.]/g, "");
+
+    // A. Prefijo exacto y posible typo en el folio (ej. FE-1240 vs FE-12400 o FE-1241)
     if (p && up.includes(p)) {
       const re = new RegExp(`${p}0*(\\d{3,12})`);
       const m = up.match(re);
       if (m) {
         const candFolio = stripZeros(m[1]);
 
-        // 3. Si candFolio es otra factura real en el reporte DIAN, no es un error de digitación
+        // Si candFolio es otra factura real en el reporte DIAN, no es un error de digitación
         const candKey = (p || "") + candFolio;
-        if (takenExact.has(candKey) || takenExact.has(candFolio)) {
-          continue;
+        if (!takenExact.has(candKey) && !takenExact.has(candFolio)) {
+          const dist = levenshtein(f, candFolio);
+          // Distancia 1 para números cortos (<= 5 caracteres); distancia 2 solo para folios largos (>= 6 dígitos)
+          const maxDist = f.length >= 6 ? 2 : 1;
+          if (dist >= 1 && dist <= maxDist) {
+            const amtOk = closeAmount(l.amt, doc.total || 0);
+            if (amtOk) {
+              typed.push(l);
+              seenToken = `${p}-${candFolio}`;
+              break;
+            }
+          }
         }
+      }
+    }
 
-        const dist = levenshtein(f, candFolio);
-        // Distancia 1 para números cortos (<= 5 caracteres); distancia 2 solo para folios largos (>= 6 dígitos)
-        const maxDist = f.length >= 6 ? 2 : 1;
-        if (dist >= 1 && dist <= maxDist) {
-          const amtOk = closeAmount(l.amt, doc.total || 0);
-          if (amtOk) {
-            typed.push(l);
-            seenToken = `${p}-${candFolio}`;
-            break;
+    // B. Folio exacto (o en tokens de texto) pero con error/typo en el prefijo (ej. PJE3 vs PJ3, o falta una letra)
+    if (!typed.length && f.length >= 4) {
+      const rawText = `${l.descripcion} ${l.cruce} ${l.observacion}`.toUpperCase();
+      const tokens = rawText.match(/\b[A-Z0-9]{2,20}\b/g) || [];
+      for (const t of tokens) {
+        if (t.includes(f)) {
+          const idx = t.indexOf(f);
+          const candPref = t.slice(0, idx).replace(/[-_.]/g, "");
+          const candKey = candPref + f;
+          if (candPref && (takenExact.has(candKey) || takenExact.has(candPref))) {
+            continue;
+          }
+          const distP = p ? levenshtein(p, candPref) : 99;
+          const isPrefTypo =
+            distP <= 1 ||
+            (p && candPref.length >= 2 && (p.includes(candPref) || candPref.includes(p)));
+          if (isPrefTypo) {
+            const amtOk = closeAmount(l.amt, doc.total || 0);
+            if (amtOk) {
+              typed.push(l);
+              seenToken = `${candPref || p}-${f}`;
+              break;
+            }
           }
         }
       }
@@ -753,7 +781,10 @@ export function conciliar(
     } else if (found.score === 40) {
       estado = "posible_typo";
       const token = found.via.replace("posible digitación ", "");
-      alerta = `En el movimiento aparece ${token} (mismo NIT y valor). Posible error al digitar el número de factura.`;
+      const isPrefMismatch = doc.prefijo && !token.toUpperCase().startsWith(compact(doc.prefijo));
+      alerta = isPrefMismatch
+        ? `En el movimiento aparece ${token} (mismo NIT y valor). Posible error al digitar el prefijo de la factura (esperado: ${doc.prefijo}).`
+        : `En el movimiento aparece ${token} (mismo NIT y valor). Posible error al digitar el número de factura.`;
     } else if (isDocumentoSoporte(doc) && comps.length > 1 && estado === "conciliado") {
       const f = stripZeros(doc.folio);
       const emisionComp = comps.find((c) => compFolio(c) === f) || comps[0];
@@ -1172,6 +1203,16 @@ export function conciliar(
         }
         if (!candFolio && l.folioN && l.folioN !== "0") {
           candFolio = stripZeros(l.folioN);
+        }
+        if (!candFolio && f.length >= 4) {
+          const rawText = `${l.descripcion} ${l.cruce} ${l.observacion}`.toUpperCase();
+          const tokens = rawText.match(/\b[A-Z0-9]{2,20}\b/g) || [];
+          for (const t of tokens) {
+            if (t.includes(f)) {
+              candFolio = f;
+              break;
+            }
+          }
         }
 
         if (!candFolio) continue;

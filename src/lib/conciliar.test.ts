@@ -1449,4 +1449,65 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
     assert.ok(row.alerta.includes("diferencia de $270.000"));
     assert.strictEqual(row.totalSiigo, 1270000);
   });
+
+  it("debe detectar error de digitación en el prefijo de la factura con mismo folio y valor (Yasser Quintero Carrascal: PJE3 vs PJ3)", () => {
+    const nitYasser = "72309561";
+    const dianDocs: DianDoc[] = [
+      {
+        tipo: "Factura electrónica de venta",
+        cufe: "CUFE-YASSER-199875",
+        folio: "199875",
+        prefijo: "PJE3",
+        fechaEmision: "2026-09-15",
+        fechaRecepcion: "2026-09-15",
+        nitEmisor: nitYasser,
+        nombreEmisor: "YASSER QUINTERO CARRASCAL",
+        nitReceptor: "900123456",
+        nombreReceptor: "EMPRESA MODELO S.A.S.",
+        iva: 0,
+        total: 112500,
+        estadoDian: "Aceptado",
+        grupo: "Recibido",
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      {
+        cuenta: "73953501",
+        cuentaNombre: "COMBUSTIBLES Y LUBRICANTES",
+        comprobante: "P 002 00000010602 016",
+        fecha: "2026-09-30",
+        nit: nitYasser,
+        nombre: "YASSER QUINTERO CARRASCAL",
+        descripcion: "CM1569 PJ3199875 REEMBOLSO CM",
+        cruce: "",
+        debito: 112500,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "22050501",
+        cuentaNombre: "PROVEEDORES",
+        comprobante: "P 002 00000010602 021",
+        fecha: "2026-09-30",
+        nit: nitYasser,
+        nombre: "YASSER QUINTERO CARRASCAL",
+        descripcion: "CM1569 PJ3199875 REEMBOLSO CM",
+        cruce: "",
+        debito: 0,
+        credito: 112500,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "SEP 2026");
+    const row = res.rows[0];
+
+    assert.ok(row, "Debe existir la fila");
+    assert.strictEqual(row.estado, "posible_typo", "Debe sugerirse como Revisar factura");
+    assert.ok(row.alerta.includes("PJ3-199875"));
+    assert.ok(row.alerta.includes("PJE3"));
+    assert.strictEqual(row.totalSiigo, 112500);
+    assert.strictEqual(row.diferencia, 0);
+  });
 });
