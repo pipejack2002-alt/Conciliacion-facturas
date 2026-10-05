@@ -1110,7 +1110,6 @@ export function conciliar(
       const f = stripZeros(r.folio);
       if (!f || f === "0" || f.length < 2) return;
 
-      const p = compact(r.prefijo);
       const cpNitK = nitKey(r.nitContraparte);
 
       for (const l of indexed) {
