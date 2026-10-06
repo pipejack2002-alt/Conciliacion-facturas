@@ -598,8 +598,8 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
   subAccounts.push({
     id: "consolidado",
     nombre: ficAltaCta
-      ? `Portafolio Consolidado Total (N° ${ficAltaCta}${adminCta ? ` / ${adminCta}` : ""})`
-      : "Portafolio Consolidado Total",
+      ? `Portafolio Consolidado Total (N° ${ficAltaCta}${adminCta ? ` / ${adminCta}` : ""}) - Cruce Integral PUC 1250`
+      : "Portafolio Consolidado Total - Cruce Integral PUC 1250",
     numeroCuenta: ficAltaCta ? `${ficAltaCta} (Consolidado)` : accountDisplay,
     saldoInicial: portafolioSaldoIni,
     saldoFinal: portafolioSaldoFin,
@@ -614,7 +614,7 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
     const altaCred = ficAltaItems.reduce((a, b) => a + b.credito, 0);
     subAccounts.push({
       id: "alta_liquidez",
-      nombre: `Credicorp Capital Alta Liquidez (FIC N° ${ficAltaCta || "1-1-44413-6"})`,
+      nombre: `Credicorp Capital Alta Liquidez (FIC N° ${ficAltaCta || "1-1-44413-6"}) - Solo Movimientos FIC`,
       numeroCuenta: ficAltaCta || "1-1-44413-6",
       saldoInicial: ficAltaSaldoIni,
       saldoFinal: ficAltaSaldoFin || ficAltaSaldoIni + altaCred - altaDeb,
