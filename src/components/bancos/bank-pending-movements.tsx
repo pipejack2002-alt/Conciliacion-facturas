@@ -8,6 +8,9 @@ import {
   Clock,
   Sparkles,
   FileText,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { formatMoneyExact, formatDate } from "@/lib/format";
 import type { BankConciliacionRow, BankConciliacionSummary } from "@/lib/conciliar-bancos";
@@ -16,6 +19,17 @@ import { exportAsientoAjusteBancario } from "@/lib/export-bancos-excel";
 import { AsientoContableModal } from "./asiento-contable-modal";
 import { cn } from "@/lib/cn";
 import * as XLSX from "xlsx";
+
+export type BankPendingSortField =
+  | "fecha"
+  | "origen"
+  | "naturaleza"
+  | "descripcion"
+  | "referencia"
+  | "valor"
+  | "asiento";
+
+export type BankPendingSortDirection = "asc" | "desc";
 
 interface BankPendingMovementsProps {
   rows: BankConciliacionRow[];
@@ -34,6 +48,8 @@ export const BankPendingMovements = memo(function BankPendingMovements({
 }: BankPendingMovementsProps) {
   const [modalRow, setModalRow] = useState<BankConciliacionRow | null>(null);
   const [filtroTipo, setFiltroTipo] = useState<"todos" | "rendimientos" | "abonos" | "cargos" | "transito">("todos");
+  const [sortField, setSortField] = useState<BankPendingSortField>("fecha");
+  const [sortDirection, setSortDirection] = useState<BankPendingSortDirection>("desc");
 
   // Filtrar exclusivamente partidas pendientes de registro en libros o partidas en tránsito
   const pendingRows = useMemo(() => {
@@ -72,6 +88,98 @@ export const BankPendingMovements = memo(function BankPendingMovements({
     if (filtroTipo === "transito") return [...chequesTransito, ...consignacionesTransito];
     return pendingRows;
   }, [filtroTipo, pendingRows, rendimientosPendientes, otrosAbonosPendientes, cargosPendientes, chequesTransito, consignacionesTransito]);
+
+  const handleToggleSort = (field: BankPendingSortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      // Para valor exacto, primer clic organiza de menor a mayor (asc); para fecha desc; para otros asc
+      setSortDirection(field === "valor" ? "asc" : field === "fecha" ? "desc" : "asc");
+    }
+  };
+
+  const handleSelectSort = (field: BankPendingSortField) => {
+    setSortField(field);
+    setSortDirection(field === "valor" ? "asc" : field === "fecha" ? "desc" : "asc");
+  };
+
+  // Ordenamiento interactivo de las partidas pendientes
+  const sortedDisplayedRows = useMemo(() => {
+    const list = [...displayedRows];
+
+    const getNaturalezaText = (r: BankConciliacionRow) => {
+      if (r.estado === "nota_credito_banco") {
+        return r.esRendimiento ? "Rendimiento Financiero" : "Nota Crédito (Abono)";
+      }
+      if (r.estado === "nota_debito_banco") {
+        if (r.esGmf) return "Gravamen al Movimiento Financiero GMF";
+        if (r.esComision) return "Comisión Bancaria";
+        return "Nota Débito (Cargo)";
+      }
+      return r.tipo === "retiro" ? "Cheque / Giro en Tránsito" : "Consignación en Tránsito";
+    };
+
+    const getAsientoText = (r: BankConciliacionRow) => {
+      if (r.estado === "nota_credito_banco") {
+        return r.esRendimiento ? "125035 Rendimientos 421005" : "111005 Bancos 130505 Clientes";
+      }
+      if (r.estado === "nota_debito_banco") {
+        if (r.esGmf) return "511595 GMF 111005 Bancos";
+        if (r.esComision) return "530515 Comisiones 111005 Bancos";
+        return "530595 Gastos Bancarios 2205 Proveedores 111005 Bancos";
+      }
+      return "Ya registrado en libros";
+    };
+
+    list.sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "fecha": {
+          cmp = (a.fecha || "").localeCompare(b.fecha || "");
+          break;
+        }
+        case "origen": {
+          const oA = a.estado === "partida_en_transito_libros" ? "Libros Contables" : "Extracto Bancario";
+          const oB = b.estado === "partida_en_transito_libros" ? "Libros Contables" : "Extracto Bancario";
+          cmp = oA.localeCompare(oB, "es");
+          break;
+        }
+        case "naturaleza": {
+          cmp = getNaturalezaText(a).localeCompare(getNaturalezaText(b), "es");
+          break;
+        }
+        case "descripcion": {
+          cmp = (a.descripcion || "").localeCompare(b.descripcion || "", "es", { sensitivity: "base" });
+          break;
+        }
+        case "referencia": {
+          cmp = (a.referencia || "").localeCompare(b.referencia || "", "es", { numeric: true, sensitivity: "base" });
+          break;
+        }
+        case "valor": {
+          const valA = a.montoBanco > 0 ? a.montoBanco : a.montoLibros;
+          const valB = b.montoBanco > 0 ? b.montoBanco : b.montoLibros;
+          cmp = valA - valB;
+          break;
+        }
+        case "asiento": {
+          cmp = getAsientoText(a).localeCompare(getAsientoText(b), "es");
+          break;
+        }
+        default:
+          cmp = 0;
+      }
+
+      if (cmp === 0) {
+        cmp = (b.montoBanco || 0) - (a.montoBanco || 0);
+      }
+
+      return sortDirection === "asc" ? cmp : -cmp;
+    });
+
+    return list;
+  }, [displayedRows, sortField, sortDirection]);
 
   function handleExportPendingExcel() {
     if (pendingRows.length === 0) return;
@@ -326,29 +434,211 @@ export const BankPendingMovements = memo(function BankPendingMovements({
             </div>
           </div>
 
+          {/* Sub-barra de Conteo y Selector de Ordenamiento */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-1 text-xs text-ink-muted">
+            <div className="flex items-center gap-2">
+              <span>
+                Mostrando <strong>{sortedDisplayedRows.length}</strong> de{" "}
+                <strong>{pendingRows.length}</strong> partidas pendientes
+              </span>
+            </div>
+
+            {/* Selector de ordenamiento interactivo (menor a mayor / asc / desc) */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] font-semibold text-ink-muted flex items-center gap-1">
+                <ArrowUpDown className="size-3 text-teal" /> Organizar por:
+              </span>
+              <select
+                value={sortField}
+                onChange={(e) => handleSelectSort(e.target.value as BankPendingSortField)}
+                className="rounded-lg border border-line bg-bg-surface px-2.5 py-1 text-xs font-semibold text-ink focus:outline-teal shadow-2xs cursor-pointer"
+              >
+                <option value="fecha">Fecha</option>
+                <option value="origen">Origen</option>
+                <option value="naturaleza">Naturaleza / Concepto</option>
+                <option value="descripcion">Descripción</option>
+                <option value="referencia">Referencia</option>
+                <option value="valor">Valor Exacto</option>
+                <option value="asiento">Asiento Contable Sugerido (PUC)</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => setSortDirection((d) => (d === "asc" ? "desc" : "asc"))}
+                className="inline-flex items-center gap-1 rounded-lg border border-line bg-bg-surface hover:bg-bg-subtle px-2 py-1 text-xs font-bold text-ink cursor-pointer transition shadow-2xs"
+                title={`Alternar dirección de orden (actual: ${sortDirection === "asc" ? "Menor a Mayor / Ascendente" : "Mayor a Menor / Descendente"})`}
+              >
+                {sortDirection === "asc" ? (
+                  <>
+                    <ArrowUp className="size-3 text-teal font-black" />
+                    <span className="text-[10px] font-extrabold uppercase">Menor a Mayor (ASC)</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowDown className="size-3 text-teal font-black" />
+                    <span className="text-[10px] font-extrabold uppercase">Mayor a Menor (DESC)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
           <div className="overflow-x-auto rounded-xl border border-line">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-line bg-bg-subtle text-ink-muted font-bold text-[11px] uppercase tracking-wider">
-                  <th className="py-2.5 px-3">Fecha</th>
-                  <th className="py-2.5 px-3">Origen</th>
-                  <th className="py-2.5 px-3">Naturaleza / Concepto</th>
-                  <th className="py-2.5 px-3">Descripción en Movimiento</th>
-                  <th className="py-2.5 px-3">Referencia</th>
-                  <th className="py-2.5 px-3 text-right">Valor Exacto</th>
-                  <th className="py-2.5 px-3">Asiento Contable Sugerido (PUC)</th>
-                  <th className="py-2.5 px-3 text-center">Acción</th>
+                <tr className="border-b border-line bg-bg-subtle text-ink-muted font-bold text-[11px] uppercase tracking-wider select-none">
+                  {/* 1. Fecha */}
+                  <th
+                    onClick={() => handleToggleSort("fecha")}
+                    className="py-2.5 px-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap"
+                    title="Clic para ordenar por Fecha"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Fecha</span>
+                      {sortField === "fecha" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="size-3.5 text-teal" />
+                        ) : (
+                          <ArrowDown className="size-3.5 text-teal" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* 2. Origen */}
+                  <th
+                    onClick={() => handleToggleSort("origen")}
+                    className="py-2.5 px-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap"
+                    title="Clic para ordenar por Origen"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Origen</span>
+                      {sortField === "origen" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="size-3.5 text-teal" />
+                        ) : (
+                          <ArrowDown className="size-3.5 text-teal" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* 3. Naturaleza */}
+                  <th
+                    onClick={() => handleToggleSort("naturaleza")}
+                    className="py-2.5 px-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap"
+                    title="Clic para ordenar por Naturaleza / Concepto"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Naturaleza / Concepto</span>
+                      {sortField === "naturaleza" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="size-3.5 text-teal" />
+                        ) : (
+                          <ArrowDown className="size-3.5 text-teal" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* 4. Descripción */}
+                  <th
+                    onClick={() => handleToggleSort("descripcion")}
+                    className="py-2.5 px-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                    title="Clic para ordenar por Descripción en Movimiento"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Descripción en Movimiento</span>
+                      {sortField === "descripcion" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="size-3.5 text-teal" />
+                        ) : (
+                          <ArrowDown className="size-3.5 text-teal" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* 5. Referencia */}
+                  <th
+                    onClick={() => handleToggleSort("referencia")}
+                    className="py-2.5 px-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap"
+                    title="Clic para ordenar por Referencia"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Referencia</span>
+                      {sortField === "referencia" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="size-3.5 text-teal" />
+                        ) : (
+                          <ArrowDown className="size-3.5 text-teal" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* 6. Valor Exacto */}
+                  <th
+                    onClick={() => handleToggleSort("valor")}
+                    className="py-2.5 px-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap text-right"
+                    title="Clic para ordenar por Valor Exacto (de menor a mayor o viceversa)"
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      <span>Valor Exacto</span>
+                      {sortField === "valor" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="size-3.5 text-teal" />
+                        ) : (
+                          <ArrowDown className="size-3.5 text-teal" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* 7. Asiento Contable Sugerido (PUC) */}
+                  <th
+                    onClick={() => handleToggleSort("asiento")}
+                    className="py-2.5 px-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                    title="Clic para ordenar por Asiento Contable Sugerido (PUC)"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Asiento Contable Sugerido (PUC)</span>
+                      {sortField === "asiento" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="size-3.5 text-teal" />
+                        ) : (
+                          <ArrowDown className="size-3.5 text-teal" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="size-3 opacity-25 group-hover:opacity-75 transition" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* 8. Acción */}
+                  <th className="py-2.5 px-3 text-center whitespace-nowrap">Acción</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line/60">
-                {displayedRows.length === 0 ? (
+                {sortedDisplayedRows.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="py-6 text-center text-xs text-ink-muted">
                       No hay partidas pendientes en la categoría seleccionada.
                     </td>
                   </tr>
                 ) : (
-                  displayedRows.map((r) => {
+                  sortedDisplayedRows.map((r) => {
                 const isNotaCredito = r.estado === "nota_credito_banco";
                 const isNotaDebito = r.estado === "nota_debito_banco";
                 const isTransito = r.estado === "partida_en_transito_libros";

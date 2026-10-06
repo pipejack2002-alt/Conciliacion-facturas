@@ -1431,7 +1431,7 @@ export function ConciliacionUniversalBancosView({
               { id: "conciliado", label: `Conciliados (${concilResult.summary.totalConciliados})` },
               {
                 id: "banco_pend",
-                label: `Notas Banco (${concilResult.rows.filter((r) => r.estado === "nota_debito_banco" || r.estado === "nota_credito_banco").length})`,
+                label: `Por Registrar (${concilResult.rows.filter((r) => r.estado === "nota_debito_banco" || r.estado === "nota_credito_banco").length})`,
               },
               {
                 id: "transito",
@@ -1681,7 +1681,7 @@ export function ConciliacionUniversalBancosView({
                                   ? "bg-teal-100 text-teal-950 border-teal-300 dark:bg-teal-950/40 dark:text-teal-300"
                                   : r.estado === "partida_en_transito_libros"
                                   ? "bg-purple-100 text-purple-950 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300"
-                                  : "bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-slate-200"
+                                  : "bg-rose-50 text-rose-950 border-rose-300 dark:bg-rose-950/40 dark:text-rose-200 font-extrabold"
                               )}
                             >
                               {r.estado === "conciliado"
@@ -1698,7 +1698,9 @@ export function ConciliacionUniversalBancosView({
                                 ? "Comisión Banco"
                                 : r.esRendimiento
                                 ? "Rendimiento"
-                                : "En Tránsito"}
+                                : r.estado === "partida_en_transito_libros"
+                                ? "En Tránsito"
+                                : "Por Registrar"}
                             </span>
                           </td>
                           <td className="px-3.5 py-2.5 font-mono text-ink-muted whitespace-nowrap">

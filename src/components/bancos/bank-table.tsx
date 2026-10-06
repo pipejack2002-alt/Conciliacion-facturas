@@ -202,7 +202,7 @@ export const BankTable = memo(function BankTable({
             [
               { id: "todas", label: `Todos (${counts.todas})` },
               { id: "conciliado", label: `Conciliados (${counts.conciliado})` },
-              { id: "banco_pend", label: `Notas Banco (${counts.banco_pend})` },
+              { id: "banco_pend", label: `Por Registrar (${counts.banco_pend})` },
               { id: "transito", label: `En Tránsito (${counts.transito})` },
             ] as const
           ).map((tab) => (
@@ -508,8 +508,8 @@ export const BankTable = memo(function BankTable({
                                 : r.esRendimiento
                                 ? "bg-teal-100 text-teal-950 border-teal-300 dark:bg-teal-950/80 dark:text-teal-200 dark:border-teal-700 font-extrabold"
                                 : r.estado === "partida_en_transito_libros"
-                                ? "bg-rose-100 text-rose-950 border-rose-300 dark:bg-rose-950/80 dark:text-rose-200 dark:border-rose-700 font-extrabold"
-                                : "bg-slate-100 text-slate-900 border-slate-300 dark:bg-slate-800 dark:text-slate-100"
+                                ? "bg-blue-100 text-blue-950 border-blue-300 dark:bg-blue-950/80 dark:text-blue-200 dark:border-blue-700 font-extrabold"
+                                : "bg-rose-50 text-rose-950 border-rose-300 dark:bg-rose-950/80 dark:text-rose-200 dark:border-rose-700 font-extrabold"
                             )}
                           >
                             <span
@@ -527,6 +527,8 @@ export const BankTable = memo(function BankTable({
                                   ? "bg-blue-600 dark:bg-blue-400"
                                   : r.esRendimiento
                                   ? "bg-teal-600 dark:bg-teal-400"
+                                  : r.estado === "partida_en_transito_libros"
+                                  ? "bg-blue-600 dark:bg-blue-400"
                                   : "bg-rose-600 dark:bg-rose-400"
                               )}
                             />
@@ -544,7 +546,9 @@ export const BankTable = memo(function BankTable({
                               ? "Comisión Banco"
                               : r.esRendimiento
                               ? "Rendimiento"
-                              : "En Tránsito"}
+                              : r.estado === "partida_en_transito_libros"
+                              ? "En Tránsito"
+                              : "Por Registrar"}
                           </span>
                         </td>
                         <td className="px-3.5 py-2.5 font-mono text-ink-muted whitespace-nowrap">
