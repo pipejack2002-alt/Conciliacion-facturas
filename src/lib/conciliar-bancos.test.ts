@@ -738,41 +738,62 @@ describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuen
     assert.strictEqual(res.summary.diferenciaCuadre, 0);
   });
 
-  it("debe conciliar rendimientos con diferencia de centavos por redondeo contable en ERP (ej. $13.519,80 vs $13.520)", () => {
+  it("debe exigir coincidencia exacta con centavos sin permitir tolerancias arbitrarias de redondeo", () => {
     const extracto: BankExtractItem[] = [
       {
-        id: "ext_rend_dec",
-        fecha: "2026-08-31",
-        descripcion: "RENDIMIENTOS FINANCIEROS AGOSTO",
-        referencia: "REND",
+        id: "ext_rend_exact",
+        fecha: "2026-09-30",
+        descripcion: "RENDIMIENTOS",
+        referencia: "1-1-44413-6",
         debito: 0,
-        credito: 13519.8,
-        saldo: 1000000,
+        credito: 116920.65,
+        saldo: 15398635.55,
       },
     ];
 
-    const libros: MovLine[] = [
+    // Caso 1: Con valor exacto al centavo (debe conciliar al 100%)
+    const librosExactos: MovLine[] = [
       {
-        cuenta: "114413",
-        cuentaNombre: "CARTERA COLECTIVA 114413 SOPORTE MINERO",
-        comprobante: "L 001",
-        fecha: "2026-08-31",
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL",
+        comprobante: "L 001 00000000098 002",
+        fecha: "2026-09-30",
         nit: "860068182",
         nombre: "CREDICORP CAPITAL",
-        descripcion: "RENDIMIENTOS AGOSTO",
+        descripcion: "RENDIMIENTOS SEPT 2026",
         cruce: "",
-        debito: 13520, // Redondeado al peso en el software contable
+        debito: 116920.65,
         credito: 0,
         observacion: "",
       },
     ];
 
-    const res = conciliarBancos(extracto, libros, 500000, 500000);
-    assert.strictEqual(res.summary.totalConciliados, 1);
-    assert.strictEqual(res.rows[0].estado, "conciliado");
-    assert.strictEqual(res.rows[0].esRendimiento, true);
-    assert.ok(res.rows[0].diferencia <= 0.2);
-    assert.strictEqual(res.summary.notasCreditoNoRegistradas, 0);
+    const resExacto = conciliarBancos(extracto, librosExactos, 29183105, 29183105);
+    assert.strictEqual(resExacto.summary.totalConciliados, 1);
+    assert.strictEqual(resExacto.rows[0].estado, "conciliado");
+    assert.strictEqual(resExacto.rows[0].diferencia, 0);
+    assert.strictEqual(resExacto.summary.consignacionesEnTransito, 0);
+    assert.strictEqual(resExacto.summary.notasCreditoRendimientos, 0);
+
+    // Caso 2: Con diferencia en decimales (no debe forzar coincidencia inexacta)
+    const librosInexactos: MovLine[] = [
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL",
+        comprobante: "L 001 00000000098 002",
+        fecha: "2026-09-30",
+        nit: "860068182",
+        nombre: "CREDICORP CAPITAL",
+        descripcion: "RENDIMIENTOS SEPT 2026",
+        cruce: "",
+        debito: 116921.0, // Diferencia de más de 0.05
+        credito: 0,
+        observacion: "",
+      },
+    ];
+
+    const resInexacto = conciliarBancos(extracto, librosInexactos, 29183105, 29183105);
+    assert.strictEqual(resInexacto.summary.totalConciliados, 0, "No debe cruzar valores si no coinciden en sus centavos exactos");
   });
 
   it("debe conciliar en lote cuando la causación contable agrupa o divide subcuentas de rendimientos (1 abono extracto = 2 comprobantes libros)", () => {

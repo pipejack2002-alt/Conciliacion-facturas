@@ -357,7 +357,7 @@ export function conciliarBancos(
 
       // Verificar que este débito NO corresponda a un crédito operativo real dentro del extracto (tolerancia de centavos)
       const matchesExtractoCredit = extracto.some(
-        (b) => b.credito > 0 && Math.abs(b.credito - l.debito) <= 1.05
+        (b) => b.credito > 0 && Math.abs(b.credito - l.debito) <= 0.05
       );
 
       // Solo cruzar contra saldo inicial si el extracto TIENE saldo inicial > 0, NO hay un crédito en extracto en este mes,
@@ -365,7 +365,7 @@ export function conciliarBancos(
       const isPriorYieldMatch =
         saldoInicialExtracto > 0 &&
         !matchesExtractoCredit &&
-        (isPriorMonthRef || Math.abs(l.debito - saldoInicialExtracto) <= 1.05) &&
+        (isPriorMonthRef || Math.abs(l.debito - saldoInicialExtracto) <= 0.05) &&
         (isInvestmentAcc || isRendKeyword || (isEarlyMonth && isCausacionVoucher));
 
       if (isPriorYieldMatch) {
@@ -790,30 +790,7 @@ export function conciliarBancos(
       }
     }
 
-    // 2. Coincidencia 1 a 1 con tolerancia de redondeo de centavos colombianos (tolerancia <= 1.05)
-    if (bestMatchIdx === null) {
-      for (let i = 0; i < cleanLibros.length; i++) {
-        if (matchedLibroIndices.has(i)) continue;
-        const l = cleanLibros[i];
-        if (l.debito <= 0 || l.credito > 0) continue;
-
-        const textAll = `${l.cuenta || ""} ${l.cuentaNombre || ""} ${l.descripcion || ""} ${l.nombre || ""} ${l.comprobante || ""}`.toLowerCase();
-        const isBookYield =
-          /rendimiento|rend\b|inter[eé]s(?:es)?\b|abono.*inter[eé]s|inter[eé]s.*abono|intereses.*liquidados/i.test(textAll) ||
-          /^(?:1144|1125|1250|1245)\b/.test(l.cuenta.trim()) ||
-          /credicorp|correval|fonval|serfinco|fic\b|cartera\s*vista|cartera\s*colectiva/i.test(textAll);
-
-        const diff = Math.abs(montoBanco - l.debito);
-        if (diff <= 1.05 && isBookYield) {
-          if (diff < bestDiff) {
-            bestMatchIdx = i;
-            bestDiff = diff;
-          }
-        }
-      }
-    }
-
-    // 3. Coincidencia en lote (1 abono de rendimientos en extracto = N comprobantes en libros, ej. subcuentas 1250 + 1245 / 1144)
+    // 2. Coincidencia en lote (1 abono de rendimientos en extracto = N comprobantes en libros, ej. subcuentas 1250 + 1245 / 1144)
     if (bestMatchIdx === null) {
       const yieldBookCandidates = cleanLibros
         .map((l, idx) => ({ ...l, originalIdx: idx }))
@@ -830,11 +807,10 @@ export function conciliarBancos(
 
       if (yieldBookCandidates.length >= 2) {
         const sumYield = yieldBookCandidates.reduce((s, c) => s + c.debito, 0);
-        if (Math.abs(sumYield - montoBanco) <= 1.05) {
+        if (Math.abs(sumYield - montoBanco) <= 0.05) {
           matchedExtractoIds.add(bItem.id);
           yieldBookCandidates.forEach((c) => matchedLibroIndices.add(c.originalIdx));
           const vouchersStr = yieldBookCandidates.map((c) => c.comprobante).filter(Boolean).slice(0, 4).join(", ");
-          const diffVal = Math.round(Math.abs(montoBanco - sumYield) * 100) / 100;
           rows.push({
             id: `match_rend_lote_${bItem.id}`,
             estado: "conciliado",
@@ -844,7 +820,7 @@ export function conciliarBancos(
             tipo: "consignacion",
             montoBanco,
             montoLibros: sumYield,
-            diferencia: diffVal,
+            diferencia: 0,
             esGmf: false,
             esComision: false,
             esRendimiento: true,
@@ -852,7 +828,7 @@ export function conciliarBancos(
             esRendimientoPeriodoAnterior: false,
             itemBanco: bItem,
             itemsLibrosLote: yieldBookCandidates,
-            nota: `Rendimientos financieros conciliados (1 abono en extracto = ${yieldBookCandidates.length} comprobantes en libros).`,
+            nota: `Rendimientos financieros conciliados con valor exacto (1 abono en extracto = ${yieldBookCandidates.length} comprobantes en libros).`,
           });
           continue;
         }
@@ -863,7 +839,6 @@ export function conciliarBancos(
       const lItem = cleanLibros[bestMatchIdx];
       matchedExtractoIds.add(bItem.id);
       matchedLibroIndices.add(bestMatchIdx);
-      const diffVal = Math.round(Math.abs(montoBanco - lItem.debito) * 100) / 100;
       rows.push({
         id: `match_rend_${bItem.id}_${bestMatchIdx}`,
         estado: "conciliado",
@@ -873,7 +848,7 @@ export function conciliarBancos(
         tipo: "consignacion",
         montoBanco,
         montoLibros: lItem.debito,
-        diferencia: diffVal,
+        diferencia: 0,
         esGmf: false,
         esComision: false,
         esRendimiento: true,
@@ -881,14 +856,12 @@ export function conciliarBancos(
         esRendimientoPeriodoAnterior: false,
         itemBanco: bItem,
         itemLibros: lItem,
-        nota: diffVal > 0.05
-          ? `Rendimientos financieros conciliados con ajuste menor por redondeo de centavos ($${diffVal.toFixed(2)}).`
-          : "Rendimientos financieros del extracto debidamente causados y conciliados en libros contables.",
+        nota: "Rendimientos financieros del extracto debidamente causados y conciliados en libros con valor y decimales exactos.",
       });
     }
   }
 
-  // 4. Coincidencia N a 1 (N abonos de rendimiento en extracto = 1 comprobante consolidado en libros)
+  // 3. Coincidencia N a 1 (N abonos de rendimiento en extracto = 1 comprobante consolidado en libros)
   for (let i = 0; i < cleanLibros.length; i++) {
     if (matchedLibroIndices.has(i)) continue;
     const l = cleanLibros[i];
@@ -912,10 +885,9 @@ export function conciliarBancos(
 
     if (unassignedExtractYields.length >= 2) {
       const sumExtractYields = unassignedExtractYields.reduce((s, b) => s + b.credito, 0);
-      if (Math.abs(sumExtractYields - l.debito) <= 1.05) {
+      if (Math.abs(sumExtractYields - l.debito) <= 0.05) {
         unassignedExtractYields.forEach((b) => matchedExtractoIds.add(b.id));
         matchedLibroIndices.add(i);
-        const diffVal = Math.round(Math.abs(sumExtractYields - l.debito) * 100) / 100;
         rows.push({
           id: `match_rend_n_to_1_${i}`,
           estado: "conciliado",
@@ -925,14 +897,14 @@ export function conciliarBancos(
           tipo: "consignacion",
           montoBanco: sumExtractYields,
           montoLibros: l.debito,
-          diferencia: diffVal,
+          diferencia: 0,
           esGmf: false,
           esComision: false,
           esRendimiento: true,
           esRendimientoPeriodoActual: true,
           esRendimientoPeriodoAnterior: false,
           itemLibros: l,
-          nota: `Rendimientos financieros conciliados (${unassignedExtractYields.length} abonos en extracto = 1 causación consolidada en libros).`,
+          nota: `Rendimientos financieros conciliados al centavo (${unassignedExtractYields.length} abonos en extracto = 1 causación en libros).`,
         });
       }
     }

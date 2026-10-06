@@ -320,7 +320,7 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
   const ficAltaItems: BankExtractItem[] = [];
   const ficAltaSaldoIni = altaRowMatch ? cleanMoneyNumber(altaRowMatch[1]) : 0;
   const ficAltaSaldoFin = altaRowMatch ? cleanMoneyNumber(altaRowMatch[6]) : 0;
-  const _ficAltaRend = altaRowMatch ? cleanMoneyNumber(altaRowMatch[4]) : 0;
+  const ficAltaRend = altaRowMatch ? cleanMoneyNumber(altaRowMatch[4]) : 0;
   const _ficAltaRetefuente = altaRowMatch ? cleanMoneyNumber(altaRowMatch[5]) : 0;
 
   // 3. Fondos de Inversión Colectiva (Vista)
@@ -532,6 +532,19 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
     });
   }
 
+  // Asegurar que Alta Liquidez tenga sus rendimientos si no vinieron en la tabla de movimientos
+  if (ficAltaRend > 0 && !ficAltaItems.some((it) => /rendimiento/i.test(it.descripcion))) {
+    ficAltaItems.push({
+      id: "cre_alta_rend",
+      fecha: `${currentYear}-09-30`,
+      descripcion: "RENDIMIENTOS FINANCIEROS (CREDICORP CAPITAL ALTA LIQUIDEZ)",
+      referencia: ficAltaCta || "1-1-44413-6",
+      debito: 0,
+      credito: ficAltaRend,
+      saldo: ficAltaSaldoFin,
+    });
+  }
+
   // Generar el Portafolio Consolidado (que cruza exactamente con la contabilidad 1250)
   // Se excluyen los traslados puente internos entre Administradora y FIC para no duplicar movimientos
   const consolidatedItems: BankExtractItem[] = [];
@@ -564,15 +577,30 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
     });
   }
 
+  // Asegurar que los rendimientos de Alta Liquidez estén en el portafolio consolidado si no estaban ya
+  if (ficAltaRend > 0 && !consolidatedItems.some((it) => /rendimiento/i.test(it.descripcion))) {
+    consolidatedItems.push({
+      id: "cons_rend_alta",
+      fecha: `${currentYear}-09-30`,
+      descripcion: "RENDIMIENTOS FINANCIEROS (CREDICORP CAPITAL ALTA LIQUIDEZ)",
+      referencia: ficAltaCta || "1-1-44413-6",
+      debito: 0,
+      credito: ficAltaRend,
+      saldo: ficAltaSaldoFin,
+    });
+  }
+
   const consDeb = consolidatedItems.reduce((a, b) => a + b.debito, 0);
   const consCred = consolidatedItems.reduce((a, b) => a + b.credito, 0);
 
-  // 1. Portafolio Consolidado Total (Suma de Alta Liquidez + Vista)
+  // 1. Portafolio Consolidado Total (Suma de Alta Liquidez + Cuenta Administradora)
   const accountDisplay = [ficAltaCta, ficVistaCta, adminCta].filter(Boolean).join(" / ");
   subAccounts.push({
     id: "consolidado",
-    nombre: "Portafolio Consolidado Total (Alta Liquidez + Vista)",
-    numeroCuenta: accountDisplay,
+    nombre: ficAltaCta
+      ? `Portafolio Consolidado Total (N° ${ficAltaCta}${adminCta ? ` / ${adminCta}` : ""})`
+      : "Portafolio Consolidado Total",
+    numeroCuenta: ficAltaCta ? `${ficAltaCta} (Consolidado)` : accountDisplay,
     saldoInicial: portafolioSaldoIni,
     saldoFinal: portafolioSaldoFin,
     totalDebitos: consDeb,
@@ -586,8 +614,8 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
     const altaCred = ficAltaItems.reduce((a, b) => a + b.credito, 0);
     subAccounts.push({
       id: "alta_liquidez",
-      nombre: "Credicorp Capital Alta Liquidez (FIC)",
-      numeroCuenta: ficAltaCta || "1-1-47311-2",
+      nombre: `Credicorp Capital Alta Liquidez (FIC N° ${ficAltaCta || "1-1-44413-6"})`,
+      numeroCuenta: ficAltaCta || "1-1-44413-6",
       saldoInicial: ficAltaSaldoIni,
       saldoFinal: ficAltaSaldoFin || ficAltaSaldoIni + altaCred - altaDeb,
       totalDebitos: altaDeb,

@@ -380,7 +380,9 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
             a.cuenta.startsWith("1125") ||
             /credicorp|correval|fonval|serfinco|fic\b|cartera\s*colectiva|fondo.*inversi/i.test(a.cuentaNombre)
         );
-        if (credAccounts.length > 1) {
+        if (credAccounts.length === 1) {
+          setCuentaSeleccionada(credAccounts[0].cuenta);
+        } else if (credAccounts.length > 1) {
           if (chosen.id === "consolidado") {
             setCuentaSeleccionada("credicorp_all");
           } else if (chosen.id === "alta_liquidez") {

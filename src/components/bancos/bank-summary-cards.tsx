@@ -658,6 +658,18 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                   </span>
                 </div>
 
+                {(summary.notasDebitoOperativas || 0) > 0 && (
+                  <div className="flex items-center justify-between text-ink py-0.5 border-b border-emerald-500/10">
+                    <div>
+                      <span className="font-medium">• Otros Retiros y Débitos Bancarios pendientes de causar:</span>
+                      <span className="block text-[10px] text-ink-muted">Cargos o transferencias debitadas en extracto</span>
+                    </div>
+                    <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                      +{formatMoneyExact(summary.notasDebitoOperativas || 0)}
+                    </span>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between text-ink py-0.5">
                   <div>
                     <span className="font-medium">• Consignaciones en Tránsito:</span>
@@ -746,14 +758,47 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                   <span className="font-mono">${formatMoneyExact(summary.saldoLibros)}</span>
                 </div>
                 <div className="space-y-1 text-[11px]">
-                  <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400">
-                    <span>(+) Rendimientos por causar:</span>
-                    <span className="font-mono font-bold">+{formatMoneyExact(summary.notasCreditoNoRegistradas || 0)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-rose-700 dark:text-rose-400">
-                    <span>(-) Gastos bancarios (GMF/Com):</span>
-                    <span className="font-mono font-bold">-{formatMoneyExact(summary.notasDebitoNoRegistradas || 0)}</span>
-                  </div>
+                  {(summary.notasCreditoRendimientos || 0) > 0 && (
+                    <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400">
+                      <span>(+) Rendimientos por causar:</span>
+                      <span className="font-mono font-bold">+{formatMoneyExact(summary.notasCreditoRendimientos || 0)}</span>
+                    </div>
+                  )}
+
+                  {(summary.notasCreditoOperativas || 0) > 0 && (
+                    <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400">
+                      <span>(+) Otros abonos en extracto por registrar:</span>
+                      <span className="font-mono font-bold">+{formatMoneyExact(summary.notasCreditoOperativas || 0)}</span>
+                    </div>
+                  )}
+
+                  {(summary.notasCreditoNoRegistradas || 0) === 0 && (
+                    <div className="flex items-center justify-between text-ink-muted">
+                      <span>(+) Rendimientos / Abonos por causar:</span>
+                      <span className="font-mono font-bold">+$ 0,00</span>
+                    </div>
+                  )}
+
+                  {((summary.notasDebitoGmf || 0) + (summary.notasDebitoComisiones || 0)) > 0 && (
+                    <div className="flex items-center justify-between text-rose-700 dark:text-rose-400">
+                      <span>(-) Gastos bancarios (GMF/Com):</span>
+                      <span className="font-mono font-bold">-{formatMoneyExact((summary.notasDebitoGmf || 0) + (summary.notasDebitoComisiones || 0))}</span>
+                    </div>
+                  )}
+
+                  {(summary.notasDebitoOperativas || 0) > 0 && (
+                    <div className="flex items-center justify-between text-rose-700 dark:text-rose-400">
+                      <span>(-) Otros cargos / retiros en extracto por causar:</span>
+                      <span className="font-mono font-bold">-{formatMoneyExact(summary.notasDebitoOperativas || 0)}</span>
+                    </div>
+                  )}
+
+                  {(summary.notasDebitoNoRegistradas || 0) === 0 && (
+                    <div className="flex items-center justify-between text-ink-muted">
+                      <span>(-) Gastos / Cargos por causar:</span>
+                      <span className="font-mono font-bold">-$ 0,00</span>
+                    </div>
+                  )}
                 </div>
                 <div className="pt-2 border-t border-line flex items-center justify-between font-black text-teal">
                   <span>(=) Saldo Libros Ajustado:</span>
@@ -771,14 +816,29 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                   <span className="font-mono">${formatMoneyExact(summary.saldoExtracto)}</span>
                 </div>
                 <div className="space-y-1 text-[11px]">
-                  <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400">
-                    <span>(+) Consignaciones en tránsito:</span>
-                    <span className="font-mono font-bold">+{formatMoneyExact(summary.consignacionesEnTransito || 0)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-rose-700 dark:text-rose-400">
-                    <span>(-) Cheques en tránsito:</span>
-                    <span className="font-mono font-bold">-{formatMoneyExact(summary.chequesEnTransito || 0)}</span>
-                  </div>
+                  {(summary.consignacionesEnTransito || 0) > 0 ? (
+                    <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400">
+                      <span>(+) Consignaciones en tránsito:</span>
+                      <span className="font-mono font-bold">+{formatMoneyExact(summary.consignacionesEnTransito || 0)}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between text-ink-muted">
+                      <span>(+) Consignaciones en tránsito:</span>
+                      <span className="font-mono font-bold">+$ 0,00</span>
+                    </div>
+                  )}
+
+                  {(summary.chequesEnTransito || 0) > 0 ? (
+                    <div className="flex items-center justify-between text-rose-700 dark:text-rose-400">
+                      <span>(-) Cheques en tránsito:</span>
+                      <span className="font-mono font-bold">-{formatMoneyExact(summary.chequesEnTransito || 0)}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between text-ink-muted">
+                      <span>(-) Cheques en tránsito:</span>
+                      <span className="font-mono font-bold">-$ 0,00</span>
+                    </div>
+                  )}
                 </div>
                 <div className="pt-2 border-t border-line flex items-center justify-between font-black text-teal">
                   <span>(=) Saldo Banco Ajustado:</span>
