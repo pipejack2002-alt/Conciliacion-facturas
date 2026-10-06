@@ -199,7 +199,9 @@ export const BankUploadCards = memo(function BankUploadCards({
               (a) =>
                 a.cuenta.startsWith("12503511") ||
                 a.cuenta.startsWith("12450541") ||
-                /credicorp|correval|fonval|serfinco/i.test(a.cuentaNombre)
+                a.cuenta.startsWith("1144") ||
+                a.cuenta.startsWith("1125") ||
+                /credicorp|correval|fonval|serfinco|fic\b|cartera\s*colectiva|fondo.*inversi/i.test(a.cuentaNombre)
             );
             const credicorpTotalMovs = credicorpAccounts.reduce(
               (sum, a) => sum + a.totalMovimientos,

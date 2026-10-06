@@ -317,14 +317,16 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
         (a) =>
           a.cuenta.startsWith("12503511") ||
           a.cuenta.startsWith("12450541") ||
-          /credicorp|correval|fonval|serfinco|fic/i.test(a.cuentaNombre)
+          a.cuenta.startsWith("1144") ||
+          a.cuenta.startsWith("1125") ||
+          /credicorp|correval|fonval|serfinco|fic\b|cartera\s*colectiva|fondo.*inversi/i.test(a.cuentaNombre)
       );
       if (credAccounts.length > 0) {
         if (selectedSubAccount === "alta_liquidez") {
           const matchAlta = credAccounts.find((a) => a.cuenta.startsWith("12503511"));
           setCuentaSeleccionada(matchAlta ? matchAlta.cuenta : credAccounts[0].cuenta);
         } else if (selectedSubAccount === "vista") {
-          const matchVista = credAccounts.find((a) => a.cuenta.startsWith("12450541"));
+          const matchVista = credAccounts.find((a) => a.cuenta.startsWith("12450541") || a.cuenta.startsWith("1144"));
           setCuentaSeleccionada(matchVista ? matchVista.cuenta : credAccounts[0].cuenta);
         } else if (credAccounts.length > 1) {
           setCuentaSeleccionada("credicorp_all");
@@ -374,7 +376,9 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
           (a) =>
             a.cuenta.startsWith("12503511") ||
             a.cuenta.startsWith("12450541") ||
-            /credicorp|correval|fonval|serfinco|fic/i.test(a.cuentaNombre)
+            a.cuenta.startsWith("1144") ||
+            a.cuenta.startsWith("1125") ||
+            /credicorp|correval|fonval|serfinco|fic\b|cartera\s*colectiva|fondo.*inversi/i.test(a.cuentaNombre)
         );
         if (credAccounts.length > 1) {
           if (chosen.id === "consolidado") {
@@ -383,7 +387,7 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
             const matchAlta = credAccounts.find((a) => a.cuenta.startsWith("12503511"));
             if (matchAlta) setCuentaSeleccionada(matchAlta.cuenta);
           } else if (chosen.id === "vista") {
-            const matchVista = credAccounts.find((a) => a.cuenta.startsWith("12450541"));
+            const matchVista = credAccounts.find((a) => a.cuenta.startsWith("12450541") || a.cuenta.startsWith("1144"));
             if (matchVista) setCuentaSeleccionada(matchVista.cuenta);
           }
         }

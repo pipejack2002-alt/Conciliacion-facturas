@@ -653,6 +653,177 @@ describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuen
     assert.strictEqual(res.rows[0].montoBanco, 3500000);
     assert.strictEqual(res.rows[0].diferencia, 0);
   });
+
+  it("debe conciliar rendimientos registrados en libros de la cuenta 114413 (Soporte Minero / SMTE) sin duplicar ni marcar como pendientes por causar", () => {
+    // Extracto bancario / fondo de inversión con abono de rendimientos del periodo actual
+    const extracto: BankExtractItem[] = [
+      {
+        id: "ext_rend_1",
+        fecha: "2026-08-31",
+        descripcion: "RENDIMIENTOS FINANCIEROS (CREDICORP CAPITAL ALTA LIQUIDEZ)",
+        referencia: "1-1-53747-4",
+        debito: 0,
+        credito: 13519.8,
+        saldo: 9829414.6,
+      },
+      {
+        id: "ext_mov_1",
+        fecha: "2026-08-28",
+        descripcion: "INCREMENTO POR TRASLADO DESDE CTA ADMIN VALORES",
+        referencia: "TRASLADO",
+        debito: 0,
+        credito: 9097528.28,
+        saldo: 9815894.8,
+      },
+    ];
+
+    // Libros contables de Soporte Minero Técnico (SMTE) cuenta 114413 con los rendimientos ya registrados
+    const libros: MovLine[] = [
+      {
+        cuenta: "11441301",
+        cuentaNombre: "114413 CREDICORP CAPITAL SMTE",
+        comprobante: "L 001 00000000122 001",
+        fecha: "2026-08-31",
+        nit: "860068182",
+        nombre: "CREDICORP CAPITAL COLOMBIA S.A",
+        descripcion: "CAUSACION RENDIMIENTOS AGOSTO 2026 SMTE",
+        cruce: "",
+        debito: 13519.8,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "11441301",
+        cuentaNombre: "114413 CREDICORP CAPITAL SMTE",
+        comprobante: "RC 002 00000000045 001",
+        fecha: "2026-08-28",
+        nit: "860068182",
+        nombre: "CREDICORP CAPITAL COLOMBIA S.A",
+        descripcion: "TRASLADO CTA ADMIN VALORES",
+        cruce: "TRASLADO",
+        debito: 9097528.28,
+        credito: 0,
+        observacion: "",
+      },
+    ];
+
+    const saldoInicial = 718366.52;
+    const res = conciliarBancos(extracto, libros, saldoInicial, saldoInicial);
+
+    // Verificaciones indispensables:
+    // 1. Debe haber exactamente 2 filas conciliadas y NINGUNA partida pendiente ni duplicada
+    assert.strictEqual(res.summary.totalItemsBanco, 2);
+    assert.strictEqual(res.summary.totalItemsLibros, 2);
+    assert.strictEqual(res.summary.totalConciliados, 2);
+    assert.strictEqual(res.rows.length, 2);
+
+    // 2. NINGUNA fila debe estar como nota_credito_banco ("Rendimientos pendientes por causar")
+    const pendientesPorCausar = res.rows.filter((r) => r.estado === "nota_credito_banco");
+    assert.strictEqual(pendientesPorCausar.length, 0, "No debe haber notas crédito pendientes si el usuario ya registró el rendimiento");
+
+    // 3. NINGUNA partida en tránsito en libros
+    assert.strictEqual(res.summary.consignacionesEnTransito, 0);
+    assert.strictEqual(res.summary.chequesEnTransito, 0);
+
+    // 4. El rendimiento debe aparecer UNA SOLA VEZ y con estado 'conciliado'
+    const rendimientoRows = res.rows.filter((r) => r.esRendimiento);
+    assert.strictEqual(rendimientoRows.length, 1, "El rendimiento debe aparecer exactamente UNA vez, no duplicado");
+    assert.strictEqual(rendimientoRows[0].estado, "conciliado");
+    assert.strictEqual(rendimientoRows[0].montoBanco, 13519.8);
+    assert.strictEqual(rendimientoRows[0].montoLibros, 13519.8);
+    assert.strictEqual(rendimientoRows[0].diferencia, 0);
+
+    // 5. La conciliación debe estar cuadrada al 100%
+    assert.strictEqual(res.summary.cuadrado, true);
+    assert.strictEqual(res.summary.diferenciaCuadre, 0);
+  });
+
+  it("debe conciliar rendimientos con diferencia de centavos por redondeo contable en ERP (ej. $13.519,80 vs $13.520)", () => {
+    const extracto: BankExtractItem[] = [
+      {
+        id: "ext_rend_dec",
+        fecha: "2026-08-31",
+        descripcion: "RENDIMIENTOS FINANCIEROS AGOSTO",
+        referencia: "REND",
+        debito: 0,
+        credito: 13519.8,
+        saldo: 1000000,
+      },
+    ];
+
+    const libros: MovLine[] = [
+      {
+        cuenta: "114413",
+        cuentaNombre: "CARTERA COLECTIVA 114413 SOPORTE MINERO",
+        comprobante: "L 001",
+        fecha: "2026-08-31",
+        nit: "860068182",
+        nombre: "CREDICORP CAPITAL",
+        descripcion: "RENDIMIENTOS AGOSTO",
+        cruce: "",
+        debito: 13520, // Redondeado al peso en el software contable
+        credito: 0,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliarBancos(extracto, libros, 500000, 500000);
+    assert.strictEqual(res.summary.totalConciliados, 1);
+    assert.strictEqual(res.rows[0].estado, "conciliado");
+    assert.strictEqual(res.rows[0].esRendimiento, true);
+    assert.ok(res.rows[0].diferencia <= 0.2);
+    assert.strictEqual(res.summary.notasCreditoNoRegistradas, 0);
+  });
+
+  it("debe conciliar en lote cuando la causación contable agrupa o divide subcuentas de rendimientos (1 abono extracto = 2 comprobantes libros)", () => {
+    const extracto: BankExtractItem[] = [
+      {
+        id: "ext_rend_total",
+        fecha: "2026-08-31",
+        descripcion: "ABONO RENDIMIENTOS FINANCIEROS CONSOLIDADOS",
+        referencia: "PORTAFOLIO",
+        debito: 0,
+        credito: 19601.21,
+        saldo: 5000000,
+      },
+    ];
+
+    const libros: MovLine[] = [
+      {
+        cuenta: "11441301",
+        cuentaNombre: "CARTERA ALTA LIQUIDEZ",
+        comprobante: "L 001",
+        fecha: "2026-08-31",
+        nit: "860068182",
+        nombre: "FIDUCIARIA",
+        descripcion: "RENDIMIENTOS SUB-PORTAFOLIO 1",
+        cruce: "",
+        debito: 13519.8,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "11441302",
+        cuentaNombre: "CARTERA VISTA",
+        comprobante: "L 002",
+        fecha: "2026-08-31",
+        nit: "860068182",
+        nombre: "FIDUCIARIA",
+        descripcion: "RENDIMIENTOS SUB-PORTAFOLIO 2",
+        cruce: "",
+        debito: 6081.41,
+        credito: 0,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliarBancos(extracto, libros);
+    assert.strictEqual(res.summary.totalConciliados, 1);
+    assert.strictEqual(res.rows[0].estado, "conciliado");
+    assert.strictEqual(res.rows[0].esRendimiento, true);
+    assert.strictEqual(res.rows[0].itemsLibrosLote?.length, 2);
+    assert.strictEqual(res.summary.notasCreditoNoRegistradas, 0);
+  });
 });
 
 

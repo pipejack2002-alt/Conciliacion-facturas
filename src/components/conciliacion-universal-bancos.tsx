@@ -209,12 +209,14 @@ export function ConciliacionUniversalBancosView({
     const bName = (extractPreview.bancoDetectado || "").toLowerCase();
     const bId = extractPreview.bancoId || "";
 
-    if (bId === "credicorp" || bName.includes("credicorp") || bName.includes("correval") || bName.includes("fonval")) {
+    if (bId === "credicorp" || bName.includes("credicorp") || bName.includes("correval") || bName.includes("fonval") || bName.includes("cartera colectiva")) {
       const credAccounts = availableAccounts.filter(
         (a) =>
           a.cuenta.startsWith("12503511") ||
           a.cuenta.startsWith("12450541") ||
-          /credicorp|correval|fonval|serfinco|fic/i.test(a.cuentaNombre)
+          a.cuenta.startsWith("1144") ||
+          a.cuenta.startsWith("1125") ||
+          /credicorp|correval|fonval|serfinco|fic\b|cartera\s*colectiva|fondo.*inversi/i.test(a.cuentaNombre)
       );
       if (credAccounts.length > 0) {
         // Ordenar por volumen de movimientos (la cuenta de mayor actividad primero)
@@ -782,7 +784,9 @@ export function ConciliacionUniversalBancosView({
                   (a) =>
                     a.cuenta.startsWith("12503511") ||
                     a.cuenta.startsWith("12450541") ||
-                    /credicorp|correval|fonval|serfinco/i.test(a.cuentaNombre)
+                    a.cuenta.startsWith("1144") ||
+                    a.cuenta.startsWith("1125") ||
+                    /credicorp|correval|fonval|serfinco|fic\b|cartera\s*colectiva|fondo.*inversi/i.test(a.cuentaNombre)
                 );
                 const credicorpTotalMovs = credicorpAccounts.reduce(
                   (sum, a) => sum + a.totalMovimientos,
