@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, Fragment } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback, Fragment } from "react";
 import {
   CheckCircle2,
   AlertCircle,
@@ -60,7 +60,19 @@ const SOFTWARE_NAMES: Record<string, string> = {
   auto: "Auto-Detección Inteligente",
 };
 
-export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLine[] }) {
+interface ConciliacionUniversalBancosProps {
+  movLines: MovLine[];
+  externalClearTrigger?: number;
+  onVaciar?: () => void;
+  onHasDataChange?: (hasData: boolean) => void;
+}
+
+export function ConciliacionUniversalBancosView({
+  movLines,
+  externalClearTrigger,
+  onVaciar,
+  onHasDataChange,
+}: ConciliacionUniversalBancosProps) {
   // Estado del archivo de extracto
   const [extractPreview, setExtractPreview] = useState<UniversalExtractPreview | null>(null);
   const [selectedSubAccount, setSelectedSubAccount] = useState<string>("consolidado");
@@ -76,13 +88,16 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
   const [customMovLines, setCustomMovLines] = useState<MovLine[] | null>(null);
   const [customMovFileName, setCustomMovFileName] = useState<string>("");
   const [isMovLoading, setIsMovLoading] = useState<boolean>(false);
+  const [isMovimientosVaciados, setIsMovimientosVaciados] = useState<boolean>(false);
 
-  // Movimientos contables efectivos
+  // Movimientos contables efectivos: si se vació explícitamente, retorna arreglo vacío
   const effectiveMovLines = useMemo(() => {
+    if (isMovimientosVaciados) return [];
     if (customMovLines && customMovLines.length > 0) return customMovLines;
+    if (customMovLines && customMovLines.length === 0) return [];
     if (movLines && movLines.length > 0) return movLines;
     return [];
-  }, [customMovLines, movLines]);
+  }, [isMovimientosVaciados, customMovLines, movLines]);
 
   // Cuentas de tesorería y bancos detectadas en libros
   const availableAccounts: DetectedBankAccount[] = useMemo(() => {
@@ -125,18 +140,38 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
     setSaldoInputStr(formatMoneyExact(saldoInicialExtracto).replace("$", "").trim());
   }
 
-  function handleVaciarUniversal() {
+  const handleVaciarUniversal = useCallback(() => {
     setExtractPreview(null);
     setCustomExtractItems(null);
     setSelectedSubAccount("consolidado");
     setExtractFileName("");
     setColumnConfig(null);
     setCustomMovLines([]);
+    setIsMovimientosVaciados(true);
     setCustomMovFileName("");
     setSaldoInicialExtracto(0);
     setSaldoInicialLibros(0);
     setSaldoInputStr("0,00");
-  }
+    setShowColumnMapper(false);
+    setExpandedRowId(null);
+    lastAutoDetectedKeyRef.current = "";
+    if (fileInputExtractRef.current) fileInputExtractRef.current.value = "";
+    if (fileInputMovRef.current) fileInputMovRef.current.value = "";
+    onVaciar?.();
+  }, [onVaciar]);
+
+  const handleReactivarSesionMov = useCallback(() => {
+    setIsMovimientosVaciados(false);
+    setCustomMovLines(null);
+    setCustomMovFileName("");
+  }, []);
+
+  // Escuchar trigger de vaciado externo proveniente del banner principal
+  useEffect(() => {
+    if (externalClearTrigger && externalClearTrigger > 0) {
+      handleVaciarUniversal();
+    }
+  }, [externalClearTrigger, handleVaciarUniversal]);
 
   // Fila expandida para auditoría detallada de comprobantes / lotes ACH
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
@@ -285,6 +320,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
       setExtractPreview(preview);
       setColumnConfig(preview.config);
       setCustomExtractItems(null);
+      setIsMovimientosVaciados(false);
 
       if (preview.cuentasDisponibles && preview.cuentasDisponibles.length > 0) {
         const defaultSub = preview.cuentasDisponibles[0];
@@ -311,6 +347,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
       );
     } finally {
       setIsExtractLoading(false);
+      if (fileInputExtractRef.current) fileInputExtractRef.current.value = "";
       if (e.target) e.target.value = "";
     }
   }
@@ -349,6 +386,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
 
       if (parsed.length > 0) {
         setCustomMovLines(parsed);
+        setIsMovimientosVaciados(false);
       } else {
         alert("No se detectaron movimientos contables en el archivo seleccionado.");
       }
@@ -357,9 +395,25 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
       alert("No se pudo leer el archivo Excel de movimientos contables.");
     } finally {
       setIsMovLoading(false);
+      if (fileInputMovRef.current) fileInputMovRef.current.value = "";
       if (e.target) e.target.value = "";
     }
   }
+
+  // Notificar al componente contenedor si hay datos en modo universal
+  const hasUniversalData = useMemo(() => {
+    return Boolean(
+      effectiveExtractItems.length > 0 ||
+      effectiveMovLines.length > 0 ||
+      extractFileName !== "" ||
+      customMovFileName !== "" ||
+      extractPreview !== null
+    );
+  }, [effectiveExtractItems.length, effectiveMovLines.length, extractFileName, customMovFileName, extractPreview]);
+
+  useEffect(() => {
+    onHasDataChange?.(hasUniversalData);
+  }, [hasUniversalData, onHasDataChange]);
 
   // Filas filtradas por tab y por texto de búsqueda
   const rowsFiltradas = useMemo(() => {
@@ -524,7 +578,7 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {(effectiveExtractItems.length > 0 || (customMovLines && customMovLines.length > 0)) && (
+            {hasUniversalData && (
               <button
                 type="button"
                 onClick={handleVaciarUniversal}
@@ -816,8 +870,22 @@ export function ConciliacionUniversalBancosView({ movLines }: { movLines: MovLin
             </button>
             <div className="mt-1 text-[11px] text-center text-ink-subtle truncate">
               {customMovFileName ||
-                (movLines && movLines.length > 0 ? "Movimientos de la sesión activa" : "Sin archivo")}
+                (movLines && movLines.length > 0 && !isMovimientosVaciados
+                  ? "Movimientos de la sesión activa"
+                  : "Sin archivo")}
             </div>
+            {isMovimientosVaciados && movLines && movLines.length > 0 && (
+              <div className="mt-2 text-center">
+                <button
+                  type="button"
+                  onClick={handleReactivarSesionMov}
+                  className="text-[11px] text-teal font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer bg-teal-soft/30 px-2.5 py-1 rounded-lg"
+                  title="Volver a asociar los movimientos del libro auxiliar de la sesión actual"
+                >
+                  <span>Reactivar movimientos de la sesión DIAN ({movLines.length})</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

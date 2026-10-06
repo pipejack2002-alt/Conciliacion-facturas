@@ -85,14 +85,24 @@ function cleanMoneyNumber(raw: unknown): number {
       // 1,234,567.89 (Anglosajón)
       s = s.replace(/,/g, "");
     }
+  } else if (hasDot && !hasComma) {
+    const parts = s.split(".");
+    if (parts.length > 2) {
+      // 1.500.000 -> 1500000 (múltiples separadores de miles)
+      s = s.replace(/\./g, "");
+    } else if (parts[1] && parts[1].length === 3) {
+      // 500.000 o 18.000 -> 500000 o 18000 (separador de miles único)
+      s = s.replace(/\./g, "");
+    }
+    // Si tiene 1 o 2 decimales (ej. 500.50), se mantiene como decimal
   } else if (hasComma && !hasDot) {
     const parts = s.split(",");
     if (parts.length > 2) {
       s = s.replace(/,/g, "");
-    } else if (parts[1] && parts[1].length <= 2) {
-      s = s.replace(",", ".");
     } else if (parts[1] && parts[1].length === 3 && parts[0].length <= 3) {
       s = s.replace(",", "");
+    } else if (parts[1] && parts[1].length <= 2) {
+      s = s.replace(",", ".");
     } else {
       s = s.replace(",", ".");
     }
@@ -104,19 +114,44 @@ function cleanMoneyNumber(raw: unknown): number {
 }
 
 /**
- * Normaliza fechas variadas (AGO 04, 28/Ago/26, 2026-08-04, 04/08/2026, 04-08-2026) a ISO YYYY-MM-DD
+ * Normaliza fechas variadas (AGO 04, 28/Ago/26, 2026-08-04, 04/08/2026, 04-08-2026, seriales Excel) a ISO YYYY-MM-DD
  */
-function normalizeDate(dStr: string, fallbackYear = "2026"): string {
+function normalizeDate(dStr: unknown, fallbackYear = "2026"): string {
+  if (dStr == null) return "";
+  if (dStr instanceof Date) {
+    return isNaN(dStr.getTime()) ? "" : dStr.toISOString().slice(0, 10);
+  }
+
+  // Serial numérico de Excel (ej. 45540 -> 2024-09-05)
+  if (typeof dStr === "number" && dStr > 30000 && dStr < 60000) {
+    const jsDate = new Date(Math.round((dStr - 25569) * 86400 * 1000));
+    return isNaN(jsDate.getTime()) ? "" : jsDate.toISOString().slice(0, 10);
+  }
+
   const s = String(dStr || "").trim();
   if (!s) return "";
 
-  // Formato YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // Serial numérico de Excel como string
+  if (/^\d{5}$/.test(s)) {
+    const num = Number(s);
+    if (num >= 30000 && num <= 60000) {
+      const jsDate = new Date(Math.round((num - 25569) * 86400 * 1000));
+      if (!isNaN(jsDate.getTime())) return jsDate.toISOString().slice(0, 10);
+    }
+  }
 
-  // Formato DD/MM/YYYY o DD-MM-YYYY
-  const mFull = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  // Formato YYYY-MM-DD o YYYY/MM/DD
+  const mIso = s.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+  if (mIso) {
+    return `${mIso[1]}-${mIso[2].padStart(2, "0")}-${mIso[3].padStart(2, "0")}`;
+  }
+
+  // Formato DD/MM/YYYY o DD-MM-YYYY o DD/MM/YY
+  const mFull = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
   if (mFull) {
-    return `${mFull[3]}-${mFull[2].padStart(2, "0")}-${mFull[1].padStart(2, "0")}`;
+    let yr = mFull[3];
+    if (yr.length === 2) yr = `20${yr}`;
+    return `${yr}-${mFull[2].padStart(2, "0")}-${mFull[1].padStart(2, "0")}`;
   }
 
   // Formato DD/MMM/YY o DD/MMM/YYYY (ej. 28/Ago/26)
@@ -720,32 +755,74 @@ function parseGenericPdf(pages: string[]): ParsedBankExtractResult {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
 
-      // Busca líneas con fecha al inicio y montos monetarios
-      const dMatch = line.match(/^(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}\s+[A-Za-z]{3}|[A-Za-z]{3}\s+\d{1,2})/);
+      // Busca líneas con fecha al inicio (incluyendo opcional consecutivo/espacio) y montos monetarios
+      const dMatch = line.match(
+        /^\s*(?:\d{1,4}\s+)?(\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}[/-][A-Za-z]{3}[/-]\d{2,4}|[A-Za-z]{3}\s+\d{1,2}|\d{1,2}\s+[A-Za-z]{3})/
+      );
       if (dMatch) {
-        const amounts = line.match(/-?\$?[\d,.]+\.\d{2}|-?\$?[\d.]+,\d{2}/g);
+        // Regex ampliado para montos con o sin centavos, con separador de miles o signo pesos
+        const amounts = line.match(
+          /(?:-|\()?\s*(?:\$\s*)?(?:\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{2})|\$\s*\d+)\)?/g
+        );
         if (amounts && amounts.length >= 1) {
           const f = normalizeDate(dMatch[1], currentYear);
-          const val1 = cleanMoneyNumber(amounts[0]);
-          const val2 = amounts[1] ? cleanMoneyNumber(amounts[1]) : 0;
 
-          // Limpiar descripción
+          // Limpiar descripción quitando fecha y montos
           let desc = line.replace(dMatch[0], "").trim();
           for (const a of amounts) {
             desc = desc.replace(a, "");
           }
           desc = desc.replace(/\s+/g, " ").trim();
 
-          const isDeb = val1 < 0 || (val2 === 0 && /retiro|debito|gmf|comision|pago/i.test(desc));
+          const val1 = cleanMoneyNumber(amounts[0]);
+          const val2 = amounts[1] ? cleanMoneyNumber(amounts[1]) : 0;
+          const val3 = amounts[2] ? cleanMoneyNumber(amounts[2]) : undefined;
 
-          items.push({
-            id: `gen_${items.length + 1}`,
-            fecha: f,
-            descripcion: desc || "Movimiento Extracto",
-            referencia: "",
-            debito: isDeb ? Math.abs(val1) : 0,
-            credito: !isDeb ? Math.abs(val1) : val2,
-          });
+          let debito = 0;
+          let credito = 0;
+          let saldo: number | undefined;
+
+          if (amounts.length >= 3) {
+            // Formato de 3 montos: Débito, Crédito, Saldo
+            debito = Math.abs(val1);
+            credito = Math.abs(val2);
+            saldo = val3;
+          } else if (amounts.length === 2) {
+            // Formato típico colombiano: Valor de la transacción y Saldo acumulado
+            const isRetiro =
+              val1 < 0 ||
+              /retiro|d[eé]bito|gmf|4x1000|comisi[oó]n|pago|egreso|salida|compra|cargo|descuento|ch-/i.test(desc);
+
+            if (isRetiro) {
+              debito = Math.abs(val1);
+            } else {
+              credito = Math.abs(val1);
+            }
+            saldo = val2;
+          } else {
+            // Un solo monto
+            const isRetiro =
+              val1 < 0 ||
+              /retiro|d[eé]bito|gmf|4x1000|comisi[oó]n|pago|egreso|salida|compra|cargo/i.test(desc);
+
+            if (isRetiro) {
+              debito = Math.abs(val1);
+            } else {
+              credito = Math.abs(val1);
+            }
+          }
+
+          if (debito > 0 || credito > 0) {
+            items.push({
+              id: `gen_${items.length + 1}`,
+              fecha: f,
+              descripcion: desc || "Movimiento Extracto",
+              referencia: "",
+              debito,
+              credito,
+              saldo,
+            });
+          }
         }
       }
     }
@@ -769,6 +846,7 @@ function parseGenericPdf(pages: string[]): ParsedBankExtractResult {
 
 /**
  * Función principal para analizar y parsear un extracto bancario en formato PDF
+ * Aplica extractores específicos y cuenta con fallback automático resiliente.
  */
 export async function parsePdfBankExtract(buffer: ArrayBuffer | Uint8Array): Promise<ParsedBankExtractResult> {
   const uint8 =
@@ -779,17 +857,20 @@ export async function parsePdfBankExtract(buffer: ArrayBuffer | Uint8Array): Pro
   const { text: pages } = await extractText(doc, { mergePages: false });
   const fullText = pages.join("\n");
 
-  // Identificación del banco
+  // Identificación del banco con fallback si el parser específico no encuentra movimientos
   if (/banco\s*caja\s*social|bcsc|bc\s*34/i.test(fullText)) {
-    return parseBancoCajaSocial(pages);
+    const res = parseBancoCajaSocial(pages);
+    if (res.items.length > 0) return res;
   }
 
   if (/credicorp\s*capital/i.test(fullText)) {
-    return parseCredicorpCapital(pages);
+    const res = parseCredicorpCapital(pages);
+    if (res.items.length > 0) return res;
   }
 
   if (/banistmo/i.test(fullText)) {
-    return parseBanistmo(pages);
+    const res = parseBanistmo(pages);
+    if (res.items.length > 0) return res;
   }
 
   return parseGenericPdf(pages);
@@ -797,6 +878,7 @@ export async function parsePdfBankExtract(buffer: ArrayBuffer | Uint8Array): Pro
 
 /**
  * Función para analizar y parsear un extracto bancario en formato Excel o CSV
+ * Soporta tildes en encabezados (Débito, Crédito, Depósito) y fechas seriales de Excel.
  */
 export function parseExcelBankExtract(data: ArrayBuffer | Uint8Array | string): ParsedBankExtractResult {
   const wb = typeof data === "string" ? XLSX.read(data, { type: "binary" }) : XLSX.read(data, { type: "array" });
@@ -804,16 +886,26 @@ export function parseExcelBankExtract(data: ArrayBuffer | Uint8Array | string): 
   const ws = wb.Sheets[sheetName];
   const rawRows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
+  const norm = (str: unknown) =>
+    String(str || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+
   let headerIdx = -1;
   for (let i = 0; i < Math.min(rawRows.length, 25); i++) {
-    const rowText = (rawRows[i] || []).join(" ").toLowerCase();
+    const rowText = (rawRows[i] || []).map(norm).join(" ");
     if (
-      rowText.includes("fecha") &&
+      (rowText.includes("fecha") || rowText.includes("date") || rowText.includes("dia")) &&
       (rowText.includes("debito") ||
         rowText.includes("retiro") ||
         rowText.includes("credito") ||
         rowText.includes("deposito") ||
+        rowText.includes("abono") ||
+        rowText.includes("cargo") ||
         rowText.includes("valor") ||
+        rowText.includes("monto") ||
         rowText.includes("saldo"))
     ) {
       headerIdx = i;
@@ -823,18 +915,28 @@ export function parseExcelBankExtract(data: ArrayBuffer | Uint8Array | string): 
 
   if (headerIdx === -1) headerIdx = 0;
 
-  const headerRow = (rawRows[headerIdx] || []).map((c) => String(c || "").toLowerCase().trim());
-  let iFecha = headerRow.findIndex((h) => h.includes("fecha"));
-  let iDesc = headerRow.findIndex((h) => h.includes("descrip") || h.includes("detalle") || h.includes("concepto"));
-  let iRef = headerRow.findIndex((h) => h.includes("ref") || h.includes("doc") || h.includes("comprobante"));
-  let iDeb = headerRow.findIndex((h) => h.includes("deb") || h.includes("retiro") || h.includes("cargo") || h.includes("egreso"));
-  let iCred = headerRow.findIndex((h) => h.includes("cred") || h.includes("dep") || h.includes("abono") || h.includes("ingreso"));
-  const iVal = headerRow.findIndex((h) => h.includes("valor") || h.includes("monto") || h.includes("importe"));
+  const headerRow = (rawRows[headerIdx] || []).map(norm);
+  let iFecha = headerRow.findIndex((h) => h.includes("fecha") || h.includes("date") || h === "fec");
+  let iDesc = headerRow.findIndex(
+    (h) => h.includes("descrip") || h.includes("detalle") || h.includes("concepto") || h.includes("movimiento")
+  );
+  let iRef = headerRow.findIndex(
+    (h) => h.includes("ref") || h.includes("doc") || h.includes("comprobante") || h.includes("cheque")
+  );
+  let iDeb = headerRow.findIndex(
+    (h) => h.includes("deb") || h.includes("retiro") || h.includes("cargo") || h.includes("egreso")
+  );
+  let iCred = headerRow.findIndex(
+    (h) => h.includes("cred") || h.includes("dep") || h.includes("abono") || h.includes("ingreso")
+  );
+  const iVal = headerRow.findIndex(
+    (h) => h.includes("valor") || h.includes("monto") || h.includes("importe") || h.includes("neto")
+  );
   const iSaldo = headerRow.findIndex((h) => h.includes("saldo") || h.includes("balance"));
 
   if (iFecha === -1) iFecha = 0;
-  if (iDesc === -1) iDesc = 1;
-  if (iRef === -1) iRef = 2;
+  if (iDesc === -1) iDesc = Math.min(1, headerRow.length - 1);
+  if (iRef === -1) iRef = Math.min(2, headerRow.length - 1);
   if (iDeb === -1 && iVal === -1) iDeb = 3;
   if (iCred === -1 && iVal === -1) iCred = 4;
 
@@ -844,8 +946,9 @@ export function parseExcelBankExtract(data: ArrayBuffer | Uint8Array | string): 
     const row = rawRows[r];
     if (!row || !row.length) continue;
 
-    const fRaw = String(row[iFecha] || "").trim();
-    if (!fRaw) continue;
+    const cellFecha = row[iFecha];
+    const fecha = normalizeDate(cellFecha);
+    if (!fecha) continue;
 
     const desc = iDesc !== -1 ? String(row[iDesc] || "").trim() : "";
     const ref = iRef !== -1 ? String(row[iRef] || "").trim() : "";
@@ -867,7 +970,7 @@ export function parseExcelBankExtract(data: ArrayBuffer | Uint8Array | string): 
     if (deb > 0 || cred > 0) {
       items.push({
         id: `ext_xl_${r}`,
-        fecha: normalizeDate(fRaw),
+        fecha,
         descripcion: desc,
         referencia: ref,
         debito: deb,

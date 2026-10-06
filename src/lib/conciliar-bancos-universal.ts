@@ -70,14 +70,23 @@ export function cleanMoneyNumber(raw: unknown): number {
       // 1,234,567.89 (Anglosajón)
       s = s.replace(/,/g, "");
     }
+  } else if (hasDot && !hasComma) {
+    const parts = s.split(".");
+    if (parts.length > 2) {
+      // 1.500.000 -> 1500000 (múltiples separadores de miles)
+      s = s.replace(/\./g, "");
+    } else if (parts[1] && parts[1].length === 3) {
+      // 500.000 o 18.000 -> 500000 o 18000 (separador de miles único)
+      s = s.replace(/\./g, "");
+    }
   } else if (hasComma && !hasDot) {
     const parts = s.split(",");
     if (parts.length > 2) {
       s = s.replace(/,/g, "");
-    } else if (parts[1] && parts[1].length <= 2) {
-      s = s.replace(",", ".");
     } else if (parts[1] && parts[1].length === 3 && parts[0].length <= 3) {
       s = s.replace(",", "");
+    } else if (parts[1] && parts[1].length <= 2) {
+      s = s.replace(",", ".");
     } else {
       s = s.replace(",", ".");
     }
@@ -91,9 +100,29 @@ export function cleanMoneyNumber(raw: unknown): number {
 /**
  * Normaliza fechas de cualquier banco colombiano o internacional a formato ISO YYYY-MM-DD
  */
-export function normalizeUniversalDate(dStr: string, fallbackYear?: string): string {
+export function normalizeUniversalDate(dStr: unknown, fallbackYear?: string): string {
+  if (dStr == null) return "";
+  if (dStr instanceof Date) {
+    return isNaN(dStr.getTime()) ? "" : dStr.toISOString().slice(0, 10);
+  }
+
+  // Serial numérico de Excel (ej. 45540 -> 2024-09-05)
+  if (typeof dStr === "number" && dStr > 30000 && dStr < 60000) {
+    const jsDate = new Date(Math.round((dStr - 25569) * 86400 * 1000));
+    return isNaN(jsDate.getTime()) ? "" : jsDate.toISOString().slice(0, 10);
+  }
+
   const s = String(dStr || "").trim();
   if (!s) return "";
+
+  // Serial numérico de Excel como string
+  if (/^\d{5}$/.test(s)) {
+    const num = Number(s);
+    if (num >= 30000 && num <= 60000) {
+      const jsDate = new Date(Math.round((num - 25569) * 86400 * 1000));
+      if (!isNaN(jsDate.getTime())) return jsDate.toISOString().slice(0, 10);
+    }
+  }
 
   const currentYear = fallbackYear || String(new Date().getFullYear());
 
@@ -103,10 +132,12 @@ export function normalizeUniversalDate(dStr: string, fallbackYear?: string): str
     return `${mIso[1]}-${mIso[2].padStart(2, "0")}-${mIso[3].padStart(2, "0")}`;
   }
 
-  // Formato DD/MM/YYYY o DD-MM-YYYY
-  const mFull = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  // Formato DD/MM/YYYY o DD-MM-YYYY o DD/MM/YY
+  const mFull = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
   if (mFull) {
-    return `${mFull[3]}-${mFull[2].padStart(2, "0")}-${mFull[1].padStart(2, "0")}`;
+    let yr = mFull[3];
+    if (yr.length === 2) yr = `20${yr}`;
+    return `${yr}-${mFull[2].padStart(2, "0")}-${mFull[1].padStart(2, "0")}`;
   }
 
   // Formato DD/MMM/YY o DD-MMM-YYYY (ej. 28/Ago/26, 15-ENE-2026)
@@ -234,8 +265,9 @@ export function parseUniversalBankRows(rawRows: any[][], config: UniversalColumn
     const row = rawRows[r];
     if (!row || !row.length) continue;
 
-    const fRaw = String(row[config.fechaCol] || "").trim();
-    if (!fRaw) continue;
+    const cellFecha = row[config.fechaCol];
+    const fecha = normalizeUniversalDate(cellFecha);
+    if (!fecha) continue;
 
     const desc = config.descripcionCol !== -1 ? String(row[config.descripcionCol] || "").trim() : "";
     const ref = config.referenciaCol !== -1 ? String(row[config.referenciaCol] || "").trim() : "";
@@ -264,7 +296,7 @@ export function parseUniversalBankRows(rawRows: any[][], config: UniversalColumn
     if (debito > 0 || credito > 0) {
       items.push({
         id: `univ_${r}`,
-        fecha: normalizeUniversalDate(fRaw),
+        fecha,
         descripcion: desc || "Movimiento Bancario",
         referencia: ref,
         debito,
@@ -328,14 +360,16 @@ export async function parseUniversalPdfBankExtract(
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
 
-      // Busca líneas con fecha al inicio
+      // Busca líneas con fecha al inicio (con o sin índice de fila previo)
       const dateMatch = line.match(
-        /^(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}[/-][A-Za-z]{3}[/-]\d{2,4}|[A-Za-z]{3}\s+\d{1,2}|\d{1,2}\s+[A-Za-z]{3})/
+        /^\s*(?:\d{1,4}\s+)?(\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}[/-][A-Za-z]{3}[/-]\d{2,4}|[A-Za-z]{3}\s+\d{1,2}|\d{1,2}\s+[A-Za-z]{3})/
       );
 
       if (dateMatch) {
-        // Encontrar todos los montos de la línea
-        const amounts = line.match(/-?\$?[\d,.]+\.\d{2}|-?\$?[\d.]+,\d{2}/g);
+        // Encontrar todos los montos de la línea con regex tolerante a pesos enteros o centavos
+        const amounts = line.match(
+          /(?:-|\()?\s*(?:\$\s*)?(?:\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{2})|\$\s*\d+)\)?/g
+        );
         if (amounts && amounts.length >= 1) {
           const f = normalizeUniversalDate(dateMatch[1], currentYear);
 
@@ -378,15 +412,27 @@ export async function parseUniversalPdfBankExtract(
 
           let debito = 0;
           let credito = 0;
+          let saldo: number | undefined;
 
-          if (amounts.length >= 2 && val1 > 0 && val2 > 0) {
-            // Dos columnas de valores
-            debito = val1;
-            credito = val2;
+          if (amounts.length >= 3) {
+            debito = Math.abs(val1);
+            credito = Math.abs(val2);
+            saldo = val3;
+          } else if (amounts.length === 2) {
+            const isRetiro =
+              val1 < 0 ||
+              /retiro|debito|d[eé]bito|gmf|4x1000|comisi[oó]n|pago|egreso|salida|compra|cargo|ch-/i.test(desc);
+
+            if (isRetiro) {
+              debito = Math.abs(val1);
+            } else {
+              credito = Math.abs(val1);
+            }
+            saldo = val2;
           } else {
             const isRetiro =
               val1 < 0 ||
-              /retiro|debito|d[eé]bito|gmf|4x1000|comisi[oó]n|pago|egreso|salida|compra/i.test(desc);
+              /retiro|debito|d[eé]bito|gmf|4x1000|comisi[oó]n|pago|egreso|salida|compra|cargo/i.test(desc);
 
             if (isRetiro) {
               debito = Math.abs(val1);
@@ -395,15 +441,17 @@ export async function parseUniversalPdfBankExtract(
             }
           }
 
-          items.push({
-            id: `updf_${items.length + 1}`,
-            fecha: f,
-            descripcion: desc || "Movimiento Extracto",
-            referencia: ref,
-            debito,
-            credito,
-            saldo: val3,
-          });
+          if (debito > 0 || credito > 0) {
+            items.push({
+              id: `updf_${items.length + 1}`,
+              fecha: f,
+              descripcion: desc || "Movimiento Extracto",
+              referencia: ref,
+              debito,
+              credito,
+              saldo,
+            });
+          }
         }
       }
     }

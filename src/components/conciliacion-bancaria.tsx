@@ -78,6 +78,9 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
   const [customMovLines, setCustomMovLines] = useState<MovLine[] | null>(() => initialBankSession?.customMovLines ?? null);
   const [customMovFileName, setCustomMovFileName] = useState<string>(() => initialBankSession?.customMovFileName ?? "");
   const [isMovLoading, setIsMovLoading] = useState<boolean>(false);
+  const [isMovimientosVaciados, setIsMovimientosVaciados] = useState<boolean>(false);
+  const [universalClearTrigger, setUniversalClearTrigger] = useState<number>(0);
+  const [hasUniversalData, setHasUniversalData] = useState<boolean>(false);
 
   // Saldos iniciales
   const [saldoInicialExtracto, setSaldoInicialExtracto] = useState<number>(() => initialBankSession?.saldoInicialExtracto ?? 0);
@@ -97,6 +100,8 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
   const fileInputExtractoRef = useRef<HTMLInputElement>(null);
   const fileInputMovRef = useRef<HTMLInputElement>(null);
   const hasTriggeredConfettiRef = useRef<boolean>(false);
+  const isVaciarRef = useRef<boolean>(false);
+  const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Cuenta contable seleccionada para la conciliación
   const [cuentaSeleccionada, setCuentaSeleccionada] = useState<string>(
@@ -105,21 +110,43 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
   const lastAutoDetectedKeyRef = useRef<string>("");
 
   const handleVaciarBancos = useCallback(() => {
+    isVaciarRef.current = true;
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+      autoSaveTimeoutRef.current = null;
+    }
     void clearStoredBankSession();
     setIsDemoMode(false);
     setExtractoItems([]);
     setExtractoMeta(null);
     setExtractoFileName("");
     setCustomMovLines([]);
+    setIsMovimientosVaciados(true);
     setCustomMovFileName("");
     setSaldoInicialExtracto(0);
     setSaldoInicialLibros(0);
     setSaldoInputStr("0,00");
     setCuentaSeleccionada("todas");
     hasTriggeredConfettiRef.current = false;
+    lastAutoDetectedKeyRef.current = "";
+
+    // Resetear valores en el DOM de los inputs tipo file para permitir re-selección inmediata del mismo archivo
+    if (fileInputExtractoRef.current) {
+      fileInputExtractoRef.current.value = "";
+    }
+    if (fileInputMovRef.current) {
+      fileInputMovRef.current.value = "";
+    }
+  }, []);
+
+  const handleReactivarSesionMov = useCallback(() => {
+    setIsMovimientosVaciados(false);
+    setCustomMovLines(null);
+    setCustomMovFileName("");
   }, []);
 
   const handleCargarDemo = useCallback(() => {
+    setIsMovimientosVaciados(false);
     setIsDemoMode(true);
     setExtractoItems(DEMO_EXTRACTO);
     setExtractoMeta(null);
@@ -175,6 +202,11 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
       return;
     }
 
+    if (isVaciarRef.current) {
+      isVaciarRef.current = false;
+      return;
+    }
+
     if (
       extractoItems.length > 0 ||
       (customMovLines && customMovLines.length > 0) ||
@@ -182,7 +214,10 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
       extractoFileName ||
       customMovFileName
     ) {
-      const handler = setTimeout(() => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+      autoSaveTimeoutRef.current = setTimeout(() => {
         void saveStoredBankSession({
           extractoItems,
           extractoMeta,
@@ -197,7 +232,11 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
           tabFilter,
         });
       }, 350);
-      return () => clearTimeout(handler);
+      return () => {
+        if (autoSaveTimeoutRef.current) {
+          clearTimeout(autoSaveTimeoutRef.current);
+        }
+      };
     }
   }, [
     extractoItems,
@@ -213,12 +252,14 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
     tabFilter,
   ]);
 
-  // Movimientos contables efectivos
+  // Movimientos contables efectivos: si se vació explícitamente, retorna arreglo vacío
   const effectiveMovLines = useMemo(() => {
+    if (isMovimientosVaciados) return [];
     if (customMovLines && customMovLines.length > 0) return customMovLines;
+    if (customMovLines && customMovLines.length === 0) return [];
     if (movLines && movLines.length > 0) return movLines;
     return [];
-  }, [customMovLines, movLines]);
+  }, [isMovimientosVaciados, customMovLines, movLines]);
 
   // Cuentas de tesorería y bancos detectadas en libros
   const availableAccounts: DetectedBankAccount[] = useMemo(() => {
@@ -462,6 +503,7 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
     try {
       const parsed = await parseBankExtractFile(file);
       setExtractoMeta(parsed);
+      setIsMovimientosVaciados(false);
 
       if (parsed.cuentasDisponibles && parsed.cuentasDisponibles.length > 0) {
         setSelectedSubAccount(parsed.cuentasDisponibles[0].id);
@@ -483,6 +525,7 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
       alert(err.message || "Error al procesar el archivo del extracto bancario.");
     } finally {
       setIsExtractoLoading(false);
+      if (fileInputExtractoRef.current) fileInputExtractoRef.current.value = "";
       if (e.target) e.target.value = "";
     }
   }
@@ -501,6 +544,7 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
 
       if (parsed.length > 0) {
         setCustomMovLines(parsed);
+        setIsMovimientosVaciados(false);
         setIsDemoMode(false);
       } else {
         alert("No se detectaron movimientos contables en el archivo Excel seleccionado.");
@@ -510,6 +554,7 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
       alert("No se pudo leer el archivo Excel de movimientos contables.");
     } finally {
       setIsMovLoading(false);
+      if (fileInputMovRef.current) fileInputMovRef.current.value = "";
       if (e.target) e.target.value = "";
     }
   }
@@ -558,15 +603,23 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
         <BankHeaderBanner
           modoVista={modoVista}
           onSetModoVista={setModoVista}
-          hasData={false}
-          onVaciar={handleVaciarBancos}
+          hasData={hasUniversalData}
+          onVaciar={() => {
+            handleVaciarBancos();
+            setUniversalClearTrigger((c) => c + 1);
+          }}
           isDemoMode={isDemoMode}
           canLoadDemo={false}
           onCargarDemo={handleCargarDemo}
           canExport={false}
           onExportarExcel={exportarConciliacionBancaria}
         />
-        <ConciliacionUniversalBancosView movLines={effectiveMovLines} />
+        <ConciliacionUniversalBancosView
+          movLines={effectiveMovLines}
+          externalClearTrigger={universalClearTrigger}
+          onVaciar={handleVaciarBancos}
+          onHasDataChange={setHasUniversalData}
+        />
       </div>
     );
   }
@@ -577,7 +630,7 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
       <BankHeaderBanner
         modoVista={modoVista}
         onSetModoVista={setModoVista}
-        hasData={extractoItems.length > 0 || effectiveMovLines.length > 0}
+        hasData={extractoItems.length > 0 || effectiveMovLines.length > 0 || isDemoMode}
         onVaciar={handleVaciarBancos}
         isDemoMode={isDemoMode}
         canLoadDemo={extractoItems.length === 0}
@@ -615,7 +668,10 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
         librosBancosCount={librosBancos.length}
         isMovLoading={isMovLoading}
         customMovFileName={customMovFileName}
-        hasSessionMovLines={Boolean(movLines && movLines.length > 0 && !customMovLines)}
+        hasSessionMovLines={Boolean(movLines && movLines.length > 0 && !customMovLines && !isMovimientosVaciados)}
+        isMovimientosVaciados={isMovimientosVaciados}
+        movLinesCount={movLines?.length || 0}
+        onReactivarSesionMov={handleReactivarSesionMov}
         fileInputMovRef={fileInputMovRef}
         onUploadMov={handleUploadMov}
       />

@@ -23,6 +23,9 @@ interface BankUploadCardsProps {
   isMovLoading: boolean;
   customMovFileName: string;
   hasSessionMovLines: boolean;
+  isMovimientosVaciados?: boolean;
+  movLinesCount?: number;
+  onReactivarSesionMov?: () => void;
   fileInputMovRef: React.RefObject<HTMLInputElement | null>;
   onUploadMov: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
@@ -46,6 +49,9 @@ export const BankUploadCards = memo(function BankUploadCards({
   isMovLoading,
   customMovFileName,
   hasSessionMovLines,
+  isMovimientosVaciados,
+  movLinesCount,
+  onReactivarSesionMov,
   fileInputMovRef,
   onUploadMov,
 }: BankUploadCardsProps) {
@@ -282,6 +288,18 @@ export const BankUploadCards = memo(function BankUploadCards({
             {customMovFileName ||
               (hasSessionMovLines ? "Movimientos de la sesión activa" : "Sin archivo")}
           </div>
+          {isMovimientosVaciados && movLinesCount && movLinesCount > 0 && onReactivarSesionMov && (
+            <div className="mt-2 text-center">
+              <button
+                type="button"
+                onClick={onReactivarSesionMov}
+                className="text-[11px] text-teal font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer bg-teal-soft/30 px-2.5 py-1 rounded-lg"
+                title="Volver a asociar los movimientos del libro auxiliar de la sesión actual"
+              >
+                <span>Reactivar movimientos de la sesión DIAN ({movLinesCount})</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
