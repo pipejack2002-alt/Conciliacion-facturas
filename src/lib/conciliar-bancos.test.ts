@@ -939,6 +939,146 @@ describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuen
     assert.strictEqual(res.summary.cuadrado, true);
     assert.strictEqual(res.summary.diferenciaCuadre, 0);
   });
+
+  it("debe conciliar al 100% cuando en el mismo mes se registran absolutamente todos los movimientos (rendimientos del mes, comisiones, retiros, consignaciones)", () => {
+    // Escenario solicitado por el usuario:
+    // La empresa registró todo durante el mismo mes (sin desfases entre meses).
+    // Extracto y libros tienen exactamente los mismos movimientos del mes.
+    const extracto: BankExtractItem[] = [
+      {
+        id: "ext-abono-1",
+        fecha: "2026-09-10",
+        descripcion: "CONSIGNACION CLIENTE NACIONAL",
+        referencia: "CONS-4501",
+        debito: 0,
+        credito: 25000000,
+        saldo: 35000000,
+      },
+      {
+        id: "ext-pago-1",
+        fecha: "2026-09-15",
+        descripcion: "PAGO PROVEEDORES TRANSFERENCIA ACH",
+        referencia: "TRANS-7890",
+        debito: 8500000,
+        credito: 0,
+        saldo: 26500000,
+      },
+      {
+        id: "ext-comision-1",
+        fecha: "2026-09-20",
+        descripcion: "COBRO COMISION BANCARIA TRANSF CON IVA",
+        referencia: "COM-0920",
+        debito: 37313.64,
+        credito: 0,
+        saldo: 26462686.36,
+      },
+      {
+        id: "ext-gmf-1",
+        fecha: "2026-09-30",
+        descripcion: "GRAVAMEN MOVIMIENTO FINANCIERO 4X1000",
+        referencia: "GMF-0930",
+        debito: 34149.25,
+        credito: 0,
+        saldo: 26428537.11,
+      },
+      {
+        id: "ext-rend-1",
+        fecha: "2026-09-30",
+        descripcion: "ABONO RENDIMIENTOS FINANCIEROS SEPTIEMBRE 2026",
+        referencia: "REND-SEP",
+        debito: 0,
+        credito: 116920.65,
+        saldo: 26545457.76,
+      },
+    ];
+
+    const libros: MovLine[] = [
+      {
+        cuenta: "11100501",
+        cuentaNombre: "BANCO CORRIENTE",
+        comprobante: "RC 001 4501",
+        fecha: "2026-09-10",
+        nit: "900111222",
+        nombre: "CLIENTE PRINCIPAL",
+        descripcion: "ABONO FACTURA CONS-4501",
+        cruce: "CONS-4501",
+        debito: 25000000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "11100501",
+        cuentaNombre: "BANCO CORRIENTE",
+        comprobante: "CE 002 7890",
+        fecha: "2026-09-15",
+        nit: "800333444",
+        nombre: "PROVEEDOR INDUSTRIAL",
+        descripcion: "PAGO FACTURA TRANS-7890",
+        cruce: "TRANS-7890",
+        debito: 0,
+        credito: 8500000,
+        observacion: "",
+      },
+      {
+        cuenta: "11100501",
+        cuentaNombre: "BANCO CORRIENTE",
+        comprobante: "L 001 00000000027",
+        fecha: "2026-09-30",
+        nit: "860068182",
+        nombre: "BANCO",
+        descripcion: "GASTO COMISION BANCARIA CON IVA",
+        cruce: "",
+        debito: 0,
+        credito: 37313.64,
+        observacion: "",
+      },
+      {
+        cuenta: "11100501",
+        cuentaNombre: "BANCO CORRIENTE",
+        comprobante: "L 001 00000000028",
+        fecha: "2026-09-30",
+        nit: "860068182",
+        nombre: "BANCO",
+        descripcion: "GMF 4X1000 SEPTIEMBRE",
+        cruce: "",
+        debito: 0,
+        credito: 34149.25,
+        observacion: "",
+      },
+      {
+        cuenta: "11100501",
+        cuentaNombre: "BANCO CORRIENTE",
+        comprobante: "L 001 00000000029",
+        fecha: "2026-09-30",
+        nit: "860068182",
+        nombre: "BANCO",
+        descripcion: "RENDIMIENTOS FINANCIEROS SEPTIEMBRE 2026",
+        cruce: "",
+        debito: 116920.65,
+        credito: 0,
+        observacion: "",
+      },
+    ];
+
+    const saldoInicial = 10000000;
+    const res = conciliarBancos(extracto, libros, saldoInicial, saldoInicial);
+
+    // Todos los 5 movimientos deben estar 100% conciliados
+    assert.strictEqual(res.summary.totalConciliados, 5);
+    assert.strictEqual(res.summary.consignacionesEnTransito, 0);
+    assert.strictEqual(res.summary.chequesEnTransito, 0);
+    assert.strictEqual(res.summary.notasDebitoNoRegistradas, 0);
+    assert.strictEqual(res.summary.notasDebitoComisiones, 0);
+    assert.strictEqual(res.summary.notasDebitoGmf, 0);
+    assert.strictEqual(res.summary.notasCreditoNoRegistradas, 0);
+    assert.strictEqual(res.summary.notasCreditoRendimientos, 0);
+
+    // Saldos exactamente iguales
+    assert.strictEqual(res.summary.saldoExtracto, res.summary.saldoLibros);
+    assert.strictEqual(res.summary.diferenciaExtractoLibros, 0);
+    assert.strictEqual(res.summary.diferenciaCuadre, 0);
+    assert.strictEqual(res.summary.cuadrado, true);
+  });
 });
 
 
