@@ -1079,6 +1079,152 @@ describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuen
     assert.strictEqual(res.summary.diferenciaCuadre, 0);
     assert.strictEqual(res.summary.cuadrado, true);
   });
+
+  it("debe conciliar caso real Credicorp con pago DIAN en 2 cheques, lotes ACH agrupados, retenciones y GMF consolidado dejando únicamente los rendimientos de $2.260.999,19", () => {
+    const extracto: BankExtractItem[] = [
+      // 1. Pago DIAN desglosado en 2 cheques de gerencia
+      { id: "b_ch1", fecha: "2026-09-09", descripcion: "RETIRO POR CHEQUE DE GERENCIA", referencia: "CH 1", debito: 4406000, credito: 0 },
+      { id: "b_ch2", fecha: "2026-09-09", descripcion: "RETIRO POR CHEQUE DE GERENCIA", referencia: "CH 2", debito: 8258000, credito: 0 },
+      // 2. Lote ACH 22 Sep
+      { id: "b_ach22", fecha: "2026-09-22", descripcion: "RETIRO POR TRANSFERENCIA ELECTRONICA", referencia: "ACH22", debito: 491700, credito: 0 },
+      // 3. Lote ACH 24 Sep
+      { id: "b_ach24", fecha: "2026-09-24", descripcion: "RETIRO POR TRANSFERENCIA ELECTRONICA", referencia: "ACH24", debito: 2342300, credito: 0 },
+      // 4. GMF diario fraccionado (2 partidas de prueba sumando 20.264.569,36)
+      { id: "b_gmf1", fecha: "2026-09-10", descripcion: "COBRO GM 12548 COBRO DE GMF SOBRE $4.354.615.000,00", referencia: "GMF1", debito: 17418460, credito: 0 },
+      { id: "b_gmf2", fecha: "2026-09-24", descripcion: "COBRO GM 13242 COBRO GMF TRASLADO A TERCERO NORCARBON SAS", referencia: "GMF2", debito: 2846109.36, credito: 0 },
+      // 5. Retenciones fraccionadas (sumando 89.636)
+      { id: "b_ret1", fecha: "2026-09-01", descripcion: "RETENCION", referencia: "RET1", debito: 40000, credito: 0 },
+      { id: "b_ret2", fecha: "2026-09-30", descripcion: "RETENCION", referencia: "RET2", debito: 49636, credito: 0 },
+      // 6. Rendimientos pendientes (única diferencia)
+      { id: "b_rend1", fecha: "2026-09-30", descripcion: "RENDIMIENTOS", referencia: "REND1", debito: 0, credito: 2256749.6 },
+      { id: "b_rend2", fecha: "2026-08-31", descripcion: "RENDIMIENTOS FINANCIEROS (CREDICORP CAPITAL VISTA)", referencia: "REND2", debito: 0, credito: 4249.59 },
+    ];
+
+    const libros: MovLine[] = [
+      // 1. Pago DIAN consolidado en libros (12.664.000 = 4.406.000 + 8.258.000)
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL",
+        comprobante: "G 001 00000009682 002",
+        fecha: "2026-09-08",
+        nit: "800197268",
+        nombre: "DIAN",
+        descripcion: "DIRECCION DE IMPUESTOS Y ADUANAS NACIONALES - DIAN",
+        cruce: "",
+        debito: 0,
+        credito: 12664000,
+        observacion: "",
+      },
+      // 2. Comprobantes de lote ACH 22 Sep (491.700 = 70.000 + 421.700)
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL",
+        comprobante: "G 001 00000009714 002",
+        fecha: "2026-09-22",
+        nit: "1",
+        nombre: "VIÑAS",
+        descripcion: "JAIRO ARMANDO VIÑAS PEREZ",
+        cruce: "",
+        debito: 0,
+        credito: 70000,
+        observacion: "",
+      },
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL",
+        comprobante: "G 001 00000009715 002",
+        fecha: "2026-09-22",
+        nit: "2",
+        nombre: "JURADO",
+        descripcion: "JUAN ALBERTO JURADO ARTETA",
+        cruce: "",
+        debito: 0,
+        credito: 421700,
+        observacion: "",
+      },
+      // 3. Comprobantes de lote ACH 24 Sep (2.342.300 = 1.516.800 + 150.000 + 675.500)
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL",
+        comprobante: "G 001 00000009716 002",
+        fecha: "2026-09-24",
+        nit: "3",
+        nombre: "GARCES",
+        descripcion: "IVAN DIEGO GARCES VALENCIA",
+        cruce: "",
+        debito: 0,
+        credito: 1516800,
+        observacion: "",
+      },
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL",
+        comprobante: "G 001 00000009717 002",
+        fecha: "2026-09-24",
+        nit: "4",
+        nombre: "VILLA",
+        descripcion: "ALEXANDER VILLA URUETA",
+        cruce: "",
+        debito: 0,
+        credito: 150000,
+        observacion: "",
+      },
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL",
+        comprobante: "G 001 00000009718 002",
+        fecha: "2026-09-24",
+        nit: "5",
+        nombre: "EDILSA",
+        descripcion: "EDILSA MANJARREZ MORENO",
+        cruce: "",
+        debito: 0,
+        credito: 675500,
+        observacion: "",
+      },
+      // 4. GMF mensual en libros
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL",
+        comprobante: "L 001 00000000123 005",
+        fecha: "2026-09-30",
+        nit: "860068182",
+        nombre: "CREDICORP",
+        descripcion: "GMF NO DEDUCIBLE SEPT",
+        cruce: "",
+        debito: 0,
+        credito: 20264569.36,
+        observacion: "",
+      },
+      // 5. Retención en la fuente mensual en libros
+      {
+        cuenta: "12503511",
+        cuentaNombre: "CORREVAL - FONVAL",
+        comprobante: "L 001 00000000123 002",
+        fecha: "2026-09-30",
+        nit: "860068182",
+        nombre: "CREDICORP",
+        descripcion: "CORREVAL - FONVAL RETENCION",
+        cruce: "",
+        debito: 0,
+        credito: 89636,
+        observacion: "",
+      },
+    ];
+
+    const saldoInicial = 100000000;
+    const res = conciliarBancos(extracto, libros, saldoInicial, saldoInicial);
+
+    // Verificaciones exactas
+    assert.strictEqual(res.summary.chequesEnTransito, 0, "No debe haber cheques en tránsito falsos");
+    assert.strictEqual(res.summary.consignacionesEnTransito, 0, "No debe haber consignaciones en tránsito");
+    assert.strictEqual(res.summary.notasDebitoNoRegistradas, 0, "No debe haber notas débito no registradas");
+    assert.strictEqual(res.summary.notasDebitoGmf, 0, "GMF no debe figurar como pendiente");
+    assert.strictEqual(res.summary.notasCreditoRendimientos, 2260999.19, "Rendimientos deben ser exactamente 2.260.999,19");
+    assert.strictEqual(res.summary.soloRendimientos, true, "soloRendimientos debe ser true");
+    assert.strictEqual(res.summary.cuadrado, true, "Conciliación debe estar cuadrada");
+    assert.ok(Math.abs(res.summary.diferenciaCuadre) <= 0.01, "Diferencia de cuadre debe ser 0");
+  });
 });
 
 
