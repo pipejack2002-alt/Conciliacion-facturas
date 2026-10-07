@@ -345,7 +345,7 @@ export const BankTable = memo(function BankTable({
               <tr>
                 <th
                   onClick={() => handleToggleSort("estado")}
-                  className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap min-w-[130px]"
+                  className="px-2.5 py-2.5 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap w-[110px]"
                   title="Clic para ordenar por Estado"
                 >
                   <div className="flex items-center gap-1">
@@ -363,7 +363,7 @@ export const BankTable = memo(function BankTable({
                 </th>
                 <th
                   onClick={() => handleToggleSort("fecha")}
-                  className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                  className="px-2 py-2.5 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap w-[85px]"
                   title="Clic para ordenar por Fecha"
                 >
                   <div className="flex items-center gap-1">
@@ -381,7 +381,7 @@ export const BankTable = memo(function BankTable({
                 </th>
                 <th
                   onClick={() => handleToggleSort("descripcion")}
-                  className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                  className="px-2.5 py-2.5 cursor-pointer hover:bg-bg-surface hover:text-ink transition group min-w-[180px]"
                   title="Clic para ordenar por Descripción"
                 >
                   <div className="flex items-center gap-1">
@@ -399,7 +399,7 @@ export const BankTable = memo(function BankTable({
                 </th>
                 <th
                   onClick={() => handleToggleSort("referencia")}
-                  className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                  className="px-2 py-2.5 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap w-[95px]"
                   title="Clic para ordenar por Referencia / Documento"
                 >
                   <div className="flex items-center gap-1">
@@ -417,7 +417,7 @@ export const BankTable = memo(function BankTable({
                 </th>
                 <th
                   onClick={() => handleToggleSort("montoBanco")}
-                  className="px-3.5 py-3 text-right cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                  className="px-2 py-2.5 text-right cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap w-[110px]"
                   title="Clic para ordenar por Monto de Extracto"
                 >
                   <div className="flex items-center justify-end gap-1">
@@ -435,7 +435,7 @@ export const BankTable = memo(function BankTable({
                 </th>
                 <th
                   onClick={() => handleToggleSort("montoLibros")}
-                  className="px-3.5 py-3 text-right cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                  className="px-2 py-2.5 text-right cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap w-[110px]"
                   title="Clic para ordenar por Monto en Libros"
                 >
                   <div className="flex items-center justify-end gap-1">
@@ -453,11 +453,11 @@ export const BankTable = memo(function BankTable({
                 </th>
                 <th
                   onClick={() => handleToggleSort("diagnostico")}
-                  className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
+                  className="px-2.5 py-2.5 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap w-[180px] lg:w-[220px]"
                   title="Clic para ordenar por Diagnóstico Contable"
                 >
                   <div className="flex items-center gap-1">
-                    <span>Diagnóstico Contable</span>
+                    <span>Diagnóstico</span>
                     {sortField === "diagnostico" ? (
                       sortDirection === "asc" ? (
                         <ArrowUp className="size-3.5 text-teal" />
@@ -469,7 +469,9 @@ export const BankTable = memo(function BankTable({
                     )}
                   </div>
                 </th>
-                <th className="px-3.5 py-3 text-center">Auditoría / Rastrear</th>
+                <th className="px-2 py-2.5 text-center whitespace-nowrap w-[130px] lg:w-[145px]">
+                  Auditoría / Asiento
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line/60">
@@ -503,7 +505,7 @@ export const BankTable = memo(function BankTable({
                   return (
                     <Fragment key={r.id}>
                       <tr className="hover:bg-bg-subtle/40 transition">
-                        <td className="px-3.5 py-2.5 whitespace-nowrap min-w-[130px]">
+                        <td className="px-2.5 py-2 whitespace-nowrap w-[110px]">
                           <span
                             className={cn(
                               "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-bold border shadow-2xs whitespace-nowrap shrink-0",
@@ -563,10 +565,10 @@ export const BankTable = memo(function BankTable({
                               : "Por Registrar"}
                           </span>
                         </td>
-                        <td className="px-3.5 py-2.5 font-mono text-ink-muted whitespace-nowrap">
+                        <td className="px-2 py-2 font-mono text-ink-muted whitespace-nowrap w-[85px]">
                           {formatDate(r.fecha)}
                         </td>
-                        <td className="px-3.5 py-2.5 font-medium text-ink min-w-[240px] max-w-[420px]">
+                        <td className="px-2.5 py-2 font-medium text-ink min-w-[180px]">
                           {(() => {
                             const isDescExpanded = expandedDescIds.has(r.id);
                             const isLong = (r.descripcion?.length || 0) > 35;
@@ -611,21 +613,21 @@ export const BankTable = memo(function BankTable({
                             );
                           })()}
                         </td>
-                        <td className="px-3.5 py-2.5 font-mono text-ink-subtle whitespace-nowrap">
+                        <td className="px-2 py-2 font-mono text-[11px] text-ink-subtle whitespace-nowrap w-[95px] max-w-[110px] truncate" title={r.referencia}>
                           {r.referencia || "—"}
                         </td>
-                        <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap">
+                        <td className="px-2 py-2 font-mono font-bold text-right text-ink whitespace-nowrap w-[110px]">
                           {r.montoBanco > 0 ? formatMoneyExact(r.montoBanco) : "—"}
                         </td>
-                        <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap">
+                        <td className="px-2 py-2 font-mono font-bold text-right text-ink whitespace-nowrap w-[110px]">
                           {r.montoLibros > 0 ? formatMoneyExact(r.montoLibros) : "—"}
                         </td>
-                        <td className="px-3.5 py-2.5 text-ink-muted leading-tight min-w-[200px] max-w-[380px]">
-                          <div className="whitespace-normal break-words" title={r.nota}>
+                        <td className="px-2.5 py-2 text-ink-muted leading-tight w-[180px] lg:w-[220px]">
+                          <div className="text-[11px] leading-snug line-clamp-2 hover:line-clamp-none transition-all cursor-pointer whitespace-normal break-words" title={r.nota}>
                             {r.nota}
                           </div>
                         </td>
-                        <td className="px-3.5 py-2.5 text-center whitespace-nowrap">
+                        <td className="px-2 py-2 text-center whitespace-nowrap w-[130px] lg:w-[145px]">
                           {r.itemsLibrosLote && r.itemsLibrosLote.length > 0 ? (
                             <button
                               type="button"
@@ -641,11 +643,11 @@ export const BankTable = memo(function BankTable({
                             <button
                               type="button"
                               onClick={() => setExpandedRowId(isExpanded ? null : r.id)}
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-bg-subtle hover:bg-teal-soft/60 text-ink hover:text-teal border border-line px-2.5 py-1 text-xs font-semibold transition cursor-pointer"
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-bg-subtle hover:bg-teal-soft/60 text-ink hover:text-teal border border-line px-2 py-1 text-xs font-semibold transition cursor-pointer max-w-[135px]"
                               title="Rastrear comprobante contable en libros"
                             >
                               <FileText className="size-3.5 text-teal" />
-                              <span>{r.itemLibros.comprobante ? `Comp. ${r.itemLibros.comprobante}` : "Rastrear"}</span>
+                              <span className="truncate max-w-[85px]">{r.itemLibros.comprobante ? `Comp. ${r.itemLibros.comprobante}` : "Rastrear"}</span>
                               <ChevronDown className={cn("size-3 transition-transform duration-200", isExpanded && "rotate-180")} />
                             </button>
                           ) : r.estado === "partida_en_transito_libros" ? (
