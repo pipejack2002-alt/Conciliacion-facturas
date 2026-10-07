@@ -238,18 +238,34 @@ export function parseBancoCajaSocial(pages: string[]): ParsedBankExtractResult {
         const lugarRegex = /\b(ACH|INTERNET|OFICINA|BE EM \d+ BAR GE)\s+(-?[\d,.]+)/gi;
         const matches = [...rest.matchAll(lugarRegex)];
 
+        let valorRaw: string | undefined;
+        let descAndDoc: string = "";
+        let saldoDisp: number | undefined;
+
         if (matches.length > 0) {
           const lastMatch = matches[matches.length - 1];
           const matchIndex = lastMatch.index ?? 0;
-          const valorRaw = lastMatch[2];
-
-          const descAndDoc = rest.slice(0, matchIndex).trim().replace(/\|/g, "").trim();
+          valorRaw = lastMatch[2];
+          descAndDoc = rest.slice(0, matchIndex).trim().replace(/\|/g, "").trim();
           const afterValor = rest.slice(matchIndex + lastMatch[0].length).trim();
-
-          // Extraer saldos posteriores
           const balances = afterValor.match(/-?[\d,.]+/g) || [];
-          const saldoDisp = balances[0] ? cleanMoneyNumber(balances[0]) : undefined;
+          saldoDisp = balances[0] ? cleanMoneyNumber(balances[0]) : undefined;
+        } else {
+          // Fallback por montos numéricos al final de la línea:
+          // Ej: [descripción y doc] [canal/opcional] -8,608,100.00 3,864,880.73 3,864,880.73
+          const numMatches = [...rest.matchAll(/(?:^|\s)(-?[\d,.]+)(?=\s|$)/g)];
+          const moneyNums = numMatches.filter((m) => /[\d,.]+(?:\.\d{2}|,\d{2})|\d{1,3}(?:[.,]\d{3})+/i.test(m[1]));
+          if (moneyNums.length >= 2) {
+            const valMatch = moneyNums.length >= 3 ? moneyNums[moneyNums.length - 3] : moneyNums[moneyNums.length - 2];
+            const saldoMatch = moneyNums[moneyNums.length - 1];
+            valorRaw = valMatch[1];
+            saldoDisp = cleanMoneyNumber(saldoMatch[1]);
+            const matchIndex = valMatch.index ?? 0;
+            descAndDoc = rest.slice(0, matchIndex).trim().replace(/\|/g, "").trim();
+          }
+        }
 
+        if (valorRaw) {
           // Extraer número de documento
           let desc = descAndDoc;
           let docRef = "";
@@ -888,6 +904,9 @@ function parseGenericPdf(pages: string[]): ParsedBankExtractResult {
   } else if (/davivienda/i.test(fullText)) {
     bancoNombre = "Banco Davivienda S.A.";
     bancoId = "davivienda";
+  } else if (/(?:banco\s*)?caja\s*social|bcsc/i.test(fullText)) {
+    bancoNombre = "Banco Caja Social (BCSC)";
+    bancoId = "banco_caja_social";
   }
 
   const ctaMatch = fullText.match(/(?:Cuenta|No\.?\s*Cuenta|No\.?\s*de\s*Cuenta)\s*[:.]?\s*([0-9*#-]{7,25})/i);
@@ -1004,7 +1023,7 @@ export function parseTextBankExtract(pages: string[]): ParsedBankExtractResult {
   const fullText = pages.join("\n");
 
   // Identificación del banco con fallback si el parser específico no encuentra movimientos
-  if (/banco\s*caja\s*social|bcsc|bc\s*34/i.test(fullText)) {
+  if (/(?:banco\s*)?caja\s*social|bcsc|bc\s*34/i.test(fullText)) {
     const res = parseBancoCajaSocial(pages);
     if (res.items.length > 0) return res;
   }
@@ -1034,6 +1053,11 @@ export async function parsePdfBankExtract(
     buffer instanceof Uint8Array
       ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
       : new Uint8Array(buffer);
+  
+  // Guardamos una copia independiente de los bytes antes de que getDocumentProxy
+  // pueda transferir o desasociar (detach) el ArrayBuffer subyacente.
+  const uint8Copy = uint8.slice();
+
   const doc = await getDocumentProxy(uint8);
   let { text: pages } = await extractText(doc, { mergePages: false });
   let fullText = pages.join("\n");
@@ -1044,7 +1068,7 @@ export async function parsePdfBankExtract(
   const totalChars = fullText.replace(/\s+/g, "").length;
   if (totalChars <= 80) {
     try {
-      const ocrPages = await extractTextFromPdfWithOcr(buffer, onProgress);
+      const ocrPages = await extractTextFromPdfWithOcr(uint8Copy, onProgress);
       if (ocrPages.length > 0 && ocrPages.join("").trim().length > 0) {
         pages = ocrPages;
         fullText = pages.join("\n");

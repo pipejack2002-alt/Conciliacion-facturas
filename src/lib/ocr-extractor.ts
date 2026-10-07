@@ -1,5 +1,5 @@
 import { createWorker, type Worker } from "tesseract.js";
-import { getDocumentProxy } from "unpdf";
+import { getDocumentProxy, renderPageAsImage } from "unpdf";
 
 let sharedWorkerPromise: Promise<Worker> | null = null;
 
@@ -93,36 +93,30 @@ export async function extractTextFromPdfWithOcr(
   buffer: ArrayBuffer | Uint8Array,
   onProgress?: (progress: number) => void
 ): Promise<string[]> {
-  const uint8 =
+  const isBrowser = typeof window !== "undefined" && typeof document !== "undefined";
+  if (!isBrowser) {
+    return [];
+  }
+
+  const rawBytes =
     buffer instanceof Uint8Array
       ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
       : new Uint8Array(buffer);
+  const uint8 = rawBytes.slice();
 
   const doc = await getDocumentProxy(uint8);
   const numPages = doc.numPages;
   const pagesText: string[] = [];
 
-  const isBrowser = typeof window !== "undefined" && typeof document !== "undefined";
-  if (!isBrowser) {
-    return pagesText;
-  }
-
   const worker = await getOcrWorker(onProgress);
 
   for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-    const page = await doc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 2.0 });
+    const dataUrl = await renderPageAsImage(doc, pageNum, {
+      scale: 2.0,
+      toDataURL: true,
+    });
 
-    const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    const ctx = canvas.getContext("2d");
-
-    if (!ctx) continue;
-
-    await page.render({ canvas, canvasContext: ctx, viewport }).promise;
-
-    const result = await worker.recognize(canvas);
+    const result = await worker.recognize(dataUrl);
     pagesText.push(result.data.text || "");
 
     if (onProgress) {
