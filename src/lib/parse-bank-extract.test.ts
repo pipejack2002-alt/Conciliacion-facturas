@@ -136,12 +136,31 @@ Pag. 2 de 2
     assert.strictEqual(res.items.length, 30);
     assert.strictEqual(res.totalDebitos, 61914410);
     assert.strictEqual(res.totalCreditos, 65183861);
+    assert.strictEqual(res.saldoInicial, 7472980.73);
     assert.strictEqual(res.saldoFinal, 10742431.73);
 
     // Verificar enrutador genérico parseTextBankExtract
     const resRouter = parseTextBankExtract([`Banco Caja Social`, page1, page2]);
     assert.strictEqual(resRouter.bancoId, "banco_caja_social");
     assert.strictEqual(resRouter.items.length, 30);
+    assert.strictEqual(resRouter.saldoInicial, 7472980.73);
+    assert.strictEqual(resRouter.saldoFinal, 10742431.73);
+
+    // Verificar clasificación de comisiones bancarias (COMIS. CONVENIO DE PAGO e IVA SOBRE COMISIONES)
+    const { classifyMovementConcept, conciliarBancos } = await import("./conciliar-bancos.ts");
+    const itemComis = res.items.find((it) => it.descripcion.includes("COMIS. CONVENIO DE PAGO"));
+    assert.ok(itemComis, "Debe existir la partida de COMIS. CONVENIO DE PAGO");
+    assert.strictEqual(classifyMovementConcept(itemComis!.descripcion).esComision, true, "COMIS. debe ser clasificado como comisión");
+
+    const itemIva = res.items.find((it) => it.descripcion.includes("IVA SOBRE COMISIONES"));
+    assert.ok(itemIva, "Debe existir la partida de IVA SOBRE COMISIONES");
+    assert.strictEqual(classifyMovementConcept(itemIva!.descripcion).esComision, true, "IVA SOBRE COMISIONES debe ser comisión");
+
+    // Ejecutar conciliación bancaria y verificar notasDebitoComisiones
+    const concRes = conciliarBancos(res.items, [], res.saldoInicial, res.saldoInicial);
+    assert.strictEqual(concRes.summary.notasDebitoGmf, 246669, "GMF debe ser 246.669");
+    assert.strictEqual(concRes.summary.notasDebitoComisiones, 9787, "Comisiones deben ser 8.224 + 1.563 = 9.787");
+    assert.strictEqual(concRes.summary.saldoExtracto, 10742431.73, "Saldo final de extracto debe ser 10.742.431,73");
   });
 });
 

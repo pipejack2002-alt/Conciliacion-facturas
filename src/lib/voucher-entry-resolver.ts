@@ -194,7 +194,7 @@ export function resolveVoucherFullEntry(
 
     const descUpper = `${bankLineToUse.descripcion || ""} ${row?.descripcion || ""}`.toUpperCase();
     const isGmf = Boolean(row?.esGmf || descUpper.includes("GMF") || descUpper.includes("4X1000") || descUpper.includes("GRAVAMEN") || compLabel.toUpperCase().startsWith("L"));
-    const isComision = Boolean(row?.esComision || descUpper.includes("COMISION") || descUpper.includes("MANEJO") || descUpper.includes("CUOTA"));
+    const isComision = Boolean(row?.esComision || descUpper.includes("COMIS") || descUpper.includes("MANEJO") || descUpper.includes("CUOTA"));
     const isRendimiento = Boolean(row?.esRendimiento || descUpper.includes("RENDIMIENTO") || descUpper.includes("INTERES"));
 
     const bankResolved: ResolvedVoucherLine = {

@@ -402,10 +402,29 @@ export function parseBancoCajaSocial(pages: string[]): ParsedBankExtractResult {
       ? Number((items[0].saldo! - items[0].credito + items[0].debito).toFixed(2))
       : undefined;
 
-  const resolvedSaldoInicial =
-    saldoInicial || saldoInicialFromFirstItem || (saldoFinal ? Number((saldoFinal - totalCreditos + totalDebitos).toFixed(2)) : 0);
-  const resolvedSaldoFinal =
-    saldoFinal || saldoFinalFromItems || Number((resolvedSaldoInicial + totalCreditos - totalDebitos).toFixed(2));
+  // Validación de consistencia matemática entre saldos de partidas y movimientos
+  const isItemsChainConsistent =
+    saldoInicialFromFirstItem !== undefined &&
+    saldoFinalFromItems !== undefined &&
+    Math.abs(saldoInicialFromFirstItem + totalCreditos - totalDebitos - saldoFinalFromItems) <= 0.05;
+
+  let resolvedSaldoInicial = 0;
+  let resolvedSaldoFinal = 0;
+
+  if (isItemsChainConsistent) {
+    // Si la cadena de saldos de las partidas es matemáticamente exacta, es la fuente de verdad definitiva
+    // (previene que texto distorsionado de OCR en el banner como "Cupo Sobregiro" o fechas corrompan el saldo)
+    resolvedSaldoInicial = saldoInicialFromFirstItem;
+    resolvedSaldoFinal = saldoFinalFromItems;
+  } else if (saldoInicial && Math.abs(saldoInicial + totalCreditos - totalDebitos - (saldoFinal || 0)) <= 0.05) {
+    resolvedSaldoInicial = saldoInicial;
+    resolvedSaldoFinal = saldoFinal || Number((saldoInicial + totalCreditos - totalDebitos).toFixed(2));
+  } else {
+    resolvedSaldoInicial =
+      saldoInicialFromFirstItem ?? (saldoInicial || (saldoFinal ? Number((saldoFinal - totalCreditos + totalDebitos).toFixed(2)) : 0));
+    resolvedSaldoFinal =
+      saldoFinalFromItems ?? (saldoFinal || Number((resolvedSaldoInicial + totalCreditos - totalDebitos).toFixed(2)));
+  }
 
   return {
     bancoId: "banco_caja_social",
@@ -1003,13 +1022,36 @@ function parseGenericPdf(pages: string[]): ParsedBankExtractResult {
   const totalDebitos = items.reduce((acc, it) => acc + it.debito, 0);
   const totalCreditos = items.reduce((acc, it) => acc + it.credito, 0);
 
+  const saldoFinalFromItems =
+    items.length > 0 && items[items.length - 1].saldo !== undefined
+      ? items[items.length - 1].saldo!
+      : undefined;
+
+  const saldoInicialFromFirstItem =
+    items.length > 0 && items[0].saldo !== undefined
+      ? Number((items[0].saldo! - items[0].credito + items[0].debito).toFixed(2))
+      : undefined;
+
+  const isChainConsistent =
+    saldoInicialFromFirstItem !== undefined &&
+    saldoFinalFromItems !== undefined &&
+    Math.abs(saldoInicialFromFirstItem + totalCreditos - totalDebitos - saldoFinalFromItems) <= 0.05;
+
+  const resolvedSaldoInicial = isChainConsistent
+    ? saldoInicialFromFirstItem
+    : saldoInicial || (saldoInicialFromFirstItem ?? 0);
+
+  const resolvedSaldoFinal = isChainConsistent
+    ? saldoFinalFromItems
+    : saldoFinal || saldoFinalFromItems || Number((resolvedSaldoInicial + totalCreditos - totalDebitos).toFixed(2));
+
   return {
     bancoId,
     bancoNombre,
     numeroCuenta,
     periodo: "",
-    saldoInicial,
-    saldoFinal: saldoFinal || saldoInicial + totalCreditos - totalDebitos,
+    saldoInicial: resolvedSaldoInicial,
+    saldoFinal: resolvedSaldoFinal,
     totalDebitos,
     totalCreditos,
     items,

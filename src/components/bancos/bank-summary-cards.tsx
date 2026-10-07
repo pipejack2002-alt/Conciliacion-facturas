@@ -249,7 +249,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                         <span className="block text-[10px] text-rose-700 dark:text-rose-400">Diferencia sin justificación documental</span>
                       </div>
                       <span className="font-mono font-black text-rose-800 dark:text-rose-300 whitespace-nowrap">
-                        ${formatMoneyExact(summary.diferenciaCuadre)}
+                        {formatMoneyExact(summary.diferenciaCuadre)}
                       </span>
                     </div>
                   )}
@@ -393,7 +393,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
             <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-bg-subtle/70 border border-line font-medium text-ink">
               <span className="font-bold">1. Saldo Final según Libro Auxiliar de Bancos (al corte):</span>
               <span className="font-mono font-black text-sm text-ink">
-                ${formatMoneyExact(summary.saldoLibros)}
+                {formatMoneyExact(summary.saldoLibros)}
               </span>
             </div>
 
@@ -509,7 +509,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                   (=) Saldo Bancario Conciliado (Libros Ajustados):
                 </span>
                 <span className="font-mono font-black text-sm text-teal-deep dark:text-teal">
-                  ${formatMoneyExact(summary.saldoConciliado)}
+                  {formatMoneyExact(summary.saldoConciliado)}
                 </span>
               </div>
 
@@ -518,7 +518,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                   (=) Saldo Final según Extracto Bancario al Corte:
                 </span>
                 <span className="font-mono font-bold text-ink">
-                  ${formatMoneyExact(summary.saldoExtracto)}
+                  {formatMoneyExact(summary.saldoExtracto)}
                 </span>
               </div>
 
@@ -556,7 +556,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 <div className="text-right shrink-0">
                   <span className="block text-[10px] text-ink-muted uppercase">Diferencia Neta:</span>
                   <span className="font-mono font-black text-sm text-emerald-700 dark:text-emerald-300">
-                    ${formatMoneyExact(summary.diferenciaCuadre)}
+                    {formatMoneyExact(summary.diferenciaCuadre)}
                   </span>
                 </div>
               </div>
@@ -571,7 +571,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
             <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-bg-subtle/70 border border-line font-medium text-ink">
               <span className="font-bold">1. Saldo Final según Extracto Bancario al Corte:</span>
               <span className="font-mono font-black text-sm text-ink">
-                ${formatMoneyExact(summary.saldoExtracto)}
+                {formatMoneyExact(summary.saldoExtracto)}
               </span>
             </div>
 
@@ -689,7 +689,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                   (=) Saldo Bancario Ajustado al Libro Contable:
                 </span>
                 <span className="font-mono font-black text-sm text-teal-deep dark:text-teal">
-                  ${formatMoneyExact(saldoBancoAjustadoALibros)}
+                  {formatMoneyExact(saldoBancoAjustadoALibros)}
                 </span>
               </div>
 
@@ -698,7 +698,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                   (=) Saldo Final según Libro Auxiliar de Bancos al Cierre:
                 </span>
                 <span className="font-mono font-bold text-ink">
-                  ${formatMoneyExact(summary.saldoLibros)}
+                  {formatMoneyExact(summary.saldoLibros)}
                 </span>
               </div>
 
@@ -736,7 +736,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 <div className="text-right shrink-0">
                   <span className="block text-[10px] text-ink-muted uppercase">Diferencia Neta:</span>
                   <span className="font-mono font-black text-sm text-emerald-700 dark:text-emerald-300">
-                    ${formatMoneyExact(difBancoALibros)}
+                    {formatMoneyExact(difBancoALibros)}
                   </span>
                 </div>
               </div>
@@ -755,7 +755,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                     <BookOpen className="size-3.5" />
                     Lado Contable (Libros)
                   </span>
-                  <span className="font-mono">${formatMoneyExact(summary.saldoLibros)}</span>
+                  <span className="font-mono">{formatMoneyExact(summary.saldoLibros)}</span>
                 </div>
                 <div className="space-y-1 text-[11px]">
                   {(summary.notasCreditoRendimientos || 0) > 0 && (
@@ -802,7 +802,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 </div>
                 <div className="pt-2 border-t border-line flex items-center justify-between font-black text-teal">
                   <span>(=) Saldo Libros Ajustado:</span>
-                  <span className="font-mono">${formatMoneyExact(saldoLibrosAjustado)}</span>
+                  <span className="font-mono">{formatMoneyExact(saldoLibrosAjustado)}</span>
                 </div>
               </div>
 
@@ -813,7 +813,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                     <Building2 className="size-3.5" />
                     Lado Bancario (Extracto)
                   </span>
-                  <span className="font-mono">${formatMoneyExact(summary.saldoExtracto)}</span>
+                  <span className="font-mono">{formatMoneyExact(summary.saldoExtracto)}</span>
                 </div>
                 <div className="space-y-1 text-[11px]">
                   {(summary.consignacionesEnTransito || 0) > 0 ? (
@@ -842,7 +842,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                 </div>
                 <div className="pt-2 border-t border-line flex items-center justify-between font-black text-teal">
                   <span>(=) Saldo Banco Ajustado:</span>
-                  <span className="font-mono">${formatMoneyExact(saldoBancoAjustado)}</span>
+                  <span className="font-mono">{formatMoneyExact(saldoBancoAjustado)}</span>
                 </div>
               </div>
             </div>
@@ -879,7 +879,7 @@ export const BankSummaryCards = memo(function BankSummaryCards({
               <div className="text-right shrink-0">
                 <span className="block text-[10px] text-ink-muted uppercase">Diferencia Neta:</span>
                 <span className="font-mono font-black text-sm text-emerald-700 dark:text-emerald-300">
-                  ${formatMoneyExact(difSaldosAjustados)}
+                  {formatMoneyExact(difSaldosAjustados)}
                 </span>
               </div>
             </div>

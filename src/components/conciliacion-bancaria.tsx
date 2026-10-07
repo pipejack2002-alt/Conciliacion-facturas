@@ -178,7 +178,10 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
       if (stored.customMovFileName) {
         setCustomMovFileName((prev) => prev || stored.customMovFileName);
       }
-      if (stored.saldoInicialExtracto !== undefined && stored.saldoInicialExtracto !== 0) {
+      if (stored.extractoMeta?.saldoInicial !== undefined && stored.extractoMeta.saldoInicial > 0) {
+        setSaldoInicialExtracto((prev) => (prev === 0 || prev === 20 ? stored.extractoMeta!.saldoInicial : prev));
+        setSaldoInicialLibros((prev) => (prev === 0 || prev === 20 ? stored.extractoMeta!.saldoInicial : prev));
+      } else if (stored.saldoInicialExtracto !== undefined && stored.saldoInicialExtracto !== 0) {
         setSaldoInicialExtracto((prev) => (prev === 0 ? stored.saldoInicialExtracto : prev));
         setSaldoInicialLibros((prev) => (prev === 0 ? stored.saldoInicialLibros : prev));
       }

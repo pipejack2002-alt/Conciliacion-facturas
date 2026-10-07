@@ -266,7 +266,7 @@ export function classifyMovementConcept(desc: string): {
   const esComision =
     !esGmf &&
     !esRendimiento &&
-    /comisi[oó]n|cuota.*manejo|chequera|tarifa|costo.*transf|costo.*transaccional|cobro.*(?:op|operaci[oó]n|bancar|tarifa|transf|servicio|cuota|mantenimiento)|cargo.*servicio|iva.*(?:comisi[oó]n|cuota|tarifa|bancar)/i.test(
+    /comis(?:i[oó]n|\.|\b)|cuota.*manejo|chequera|tarifa|costo.*transf|costo.*transaccional|cobro.*(?:op|operaci[oó]n|bancar|tarifa|transf|servicio|cuota|mantenimiento)|cargo.*servicio|iva.*(?:comis|cuota|tarifa|bancar)/i.test(
       d
     );
 
@@ -783,7 +783,7 @@ export function conciliarBancos(
 
     const isCom =
       classifyMovementConcept(bItem.descripcion).esComision ||
-      /cobro.*(?:op|operaci[oó]n|bancar|tarifa|transf|servicio|cuota)|comisi[oó]n|cuota.*manejo/i.test(
+      /cobro.*(?:op|operaci[oó]n|bancar|tarifa|transf|servicio|cuota)|comis(?:i[oó]n|\.|\b)|cuota.*manejo/i.test(
         bItem.descripcion
       );
     if (!isCom) continue;
@@ -837,7 +837,7 @@ export function conciliarBancos(
       !matchedExtractoIds.has(it.id) &&
       it.debito > 0 &&
       (classifyMovementConcept(it.descripcion).esComision ||
-        /cobro.*(?:op|operaci[oó]n|bancar|tarifa|transf|servicio|cuota)|comisi[oó]n/i.test(it.descripcion))
+        /cobro.*(?:op|operaci[oó]n|bancar|tarifa|transf|servicio|cuota)|comis(?:i[oó]n|\.|\b)/i.test(it.descripcion))
   );
   if (unassignedComItems.length >= 2) {
     const sumCom = unassignedComItems.reduce((s, it) => s + it.debito, 0);
@@ -1180,7 +1180,7 @@ export function conciliarBancos(
 
   const totalDebitosExtracto = extracto.reduce((a, b) => a + b.debito, 0);
   const totalCreditosExtracto = extracto.reduce((a, b) => a + b.credito, 0);
-  const saldoFinalExtracto = saldoInicialExtracto + totalCreditosExtracto - totalDebitosExtracto;
+  const saldoFinalExtracto = Number((saldoInicialExtracto + totalCreditosExtracto - totalDebitosExtracto).toFixed(2));
 
   // En libros: Si hubo nota contable de rendimientos del mes anterior (FASE 0) que ya estaba
   // incorporada en el saldo inicial del extracto bancario, no se duplica en los débitos operativos del periodo actual.
@@ -1202,7 +1202,7 @@ export function conciliarBancos(
       : saldoInicialLibros || saldoInicialExtracto;
 
   const saldoFinalLibros = cleanLibros.length > 0
-    ? baseInicialLibros + totalDebitosLibros - totalCreditosLibros
+    ? Number((baseInicialLibros + totalDebitosLibros - totalCreditosLibros).toFixed(2))
     : 0;
 
   // Conciliación de Libros a Extracto Bancario (Norma Técnica DIAN / NIIF):
@@ -1212,16 +1212,17 @@ export function conciliarBancos(
   // (+) Cheques / Giros en tránsito
   // (-) Consignaciones en tránsito
   // (=) Saldo Bancario Conciliado (debe coincidir con el Saldo según Extracto Bancario)
-  const saldoConciliado =
+  const saldoConciliado = Number((
     saldoFinalLibros +
     notasCreditoNoRegistradas -
     notasDebitoNoRegistradas +
     chequesEnTransito -
-    consignacionesEnTransito;
+    consignacionesEnTransito
+  ).toFixed(2));
 
-  const diferenciaCuadre = Math.abs(saldoConciliado - saldoFinalExtracto);
+  const diferenciaCuadre = Number(Math.abs(saldoConciliado - saldoFinalExtracto).toFixed(2));
   const cuadrado = cleanLibros.length > 0 && extracto.length > 0 && diferenciaCuadre < 1;
-  const diferenciaExtractoLibros = Math.abs(saldoFinalExtracto - saldoFinalLibros);
+  const diferenciaExtractoLibros = Number(Math.abs(saldoFinalExtracto - saldoFinalLibros).toFixed(2));
   const soloRendimientos =
     cuadrado &&
     notasCreditoRendimientos > 0 &&
