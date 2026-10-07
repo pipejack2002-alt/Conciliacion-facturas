@@ -299,7 +299,7 @@ export function AsientoContableModal({
               </div>
               <div className="sm:col-span-2 lg:col-span-4 pt-2 border-t border-line/60">
                 <span className="text-ink-muted block text-[11px]">Descripción del Movimiento:</span>
-                <span className="font-semibold text-ink">{row.descripcion}</span>
+                <span className="font-semibold text-ink break-words whitespace-normal leading-relaxed">{row.descripcion}</span>
               </div>
             </div>
           </div>
@@ -524,10 +524,10 @@ export function AsientoContableModal({
                                 </span>
                               )}
                             </td>
-                            <td className="px-3.5 py-2.5 font-medium text-ink max-w-64 truncate" title={line.cuentaNombre}>
+                            <td className="px-3.5 py-2.5 font-medium text-ink min-w-[140px] break-words whitespace-normal leading-relaxed" title={line.cuentaNombre}>
                               {line.cuentaNombre}
                             </td>
-                            <td className="px-3.5 py-2.5 text-ink max-w-64 truncate" title={line.nombre}>
+                            <td className="px-3.5 py-2.5 text-ink min-w-[140px] break-words whitespace-normal leading-relaxed" title={line.nombre}>
                               <span>{line.nombre || "—"}</span>
                               {line.nit && (
                                 <span className="block text-[10px] text-ink-subtle font-mono">
@@ -535,7 +535,7 @@ export function AsientoContableModal({
                                 </span>
                               )}
                             </td>
-                            <td className="px-3.5 py-2.5 text-ink-muted max-w-80 truncate" title={line.descripcion}>
+                            <td className="px-3.5 py-2.5 text-ink-muted min-w-[200px] break-words whitespace-normal leading-relaxed" title={line.descripcion}>
                               {line.descripcion}
                             </td>
                             <td className="px-3.5 py-2.5 font-mono text-ink-subtle whitespace-nowrap">

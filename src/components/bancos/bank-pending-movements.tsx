@@ -11,6 +11,8 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { formatMoneyExact, formatDate } from "@/lib/format";
 import type { BankConciliacionRow, BankConciliacionSummary } from "@/lib/conciliar-bancos";
@@ -50,6 +52,16 @@ export const BankPendingMovements = memo(function BankPendingMovements({
   const [filtroTipo, setFiltroTipo] = useState<"todos" | "rendimientos" | "abonos" | "cargos" | "transito">("todos");
   const [sortField, setSortField] = useState<BankPendingSortField>("fecha");
   const [sortDirection, setSortDirection] = useState<BankPendingSortDirection>("desc");
+  const [expandedDescIds, setExpandedDescIds] = useState<Set<string>>(new Set());
+
+  const toggleDesc = (id: string) => {
+    setExpandedDescIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   // Filtrar exclusivamente partidas pendientes de registro en libros o partidas en tránsito
   const pendingRows = useMemo(() => {
@@ -710,13 +722,58 @@ export const BankPendingMovements = memo(function BankPendingMovements({
                     </td>
 
                     {/* 4. Descripción */}
-                    <td className="py-2.5 px-3 max-w-[280px]">
-                      <div className="font-semibold text-ink truncate" title={r.descripcion}>
-                        {r.descripcion}
-                      </div>
-                      <div className="text-[10px] text-ink-muted truncate" title={r.nota}>
-                        {r.nota}
-                      </div>
+                    <td className="py-2.5 px-3 min-w-[260px] max-w-[420px]">
+                      {(() => {
+                        const isExpanded = expandedDescIds.has(r.id);
+                        const isLong = (r.descripcion?.length || 0) > 35 || (r.nota?.length || 0) > 40;
+
+                        return (
+                          <div className="space-y-1">
+                            <div className="flex items-start justify-between gap-1.5 group">
+                              <div
+                                onClick={() => isLong && toggleDesc(r.id)}
+                                className={cn(
+                                  "font-semibold text-ink leading-snug transition",
+                                  isLong && "cursor-pointer hover:text-teal select-text",
+                                  !isExpanded ? "truncate" : "whitespace-normal break-words"
+                                )}
+                                title={isLong ? (isExpanded ? "Clic para contraer" : "Clic para ver descripción completa") : r.descripcion}
+                              >
+                                {r.descripcion}
+                              </div>
+                              {isLong && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleDesc(r.id);
+                                  }}
+                                  className="shrink-0 p-1 rounded-md text-ink-muted hover:text-teal hover:bg-teal-soft/60 transition cursor-pointer"
+                                  title={isExpanded ? "Contraer detalle" : "Zoom: Ver detalle completo"}
+                                  aria-label={isExpanded ? "Contraer" : "Zoom"}
+                                >
+                                  {isExpanded ? (
+                                    <ZoomOut className="size-3.5 text-teal" />
+                                  ) : (
+                                    <ZoomIn className="size-3.5 text-ink-muted group-hover:text-teal" />
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                            <div
+                              onClick={() => isLong && toggleDesc(r.id)}
+                              className={cn(
+                                "text-[11px] text-ink-muted leading-snug transition",
+                                isLong && "cursor-pointer hover:text-ink select-text",
+                                !isExpanded ? "truncate" : "whitespace-normal break-words mt-0.5 text-ink-subtle"
+                              )}
+                              title={r.nota}
+                            >
+                              {r.nota}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     {/* 5. Referencia */}

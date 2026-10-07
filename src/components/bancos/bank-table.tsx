@@ -16,6 +16,8 @@ import {
   ArrowDown,
   Scale,
   CheckCircle2,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { formatMoneyExact, formatDate } from "@/lib/format";
 import type { BankConciliacionRow } from "@/lib/conciliar-bancos";
@@ -81,6 +83,16 @@ export const BankTable = memo(function BankTable({
   const [pageSize, setPageSize] = useState<number>(50);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const [expandedDescIds, setExpandedDescIds] = useState<Set<string>>(new Set());
+
+  const toggleDesc = (id: string) => {
+    setExpandedDescIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   // Filtrado de filas (pestañas + búsqueda debounced)
   const filteredRows = useMemo(() => {
@@ -554,13 +566,50 @@ export const BankTable = memo(function BankTable({
                         <td className="px-3.5 py-2.5 font-mono text-ink-muted whitespace-nowrap">
                           {formatDate(r.fecha)}
                         </td>
-                        <td className="px-3.5 py-2.5 font-medium text-ink max-w-80 truncate" title={r.descripcion}>
-                          {r.esGmf && (
-                            <span className="mr-1.5 inline-block text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300">
-                              GMF 4x1000
-                            </span>
-                          )}
-                          {r.descripcion}
+                        <td className="px-3.5 py-2.5 font-medium text-ink min-w-[240px] max-w-[420px]">
+                          {(() => {
+                            const isDescExpanded = expandedDescIds.has(r.id);
+                            const isLong = (r.descripcion?.length || 0) > 35;
+
+                            return (
+                              <div className="flex items-start justify-between gap-1.5 group">
+                                <div
+                                  onClick={() => isLong && toggleDesc(r.id)}
+                                  className={cn(
+                                    "leading-snug transition",
+                                    isLong && "cursor-pointer hover:text-teal select-text",
+                                    !isDescExpanded ? "truncate" : "whitespace-normal break-words"
+                                  )}
+                                  title={isLong ? (isDescExpanded ? "Clic para contraer" : "Clic para ver descripción completa") : r.descripcion}
+                                >
+                                  {r.esGmf && (
+                                    <span className="mr-1.5 inline-block text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300">
+                                      GMF 4x1000
+                                    </span>
+                                  )}
+                                  {r.descripcion}
+                                </div>
+                                {isLong && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleDesc(r.id);
+                                    }}
+                                    className="shrink-0 p-1 rounded-md text-ink-muted hover:text-teal hover:bg-teal-soft/60 transition cursor-pointer"
+                                    title={isDescExpanded ? "Contraer descripción" : "Zoom: Ver descripción completa"}
+                                    aria-label={isDescExpanded ? "Contraer" : "Zoom"}
+                                  >
+                                    {isDescExpanded ? (
+                                      <ZoomOut className="size-3.5 text-teal" />
+                                    ) : (
+                                      <ZoomIn className="size-3.5 text-ink-muted group-hover:text-teal" />
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="px-3.5 py-2.5 font-mono text-ink-subtle whitespace-nowrap">
                           {r.referencia || "—"}
@@ -571,8 +620,10 @@ export const BankTable = memo(function BankTable({
                         <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap">
                           {r.montoLibros > 0 ? formatMoneyExact(r.montoLibros) : "—"}
                         </td>
-                        <td className="px-3.5 py-2.5 text-ink-muted leading-tight max-w-80">
-                          {r.nota}
+                        <td className="px-3.5 py-2.5 text-ink-muted leading-tight min-w-[200px] max-w-[380px]">
+                          <div className="whitespace-normal break-words" title={r.nota}>
+                            {r.nota}
+                          </div>
                         </td>
                         <td className="px-3.5 py-2.5 text-center whitespace-nowrap">
                           {r.itemsLibrosLote && r.itemsLibrosLote.length > 0 ? (
@@ -686,7 +737,7 @@ export const BankTable = memo(function BankTable({
                                             <span className="font-semibold">{c.nombre || "—"}</span>
                                             {c.nit && <span className="text-[10px] text-ink-subtle block font-mono">NIT: {c.nit}</span>}
                                           </td>
-                                          <td className="px-3 py-2 text-ink-muted max-w-64 truncate" title={c.descripcion}>
+                                          <td className="px-3 py-2 text-ink-muted min-w-[180px] break-words whitespace-normal leading-relaxed" title={c.descripcion}>
                                             {c.descripcion}
                                           </td>
                                           <td className="px-3 py-2 font-mono text-ink-subtle">
@@ -808,14 +859,14 @@ export const BankTable = memo(function BankTable({
                                                   </span>
                                                 )}
                                               </td>
-                                              <td className="px-3 py-2 font-medium text-ink max-w-56 truncate" title={line.cuentaNombre}>
+                                              <td className="px-3 py-2 font-medium text-ink min-w-[140px] break-words whitespace-normal" title={line.cuentaNombre}>
                                                 {line.cuentaNombre}
                                               </td>
-                                              <td className="px-3 py-2 text-ink max-w-56 truncate" title={line.nombre}>
+                                              <td className="px-3 py-2 text-ink min-w-[140px] break-words whitespace-normal" title={line.nombre}>
                                                 <span>{line.nombre || "—"}</span>
                                                 {line.nit && <span className="block text-[10px] text-ink-subtle font-mono">NIT: {line.nit}</span>}
                                               </td>
-                                              <td className="px-3 py-2 text-ink-muted max-w-64 truncate" title={line.descripcion}>
+                                              <td className="px-3 py-2 text-ink-muted min-w-[200px] break-words whitespace-normal leading-relaxed" title={line.descripcion}>
                                                 {line.descripcion}
                                               </td>
                                               <td className="px-3 py-2 font-mono text-ink-subtle whitespace-nowrap">
