@@ -647,13 +647,13 @@ export function ConciliacionUniversalBancosView({
                 </span>
               ) : (
                 <span className="rounded-full bg-bg-subtle text-ink-subtle px-2 py-0.5 text-[10px] font-medium">
-                  PDF / Excel / CSV
+                  PDF / Excel / CSV / Imagen
                 </span>
               )}
             </div>
 
             <p className="text-xs text-ink-muted mb-3">
-              Arrastra o sube el extracto de tu banco en PDF, Excel o CSV. El motor detectará automáticamente las columnas y la estructura.
+              Arrastra o sube el extracto de tu banco en PDF, Excel, CSV o Imagen (PNG, JPG). El motor detectará automáticamente las columnas y la estructura por texto u OCR.
             </p>
 
             {extractPreview && (
@@ -671,7 +671,7 @@ export function ConciliacionUniversalBancosView({
                   <span className="font-bold text-teal">{effectiveExtractItems.length} movimientos</span>
                 </div>
 
-                {extractPreview.fileType !== "pdf" && (
+                {extractPreview.fileType !== "pdf" && extractPreview.fileType !== "image" && (
                   <button
                     type="button"
                     onClick={() => setShowColumnMapper(!showColumnMapper)}
@@ -726,7 +726,7 @@ export function ConciliacionUniversalBancosView({
             <input
               ref={fileInputExtractRef}
               type="file"
-              accept=".pdf,.xlsx,.xls,.csv"
+              accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg,.webp"
               onChange={handleUploadExtract}
               className="hidden"
             />
@@ -739,15 +739,15 @@ export function ConciliacionUniversalBancosView({
               {isExtractLoading ? (
                 <>
                   <RefreshCw className="size-3.5 animate-spin" />
-                  <span>Analizando extracto bancario...</span>
+                  <span>Analizando extracto u OCR...</span>
                 </>
               ) : (
                 <>
                   <Upload className="size-3.5" />
                   <span>
                     {extractPreview
-                      ? "Cargar Otro Extracto Bancario"
-                      : "Subir Extracto Bancario (PDF / Excel / CSV)"}
+                      ? "Cargar Otro Extracto (PDF / Excel / Imagen)"
+                      : "Subir Extracto Bancario (PDF / Excel / Imagen)"}
                   </span>
                 </>
               )}

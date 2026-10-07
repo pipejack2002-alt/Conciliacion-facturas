@@ -1,6 +1,7 @@
 import { getDocumentProxy, extractText } from "unpdf";
 import * as XLSX from "xlsx";
 import type { BankExtractItem } from "./conciliar-bancos.ts";
+import { isImageFile, isPdfFile, extractTextFromImage, extractTextFromPdfWithOcr } from "./ocr-extractor.ts";
 
 export type BankId =
   | "banco_caja_social"
@@ -73,6 +74,11 @@ function cleanMoneyNumber(raw: unknown): number {
   }
 
   s = s.replace(/[$€COPcopUSD]/g, "").trim();
+
+  // Eliminar artefactos de puntuación OCR duplicados (ej: ".,", ",,", "..")
+  s = s.replace(/\.+/g, ".").replace(/,+/g, ",");
+  if (s.includes(".,")) s = s.replace(".,", ",");
+  if (s.includes(",.")) s = s.replace(",.", ".");
 
   const hasDot = s.includes(".");
   const hasComma = s.includes(",");
@@ -179,25 +185,31 @@ function normalizeDate(dStr: unknown, fallbackYear = "2026"): string {
 
 /**
  * Extractor especializado para Banco Caja Social (BCSC)
+ * Soporta tanto texto digital nativo como texto obtenido por OCR en extractos escaneados o vectorizados.
  */
-function parseBancoCajaSocial(pages: string[]): ParsedBankExtractResult {
+export function parseBancoCajaSocial(pages: string[]): ParsedBankExtractResult {
   const fullText = pages.join("\n");
 
   // Detección de cuenta corriente
-  const ctaMatch = fullText.match(/Cuenta\s+Corriente\s+([0-9*]{10,25})/i);
+  const ctaMatch =
+    fullText.match(/Cuenta\s+Corriente\s*[\n\r\s]*([0-9*]{4,25})/i) ||
+    fullText.match(/(\d{4,12})\s+Detalle\s+de\s+Productos/i) ||
+    fullText.match(/Cuenta\s+Corriente\s+([0-9*]{10,25})/i);
   const numeroCuenta = ctaMatch ? ctaMatch[1] : "";
 
   // Detección de periodo
-  const periodoMatch = fullText.match(/Periodo del Informe\s+([\w\s]+a[\w\s]+\d{4})/i);
+  const periodoMatch =
+    fullText.match(/Periodo\s+del\s+Informe[\s\S]*?(\d{1,2}\s+de\s+[A-Za-z]+\s+a\s+\d{1,2}\s+de\s+[A-Za-z]+\s+de\s+\d{4})/i) ||
+    fullText.match(/Periodo\s+del\s+Informe\s+([\w\s]+a[\w\s]+\d{4})/i);
   const periodo = periodoMatch ? periodoMatch[1].trim() : "";
   const yearMatch = periodo.match(/\b(20\d{2})\b/);
   const currentYear = yearMatch ? yearMatch[1] : String(new Date().getFullYear());
 
   // Saldos
-  const saldoIniMatch = fullText.match(/Saldo\s+(?:Disponible|Total)\s+Anterior\s+([\d,.]+)/i);
+  const saldoIniMatch = fullText.match(/Saldo\s+(?:Disponible|Total)\s+Anterior[\s\S]*?([\d,.]+)/i);
   const saldoInicial = saldoIniMatch ? cleanMoneyNumber(saldoIniMatch[1]) : 0;
 
-  const saldoFinMatch = fullText.match(/Nuevo\s+Saldo\s+([\d,.]+)/i);
+  const saldoFinMatch = fullText.match(/Nuevo\s+Saldo[\s\S]*?([\d,.]+)/i);
   const saldoFinal = saldoFinMatch ? cleanMoneyNumber(saldoFinMatch[1]) : 0;
 
   const items: BankExtractItem[] = [];
@@ -206,10 +218,109 @@ function parseBancoCajaSocial(pages: string[]): ParsedBankExtractResult {
     const lines = page.split("\n").map((l) => l.trim()).filter(Boolean);
 
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+      let line = lines[i];
 
-      // Formato típico Banco Caja Social:
-      // AGO 04 DEBITO AUTORIZADO POR ACH 07068610 ACH -2,272,515.00 20,246,726.78 20,246,726.78
+      // Eliminar posibles artefactos de marca de agua vertical antes del mes (ej. "a SEP 17", ": SEP 11", "ra SEP 17")
+      const dateIdx = line.search(/\b(ENE|FEB|MAR|ABR|MAY|JUN|JUL|AGO|SEP|OCT|NOV|DIC)\s+\d{1,2}\b/i);
+      if (dateIdx !== -1) {
+        line = line.slice(dateIdx);
+      }
+
+      // 1. Detección flexible (compatible con OCR y texto digital con pipes opcionales)
+      // Ej: SEP 04 | CREDITO TRANSFERENCIA 89764801 INTERNET 5,000,000.00 12,472,980.73 12,472,980.73
+      const dateMatch = line.match(/^([A-Z]{3})\s+(\d{1,2})\s*\|?\s*(.+)$/i);
+      if (dateMatch) {
+        const monStr = dateMatch[1].toUpperCase();
+        const dayStr = dateMatch[2].padStart(2, "0");
+        const rest = dateMatch[3].trim();
+
+        // Buscar última aparición de LUGAR + VALOR (ACH, INTERNET, OFICINA, BE EM ...)
+        const lugarRegex = /\b(ACH|INTERNET|OFICINA|BE EM \d+ BAR GE)\s+(-?[\d,.]+)/gi;
+        const matches = [...rest.matchAll(lugarRegex)];
+
+        if (matches.length > 0) {
+          const lastMatch = matches[matches.length - 1];
+          const matchIndex = lastMatch.index ?? 0;
+          const valorRaw = lastMatch[2];
+
+          const descAndDoc = rest.slice(0, matchIndex).trim().replace(/\|/g, "").trim();
+          const afterValor = rest.slice(matchIndex + lastMatch[0].length).trim();
+
+          // Extraer saldos posteriores
+          const balances = afterValor.match(/-?[\d,.]+/g) || [];
+          const saldoDisp = balances[0] ? cleanMoneyNumber(balances[0]) : undefined;
+
+          // Extraer número de documento
+          let desc = descAndDoc;
+          let docRef = "";
+          const docMatch = descAndDoc.match(/\b(\d{6,14})\b(?:\s*)$/);
+          if (docMatch) {
+            docRef = docMatch[1];
+            desc = descAndDoc.slice(0, docMatch.index).trim();
+          } else {
+            const anyDoc = descAndDoc.match(/\b(\d{7,10})\b/);
+            if (anyDoc) {
+              docRef = anyDoc[1];
+              desc = descAndDoc.replace(anyDoc[0], "").trim();
+            }
+          }
+
+          // Capturar líneas siguientes descriptivas (ej. DEBITO POR LOTE:...)
+          let fullDesc = desc;
+          if (/gravamen\s+movs?\s+financieros|gmf\b/i.test(desc)) {
+            fullDesc = "GRAVAMEN MOVIMIENTOS FINANCIEROS (GMF 4x1000)";
+          } else if (/iva\s+sobre\s+comisiones/i.test(desc)) {
+            fullDesc = "IVA SOBRE COMISIONES";
+          } else {
+            let j = i + 1;
+            while (j < lines.length) {
+              const nextL = lines[j];
+              if (
+                /\b(ENE|FEB|MAR|ABR|MAY|JUN|JUL|AGO|SEP|OCT|NOV|DIC)\s+\d{1,2}\b/i.test(nextL) ||
+                nextL.startsWith("Pag.") ||
+                nextL.startsWith("Continua") ||
+                nextL.startsWith("BC") ||
+                nextL.startsWith("Fecha Transacción")
+              ) {
+                break;
+              }
+              if (nextL.length > 2 && !nextL.includes("Seguro de Depósito") && !nextL.includes("Fogafín")) {
+                fullDesc += ` ${nextL}`;
+              }
+              j++;
+              if (j - i > 3) break;
+            }
+          }
+
+          let valor = cleanMoneyNumber(valorRaw);
+
+          // En BCSC los retiros/débitos son negativos (-valor). Si el signo menos fue omitido por OCR:
+          const isDebitoKeyword = /DEBITO|COMIS|GRAVAMEN|IVA|PAGO/i.test(descAndDoc);
+          const isCreditoKeyword = /CREDITO|ABONO|CONSIGNACION/i.test(descAndDoc);
+
+          let isDebito = valor < 0;
+          if (valor > 0 && isDebitoKeyword && !isCreditoKeyword) {
+            isDebito = true;
+          }
+
+          const deb = isDebito ? Math.abs(valor) : 0;
+          const cred = !isDebito ? Math.abs(valor) : 0;
+          const fecha = normalizeDate(`${monStr} ${dayStr}`, currentYear);
+
+          items.push({
+            id: `bcs_${items.length + 1}`,
+            fecha,
+            descripcion: fullDesc.trim(),
+            referencia: docRef,
+            debito: deb,
+            credito: cred,
+            saldo: saldoDisp,
+          });
+          continue;
+        }
+      }
+
+      // 2. Fallback regex tradicional para líneas de texto digital estándar
       const txMatch = line.match(
         /^([A-Z]{3})\s+(\d{1,2})\s+(.+?)\s+(\d{6,14})\s+(ACH|INTERNET|OFICINA|BE EM 962 BAR GE|[A-Z0-9\s]+?)\s+(-?[\d,.]+)\s+([\d,.]+)\s+([\d,.]+)$/
       );
@@ -224,7 +335,6 @@ function parseBancoCajaSocial(pages: string[]): ParsedBankExtractResult {
 
         const fecha = normalizeDate(`${monStr} ${dayStr}`, currentYear);
 
-        // Capturar líneas siguientes descriptivas (ej. DEBITO POR LOTE:...)
         let fullDesc = descBase;
         if (/gravamen\s+movs?\s+financieros|gmf\b/i.test(descBase)) {
           fullDesc = "GRAVAMEN MOVIMIENTOS FINANCIEROS (GMF 4x1000)";
@@ -246,7 +356,7 @@ function parseBancoCajaSocial(pages: string[]): ParsedBankExtractResult {
           }
         }
 
-        const isDebito = valor < 0; // En extracto Caja Social, negativo es retiro/débito
+        const isDebito = valor < 0;
         const deb = isDebito ? Math.abs(valor) : 0;
         const cred = !isDebito ? valor : 0;
 
@@ -266,13 +376,28 @@ function parseBancoCajaSocial(pages: string[]): ParsedBankExtractResult {
   const totalDebitos = items.reduce((acc, it) => acc + it.debito, 0);
   const totalCreditos = items.reduce((acc, it) => acc + it.credito, 0);
 
+  const saldoFinalFromItems =
+    items.length > 0 && items[items.length - 1].saldo !== undefined
+      ? items[items.length - 1].saldo!
+      : undefined;
+
+  const saldoInicialFromFirstItem =
+    items.length > 0 && items[0].saldo !== undefined
+      ? Number((items[0].saldo! - items[0].credito + items[0].debito).toFixed(2))
+      : undefined;
+
+  const resolvedSaldoInicial =
+    saldoInicial || saldoInicialFromFirstItem || (saldoFinal ? Number((saldoFinal - totalCreditos + totalDebitos).toFixed(2)) : 0);
+  const resolvedSaldoFinal =
+    saldoFinal || saldoFinalFromItems || Number((resolvedSaldoInicial + totalCreditos - totalDebitos).toFixed(2));
+
   return {
     bancoId: "banco_caja_social",
     bancoNombre: "Banco Caja Social (BCSC)",
     numeroCuenta,
     periodo,
-    saldoInicial,
-    saldoFinal: saldoFinal || saldoInicial + totalCreditos - totalDebitos,
+    saldoInicial: resolvedSaldoInicial,
+    saldoFinal: resolvedSaldoFinal,
     totalDebitos,
     totalCreditos,
     items,
@@ -873,16 +998,9 @@ function parseGenericPdf(pages: string[]): ParsedBankExtractResult {
 }
 
 /**
- * Función principal para analizar y parsear un extracto bancario en formato PDF
- * Aplica extractores específicos y cuenta con fallback automático resiliente.
+ * Analiza el texto plano de páginas extraídas (digitalmente o vía OCR) y ejecuta el parser bancario adecuado
  */
-export async function parsePdfBankExtract(buffer: ArrayBuffer | Uint8Array): Promise<ParsedBankExtractResult> {
-  const uint8 =
-    buffer instanceof Uint8Array
-      ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
-      : new Uint8Array(buffer);
-  const doc = await getDocumentProxy(uint8);
-  const { text: pages } = await extractText(doc, { mergePages: false });
+export function parseTextBankExtract(pages: string[]): ParsedBankExtractResult {
   const fullText = pages.join("\n");
 
   // Identificación del banco con fallback si el parser específico no encuentra movimientos
@@ -902,6 +1020,41 @@ export async function parsePdfBankExtract(buffer: ArrayBuffer | Uint8Array): Pro
   }
 
   return parseGenericPdf(pages);
+}
+
+/**
+ * Función principal para analizar y parsear un extracto bancario en formato PDF
+ * Aplica extractores específicos y cuenta con fallback automático resiliente vía OCR.
+ */
+export async function parsePdfBankExtract(
+  buffer: ArrayBuffer | Uint8Array,
+  onProgress?: (progress: number) => void
+): Promise<ParsedBankExtractResult> {
+  const uint8 =
+    buffer instanceof Uint8Array
+      ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+      : new Uint8Array(buffer);
+  const doc = await getDocumentProxy(uint8);
+  let { text: pages } = await extractText(doc, { mergePages: false });
+  let fullText = pages.join("\n");
+
+  // Si el texto extraído digitalmente es casi nulo (<= 80 caracteres),
+  // se trata de un PDF escaneado o con texto vectorizado (como extractos de BCSC convertidos a curvas).
+  // Activamos automáticamente el OCR con Tesseract.
+  const totalChars = fullText.replace(/\s+/g, "").length;
+  if (totalChars <= 80) {
+    try {
+      const ocrPages = await extractTextFromPdfWithOcr(buffer, onProgress);
+      if (ocrPages.length > 0 && ocrPages.join("").trim().length > 0) {
+        pages = ocrPages;
+        fullText = pages.join("\n");
+      }
+    } catch (ocrErr) {
+      console.warn("Fallo en fallback OCR de PDF:", ocrErr);
+    }
+  }
+
+  return parseTextBankExtract(pages);
 }
 
 /**
@@ -1025,14 +1178,23 @@ export function parseExcelBankExtract(data: ArrayBuffer | Uint8Array | string): 
 }
 
 /**
- * Función unificada para cargar un extracto bancario desde un archivo (PDF, XLSX, XLS, CSV)
+ * Función unificada para cargar un extracto bancario desde un archivo (PDF, XLSX, XLS, CSV, o Imágenes PNG/JPG/WEBP)
  */
-export async function parseBankExtractFile(file: File): Promise<ParsedBankExtractResult> {
-  const isPdf = file.name.toLowerCase().endsWith(".pdf") || file.type.includes("pdf");
-  const buffer = await file.arrayBuffer();
+export async function parseBankExtractFile(
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<ParsedBankExtractResult> {
+  const isPdf = isPdfFile(file);
+  const isImg = isImageFile(file);
 
+  if (isImg) {
+    const text = await extractTextFromImage(file, onProgress);
+    return parseTextBankExtract([text]);
+  }
+
+  const buffer = await file.arrayBuffer();
   if (isPdf) {
-    return parsePdfBankExtract(buffer);
+    return parsePdfBankExtract(buffer, onProgress);
   }
   return parseExcelBankExtract(buffer);
 }

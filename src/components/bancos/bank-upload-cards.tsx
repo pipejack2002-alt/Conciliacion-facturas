@@ -57,7 +57,7 @@ export const BankUploadCards = memo(function BankUploadCards({
 }: BankUploadCardsProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {/* Tarjeta 1: Carga de Extracto Bancario (PDF o Excel) */}
+      {/* Tarjeta 1: Carga de Extracto Bancario (PDF, Excel o Imagen) */}
       <div className="rounded-2xl border border-line bg-bg-surface p-4 shadow-2xs flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between gap-2 mb-2">
@@ -66,7 +66,7 @@ export const BankUploadCards = memo(function BankUploadCards({
                 <FileText className="size-4" />
               </span>
               <span className="text-xs font-bold uppercase tracking-wider text-ink">
-                1. Extracto Bancario (PDF o Excel)
+                1. Extracto Bancario (PDF, Excel o Imagen)
               </span>
             </div>
             {extractoMeta ? (
@@ -75,13 +75,13 @@ export const BankUploadCards = memo(function BankUploadCards({
               </span>
             ) : (
               <span className="rounded-full bg-bg-subtle text-ink-subtle px-2 py-0.5 text-[10px] font-medium">
-                PDF / XLSX / CSV
+                PDF / XLSX / CSV / IMAGEN
               </span>
             )}
           </div>
 
           <p className="text-xs text-ink-muted mb-3">
-            Sube el extracto bancario emitido por la entidad financiera. Compatible con Banco Caja Social, Credicorp Capital, Banistmo, Bancolombia, Davivienda y formatos universales.
+            Sube el extracto emitido por la entidad financiera (PDF digital o escaneado, imagen PNG/JPG o archivo Excel). Compatible con Banco Caja Social, Credicorp Capital, Banistmo, Bancolombia, Davivienda y formatos universales con OCR.
           </p>
 
           {extractoMeta && (
@@ -134,7 +134,7 @@ export const BankUploadCards = memo(function BankUploadCards({
           <input
             ref={fileInputExtractoRef}
             type="file"
-            accept=".pdf,.xlsx,.xls,.csv"
+            accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg,.webp"
             onChange={onUploadExtracto}
             className="hidden"
           />
@@ -147,13 +147,13 @@ export const BankUploadCards = memo(function BankUploadCards({
             {isExtractoLoading ? (
               <>
                 <RefreshCw className="size-3.5 animate-spin" />
-                <span>Procesando extracto...</span>
+                <span>Procesando extracto u OCR...</span>
               </>
             ) : (
               <>
                 <Upload className="size-3.5" />
                 <span>
-                  {extractoMeta ? "Reemplazar Extracto (PDF o Excel)" : "Subir Extracto Bancario (PDF / Excel)"}
+                  {extractoMeta ? "Reemplazar Extracto (PDF / Excel / Imagen)" : "Subir Extracto Bancario (PDF / Excel / Imagen)"}
                 </span>
               </>
             )}

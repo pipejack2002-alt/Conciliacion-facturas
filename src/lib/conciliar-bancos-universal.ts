@@ -1,7 +1,8 @@
 import { getDocumentProxy, extractText } from "unpdf";
 import * as XLSX from "xlsx";
 import type { BankExtractItem } from "./conciliar-bancos.ts";
-import { parsePdfBankExtract, type BankSubAccount } from "./parse-bank-extract.ts";
+import { parsePdfBankExtract, parseTextBankExtract, type BankSubAccount } from "./parse-bank-extract.ts";
+import { isImageFile, isPdfFile, extractTextFromImage } from "./ocr-extractor.ts";
 
 export interface UniversalColumnMapping {
   headerRow: number;
@@ -17,7 +18,7 @@ export interface UniversalColumnMapping {
 
 export interface UniversalExtractPreview {
   fileName: string;
-  fileType: "pdf" | "excel" | "csv";
+  fileType: "pdf" | "excel" | "csv" | "image";
   bancoDetectado: string;
   bancoId?: string;
   numeroCuenta?: string;
@@ -58,6 +59,11 @@ export function cleanMoneyNumber(raw: unknown): number {
   }
 
   s = s.replace(/[$€COPcopUSD]/g, "").trim();
+
+  // Eliminar artefactos de puntuación OCR duplicados (ej: ".,", ",,", "..")
+  s = s.replace(/\.+/g, ".").replace(/,+/g, ",");
+  if (s.includes(".,")) s = s.replace(".,", ",");
+  if (s.includes(",.")) s = s.replace(",.", ".");
 
   const hasDot = s.includes(".");
   const hasComma = s.includes(",");
@@ -488,13 +494,62 @@ export async function parseUniversalPdfBankExtract(
 /**
  * Lee un archivo de extracto (PDF, Excel o CSV) y genera la previsualización y extracción universal
  */
-export async function processUniversalExtractFile(file: File): Promise<UniversalExtractPreview> {
-  const isPdf = file.name.toLowerCase().endsWith(".pdf") || file.type.includes("pdf");
+export async function processUniversalExtractFile(
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<UniversalExtractPreview> {
+  const isPdf = isPdfFile(file);
+  const isImg = isImageFile(file);
+
+  if (isImg) {
+    try {
+      const text = await extractTextFromImage(file, onProgress);
+      const specialized = parseTextBankExtract([text]);
+      if (specialized && specialized.items.length > 0) {
+        return {
+          fileName: file.name,
+          fileType: "image",
+          bancoDetectado: specialized.bancoNombre,
+          bancoId: specialized.bancoId,
+          numeroCuenta: specialized.numeroCuenta,
+          totalFilas: specialized.items.length,
+          headers: ["Fecha", "Descripción / Detalle", "Referencia", "Débito / Retiro", "Crédito / Abono", "Saldo"],
+          rawRowsSample: specialized.items.slice(0, 5).map((it) => [
+            it.fecha,
+            it.descripcion,
+            it.referencia || "",
+            String(it.debito),
+            String(it.credito),
+            String(it.saldo ?? ""),
+          ]),
+          config: {
+            headerRow: 0,
+            fechaCol: 0,
+            descripcionCol: 1,
+            referenciaCol: 2,
+            valorMode: "separate",
+            debitoCol: 3,
+            creditoCol: 4,
+            saldoCol: 5,
+          },
+          items: specialized.items,
+          cuentasDisponibles: specialized.cuentasDisponibles,
+          saldoInicial: specialized.saldoInicial,
+          saldoFinal: specialized.saldoFinal,
+          totalDebitos: specialized.totalDebitos,
+          totalCreditos: specialized.totalCreditos,
+        };
+      }
+    } catch (e) {
+      console.warn("Fallo al procesar imagen con OCR:", e);
+    }
+  }
+
   const buffer = await file.arrayBuffer();
 
   if (isPdf) {
     try {
-      const specialized = await parsePdfBankExtract(buffer);
+      const specialized = await parsePdfBankExtract(buffer, onProgress);
       if (specialized && specialized.items.length > 0) {
         return {
           fileName: file.name,
