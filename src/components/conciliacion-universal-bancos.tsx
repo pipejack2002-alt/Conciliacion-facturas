@@ -69,6 +69,16 @@ interface ConciliacionUniversalBancosProps {
   onHasDataChange?: (hasData: boolean) => void;
 }
 
+function getCleanDescription(r: BankConciliacionRow): string {
+  if (r.esGmf) {
+    return "GRAVAMEN MOVIMIENTOS FINANCIEROS (GMF 4×1000)";
+  }
+  if (r.descripcion && r.descripcion.includes(" ↔ ")) {
+    return r.descripcion.split(" ↔ ")[0].trim();
+  }
+  return r.descripcion || "—";
+}
+
 export function ConciliacionUniversalBancosView({
   movLines,
   externalClearTrigger,
@@ -1532,7 +1542,7 @@ export function ConciliacionUniversalBancosView({
                 <tr>
                   <th
                     onClick={() => handleToggleSort("estado")}
-                    className="px-2.5 py-2.5 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap w-[110px]"
+                    className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap"
                     title="Ordenar por Estado"
                   >
                     <div className="flex items-center gap-1">
@@ -1550,7 +1560,7 @@ export function ConciliacionUniversalBancosView({
                   </th>
                   <th
                     onClick={() => handleToggleSort("fecha")}
-                    className="px-2 py-2.5 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap w-[85px]"
+                    className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap"
                     title="Ordenar por Fecha"
                   >
                     <div className="flex items-center gap-1">
@@ -1568,7 +1578,7 @@ export function ConciliacionUniversalBancosView({
                   </th>
                   <th
                     onClick={() => handleToggleSort("descripcion")}
-                    className="px-2.5 py-2.5 cursor-pointer hover:bg-bg-surface hover:text-ink transition group min-w-[180px]"
+                    className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group"
                     title="Ordenar por Descripción"
                   >
                     <div className="flex items-center gap-1">
@@ -1586,7 +1596,7 @@ export function ConciliacionUniversalBancosView({
                   </th>
                   <th
                     onClick={() => handleToggleSort("referencia")}
-                    className="px-2 py-2.5 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap w-[95px]"
+                    className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap"
                     title="Ordenar por Referencia / Documento"
                   >
                     <div className="flex items-center gap-1">
@@ -1604,7 +1614,7 @@ export function ConciliacionUniversalBancosView({
                   </th>
                   <th
                     onClick={() => handleToggleSort("montoBanco")}
-                    className="px-2 py-2.5 text-right cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap w-[110px]"
+                    className="px-3.5 py-3 text-right cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap"
                     title="Ordenar por Monto de Extracto"
                   >
                     <div className="flex items-center justify-end gap-1">
@@ -1622,7 +1632,7 @@ export function ConciliacionUniversalBancosView({
                   </th>
                   <th
                     onClick={() => handleToggleSort("montoLibros")}
-                    className="px-2 py-2.5 text-right cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap w-[110px]"
+                    className="px-3.5 py-3 text-right cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap"
                     title="Ordenar por Monto en Libros"
                   >
                     <div className="flex items-center justify-end gap-1">
@@ -1640,11 +1650,11 @@ export function ConciliacionUniversalBancosView({
                   </th>
                   <th
                     onClick={() => handleToggleSort("diagnostico")}
-                    className="px-2.5 py-2.5 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap w-[180px] lg:w-[220px]"
+                    className="px-3.5 py-3 cursor-pointer hover:bg-bg-surface hover:text-ink transition group whitespace-nowrap"
                     title="Ordenar por Diagnóstico Contable"
                   >
                     <div className="flex items-center gap-1">
-                      <span>Diagnóstico</span>
+                      <span>Diagnóstico Contable</span>
                       {sortField === "diagnostico" ? (
                         sortDirection === "asc" ? (
                           <ArrowUp className="size-3.5 text-teal" />
@@ -1656,7 +1666,7 @@ export function ConciliacionUniversalBancosView({
                       )}
                     </div>
                   </th>
-                  <th className="px-2 py-2.5 text-center whitespace-nowrap w-[130px] lg:w-[145px]">
+                  <th className="px-3.5 py-3 text-center whitespace-nowrap">
                     Auditoría / Asiento
                   </th>
                 </tr>
@@ -1679,7 +1689,7 @@ export function ConciliacionUniversalBancosView({
                             isExpanded && "bg-teal-soft/10"
                           )}
                         >
-                          <td className="px-2.5 py-2 whitespace-nowrap w-[110px]">
+                          <td className="px-3.5 py-2.5 whitespace-nowrap">
                             <span
                               className={cn(
                                 "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border",
@@ -1717,67 +1727,47 @@ export function ConciliacionUniversalBancosView({
                                 : "Por Registrar"}
                             </span>
                           </td>
-                          <td className="px-2 py-2 font-mono text-ink-muted whitespace-nowrap w-[85px]">
+                          <td className="px-3.5 py-2.5 font-mono text-ink-muted whitespace-nowrap">
                             {formatDate(r.fecha)}
                           </td>
-                          <td className="px-2.5 py-2 font-medium text-ink min-w-[180px]">
-                            {(() => {
-                              const isDescExpanded = expandedDescIds.has(r.id);
-                              const isLong = (r.descripcion?.length || 0) > 35;
-
-                              return (
-                                <div className="flex items-start justify-between gap-1.5 group">
-                                  <div
-                                    onClick={() => isLong && toggleDesc(r.id)}
-                                    className={cn(
-                                      "leading-snug transition",
-                                      isLong && "cursor-pointer hover:text-teal select-text",
-                                      !isDescExpanded ? "truncate" : "whitespace-normal break-words"
-                                    )}
-                                    title={isLong ? (isDescExpanded ? "Clic para contraer" : "Clic para ver descripción completa") : r.descripcion}
-                                  >
-                                    {r.esGmf && (
-                                      <span className="mr-1.5 inline-block text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300">
-                                        GMF 4x1000
-                                      </span>
-                                    )}
-                                    {r.descripcion}
-                                  </div>
-                                  {isLong && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        toggleDesc(r.id);
-                                      }}
-                                      className="shrink-0 p-1 rounded-md text-ink-muted hover:text-teal hover:bg-teal-soft/60 transition cursor-pointer"
-                                      title={isDescExpanded ? "Contraer descripción" : "Zoom: Ver descripción completa"}
-                                      aria-label={isDescExpanded ? "Contraer" : "Zoom"}
-                                    >
-                                      {isDescExpanded ? (
-                                        <ZoomOut className="size-3.5 text-teal" />
-                                      ) : (
-                                        <ZoomIn className="size-3.5 text-ink-muted group-hover:text-teal" />
-                                      )}
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            })()}
-                          </td>
-                          <td className="px-2 py-2 font-mono text-[11px] text-ink-subtle whitespace-nowrap w-[95px] max-w-[110px] truncate" title={r.referencia}>
+                          <td
+                          onClick={() => setExpandedRowId(isExpanded ? null : r.id)}
+                          className="px-3.5 py-2.5 font-medium text-ink max-w-72 lg:max-w-80 cursor-pointer group"
+                          title="Clic para abrir el detalle y asiento contable"
+                        >
+                          <div className="flex items-center justify-between gap-1.5 min-w-0">
+                            <div className="truncate group-hover:text-teal transition select-text flex items-center gap-1.5 min-w-0">
+                              {r.esGmf && (
+                                <span className="shrink-0 text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300">
+                                  GMF 4x1000
+                                </span>
+                              )}
+                              <span className="truncate" title={r.descripcion}>
+                                {getCleanDescription(r)}
+                              </span>
+                            </div>
+                            {r.itemsLibrosLote && (
+                              <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-900 border border-purple-300 dark:bg-purple-950/60 dark:text-purple-200">
+                                {r.itemsLibrosLote.length} comps
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3.5 py-2.5 font-mono text-ink-subtle whitespace-nowrap max-w-28 truncate" title={r.referencia}>
                             {r.referencia || "—"}
                           </td>
-                          <td className="px-2 py-2 font-mono font-semibold text-right text-ink whitespace-nowrap w-[110px]">
+                          <td className="px-3.5 py-2.5 font-mono font-semibold text-right text-ink whitespace-nowrap">
                             {r.montoBanco > 0 ? formatMoneyExact(r.montoBanco) : "—"}
                           </td>
-                          <td className="px-2 py-2 font-mono font-semibold text-right text-ink whitespace-nowrap w-[110px]">
+                          <td className="px-3.5 py-2.5 font-mono font-semibold text-right text-ink whitespace-nowrap">
                             {r.montoLibros > 0 ? formatMoneyExact(r.montoLibros) : "—"}
                           </td>
-                          <td className="px-2.5 py-2 text-ink-muted leading-tight w-[180px] lg:w-[220px]">
-                            <div className="text-[11px] leading-snug line-clamp-2 hover:line-clamp-none transition-all cursor-pointer whitespace-normal break-words" title={r.nota}>{r.nota}</div>
-                          </td>
-                          <td className="px-2 py-2 text-center whitespace-nowrap w-[130px] lg:w-[145px]">
+                          <td className="px-3.5 py-2.5 text-ink-muted leading-tight max-w-64 lg:max-w-72">
+                          <div className="text-xs leading-snug line-clamp-2 hover:line-clamp-none transition-all cursor-pointer whitespace-normal break-words" title={r.nota}>
+                            {r.nota}
+                          </div>
+                        </td>
+                          <td className="px-3.5 py-2.5 text-center whitespace-nowrap">
                             {r.itemsLibrosLote && r.itemsLibrosLote.length > 0 ? (
                               <button
                                 type="button"
@@ -1793,7 +1783,7 @@ export function ConciliacionUniversalBancosView({
                               <button
                                 type="button"
                                 onClick={() => setExpandedRowId(isExpanded ? null : r.id)}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-bg-subtle hover:bg-teal-soft/60 text-ink hover:text-teal border border-line px-2 py-1 text-xs font-semibold transition cursor-pointer max-w-[135px]"
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-bg-subtle hover:bg-teal-soft/60 text-ink hover:text-teal border border-line px-2.5 py-1 text-xs font-semibold transition cursor-pointer max-w-[150px]"
                                 title="Rastrear comprobante contable en libros"
                               >
                                 <FileText className="size-3.5 text-teal" />
