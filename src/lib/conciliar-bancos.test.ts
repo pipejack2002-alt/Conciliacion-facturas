@@ -845,6 +845,100 @@ describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuen
     assert.strictEqual(res.rows[0].itemsLibrosLote?.length, 2);
     assert.strictEqual(res.summary.notasCreditoNoRegistradas, 0);
   });
+
+  it("debe conciliar comisiones bancarias registradas en libros a fin de mes mediante comprobante de ajuste (L o NC) sin importar la diferencia de días con el extracto", () => {
+    const extracto: BankExtractItem[] = [
+      {
+        id: "com-sep-16",
+        fecha: "2026-09-16",
+        descripcion: "COBRO OP BANCARIA TRANSF Y/O CHQ CON IVA",
+        referencia: "TRANSF",
+        debito: 37313.64,
+        credito: 0,
+        saldo: 6000000,
+      },
+    ];
+
+    const libros: MovLine[] = [
+      {
+        cuenta: "12503528",
+        cuentaNombre: "CORREVAL - FONVAL TESORERIA",
+        comprobante: "L 001 00000000027 004",
+        fecha: "2026-09-30",
+        nit: "860068182",
+        nombre: "CREDICORP CAPITAL FIDUCIARIA S.A.",
+        descripcion: "COMISION SEPTIEMBRE 2026",
+        cruce: "",
+        debito: 0,
+        credito: 37313.64,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliarBancos(extracto, libros, 10000000, 10000000);
+    assert.strictEqual(res.summary.totalConciliados, 1);
+    assert.strictEqual(res.rows[0].estado, "conciliado");
+    assert.strictEqual(res.summary.chequesEnTransito, 0);
+    assert.strictEqual(res.summary.notasDebitoComisiones, 0);
+    assert.strictEqual(res.summary.notasDebitoNoRegistradas, 0);
+  });
+
+  it("debe reconocer rendimientos del mes anterior causados el primer día del mes corriente como parte del saldo inicial sin generar falsa partida en tránsito", () => {
+    // Caso real Norcarbón: Saldo inicial extracto ya incluye rendimientos de agosto ($757.776,52).
+    // Libros al 31 de agosto tenía $9.299.388,66, y causa el 1 de septiembre los rendimientos de agosto.
+    // 9.299.388,66 + 757.776,52 = 10.057.165,18 (saldo inicial extracto).
+    const extracto: BankExtractItem[] = [
+      {
+        id: "ext-1",
+        fecha: "2026-09-16",
+        descripcion: "COBRO COMISION BANCARIA",
+        referencia: "COM",
+        debito: 50000,
+        credito: 0,
+        saldo: 10007165.18,
+      },
+    ];
+
+    const libros: MovLine[] = [
+      {
+        cuenta: "12503528",
+        cuentaNombre: "CORREVAL - FONVAL TESORERIA",
+        comprobante: "L 001 00000000026 002",
+        fecha: "2026-09-01",
+        nit: "860068182",
+        nombre: "CREDICORP CAPITAL FIDUCIARIA S.A.",
+        descripcion: "RENDIMIENTOS AGOSTO 2026",
+        cruce: "",
+        debito: 757776.52,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "12503528",
+        cuentaNombre: "CORREVAL - FONVAL TESORERIA",
+        comprobante: "L 001 00000000027 004",
+        fecha: "2026-09-30",
+        nit: "860068182",
+        nombre: "CREDICORP CAPITAL FIDUCIARIA S.A.",
+        descripcion: "COMISION SEPTIEMBRE 2026",
+        cruce: "",
+        debito: 0,
+        credito: 50000,
+        observacion: "",
+      },
+    ];
+
+    const saldoInicialExtracto = 10057165.18;
+    const saldoInicialLibros = 9299388.66; // 9.299.388,66 + 757.776,52 = 10.057.165,18
+
+    const res = conciliarBancos(extracto, libros, saldoInicialExtracto, saldoInicialLibros);
+    // No debe considerar los $757.776,52 como "Consignación en Tránsito"
+    assert.strictEqual(res.summary.consignacionesEnTransito, 0, "No debe haber consignaciones en tránsito falsas");
+    assert.strictEqual(res.summary.chequesEnTransito, 0);
+    assert.strictEqual(res.summary.totalConciliados, 2);
+    assert.strictEqual(res.summary.cuadrado, true);
+    assert.strictEqual(res.summary.diferenciaCuadre, 0);
+  });
 });
 
 

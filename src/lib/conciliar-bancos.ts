@@ -341,13 +341,36 @@ export function conciliarBancos(
   // (ej. 12503511 Alta Liquidez/Fonval, 12450541 SMTE/Cartera Vista o 114413 Fondos de Inversión). Dado que dichos
   // rendimientos ya están reflejados en el Saldo Inicial del extracto bancario, se identifican y concilian contra el
   // saldo inicial para no duplicar débitos operativos ni generar falsas consignaciones en tránsito.
+  const SPANISH_MONTHS = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+  ];
+
+  // Detectar el mes del extracto (0-11) para identificar dinámicamente el mes anterior
+  let extractMonthIdx = -1;
+  for (const b of extracto) {
+    if (b.fecha) {
+      const parts = b.fecha.split("-");
+      if (parts.length >= 2) {
+        const m = parseInt(parts[1], 10) - 1;
+        if (!isNaN(m) && m >= 0 && m <= 11) {
+          extractMonthIdx = m;
+          break;
+        }
+      }
+    }
+  }
+  const prevMonthName = extractMonthIdx >= 0 ? SPANISH_MONTHS[(extractMonthIdx + 11) % 12] : "";
+
   for (let i = 0; i < cleanLibros.length; i++) {
     const l = cleanLibros[i];
     if (l.debito > 0 && l.credito === 0) {
       const textAll = `${l.cuenta || ""} ${l.cuentaNombre || ""} ${l.descripcion || ""} ${l.nombre || ""}`.toLowerCase();
       const isInvestmentAcc = /^(?:1250|1245|1144|1125)\b/.test(l.cuenta.trim()) || /credicorp|correval|fonval|serfinco|fic\b|cartera\s*vista|cartera\s*colectiva/i.test(textAll);
       const isRendKeyword = /rendimiento|rend\b|inter[eé]s(?:es)?\b|abono.*inter[eé]s|cartera\s*vista|fonval|fic\b|correval|serfinco|credicorp/i.test(textAll);
-      const isPriorMonthRef = /julio|junio|mes\s*anterior|inicial|periodo\s*anterior/i.test(textAll);
+      const isPriorMonthRef =
+        /mes\s*anterior|periodo\s*anterior|inicial|anterior\b/i.test(textAll) ||
+        (prevMonthName ? textAll.includes(prevMonthName) : /enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre/i.test(textAll));
 
       // Fecha en los primeros días del periodo (ej. día 01 a 05) o referencia al mes anterior
       const isEarlyMonth = /(?:^|\D)0?[1-5](?:\D|$)/.test(l.fecha || "") || isPriorMonthRef;
@@ -361,11 +384,11 @@ export function conciliarBancos(
       );
 
       // Solo cruzar contra saldo inicial si el extracto TIENE saldo inicial > 0, NO hay un crédito en extracto en este mes,
-      // y la línea hace mención expresa al mes anterior o coincide exactamente con el saldo inicial del extracto.
+      // y la línea hace mención expresa al mes anterior, coincide con el saldo inicial del extracto o sumado al saldo en libros iguala el extracto.
       const isPriorYieldMatch =
         saldoInicialExtracto > 0 &&
         !matchesExtractoCredit &&
-        (isPriorMonthRef || Math.abs(l.debito - saldoInicialExtracto) <= 0.05) &&
+        (isPriorMonthRef || Math.abs(l.debito - saldoInicialExtracto) <= 0.05 || (saldoInicialLibros > 0 && Math.abs((saldoInicialLibros + l.debito) - saldoInicialExtracto) <= 0.05)) &&
         (isInvestmentAcc || isRendKeyword || (isEarlyMonth && isCausacionVoucher));
 
       if (isPriorYieldMatch) {
@@ -751,6 +774,100 @@ export function conciliarBancos(
     }
   }
 
+  // C. Comisiones Bancarias y Gastos Financieros con IVA (1 a 1 y Consolidadas)
+  // Práctica estándar en contabilidad: el banco debita comisiones o costos de transferencia durante el mes,
+  // y contabilidad las causa con nota de contabilidad (ej. comprobante L) a fin de mes por el valor exacto con IVA.
+  for (const bItem of extracto) {
+    if (matchedExtractoIds.has(bItem.id)) continue;
+    if (bItem.debito <= 0) continue;
+
+    const isCom =
+      classifyMovementConcept(bItem.descripcion).esComision ||
+      /cobro.*(?:op|operaci[oó]n|bancar|tarifa|transf|servicio|cuota)|comisi[oó]n|cuota.*manejo/i.test(
+        bItem.descripcion
+      );
+    if (!isCom) continue;
+
+    const montoBanco = bItem.debito;
+
+    for (let i = 0; i < cleanLibros.length; i++) {
+      if (matchedLibroIndices.has(i)) continue;
+      const l = cleanLibros[i];
+      if (l.credito <= 0) continue;
+
+      if (Math.abs(montoBanco - l.credito) <= 0.05) {
+        const textL = `${l.cuenta || ""} ${l.cuentaNombre || ""} ${l.descripcion || ""} ${l.nombre || ""} ${l.comprobante || ""}`.toLowerCase();
+        const isAdjustOrBank =
+          /^(?:L|NC|RC|AJ|CA)\b/i.test(l.comprobante?.trim() || "") ||
+          /comisi[oó]n|gasto|banc|correval|fonval|credicorp|tarifa|iva/i.test(textL);
+
+        const bTime = new Date(bItem.fecha).getTime();
+        const lTime = new Date(l.fecha).getTime();
+        const diffDays = Math.abs(bTime - lTime) / (1000 * 60 * 60 * 24);
+
+        if (isAdjustOrBank || isNaN(diffDays) || diffDays <= 31) {
+          matchedExtractoIds.add(bItem.id);
+          matchedLibroIndices.add(i);
+          rows.push({
+            id: `match_comision_${bItem.id}_${i}`,
+            estado: "conciliado",
+            fecha: bItem.fecha,
+            descripcion: `${bItem.descripcion} ↔ ${l.descripcion || l.nombre || "Comisión o Gasto Bancario en Libros"}`,
+            referencia: bItem.referencia || l.comprobante || "Comisión Bancaria",
+            tipo: "retiro",
+            montoBanco,
+            montoLibros: l.credito,
+            diferencia: 0,
+            esGmf: false,
+            esComision: true,
+            esRendimiento: false,
+            itemBanco: bItem,
+            itemLibros: l,
+            nota: "Comisión bancaria debitada por el banco debidamente causada en libros contables.",
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  // D. Comisiones Bancarias Consolidadas (N cargos en extracto = 1 comprobante en libros)
+  const unassignedComItems = extracto.filter(
+    (it) =>
+      !matchedExtractoIds.has(it.id) &&
+      it.debito > 0 &&
+      (classifyMovementConcept(it.descripcion).esComision ||
+        /cobro.*(?:op|operaci[oó]n|bancar|tarifa|transf|servicio|cuota)|comisi[oó]n/i.test(it.descripcion))
+  );
+  if (unassignedComItems.length >= 2) {
+    const sumCom = unassignedComItems.reduce((s, it) => s + it.debito, 0);
+    for (let i = 0; i < cleanLibros.length; i++) {
+      if (matchedLibroIndices.has(i)) continue;
+      const l = cleanLibros[i];
+      if (l.credito > 0 && Math.abs(l.credito - sumCom) <= 0.05) {
+        unassignedComItems.forEach((it) => matchedExtractoIds.add(it.id));
+        matchedLibroIndices.add(i);
+        rows.push({
+          id: `match_comisiones_consolidadas_${i}`,
+          estado: "conciliado",
+          fecha: l.fecha,
+          descripcion: `Comisiones y Gastos Bancarios Consolidados (${unassignedComItems.length} cargos) ↔ ${l.descripcion || l.nombre}`,
+          referencia: l.comprobante || "Comisiones Consolidadas",
+          tipo: "retiro",
+          montoBanco: sumCom,
+          montoLibros: l.credito,
+          diferencia: 0,
+          esGmf: false,
+          esComision: true,
+          esRendimiento: false,
+          itemLibros: l,
+          nota: `Comisiones bancarias consolidadas (${unassignedComItems.length} deducciones en extracto = 1 comprobante en libros).`,
+        });
+        break;
+      }
+    }
+  }
+
   // FASE 3.5: Cruce Especializado de Rendimientos Financieros del Periodo Actual
   // Permite conciliar abonos de rendimientos del extracto con sus respectivos comprobantes
   // registrados en libros (débitos a cuentas 1144, 1250, 1245, 1125, 1110, 1120 con contrapartida a ingresos 4210).
@@ -928,8 +1045,10 @@ export function conciliarBancos(
         const bTime = new Date(bItem.fecha).getTime();
         const lTime = new Date(lItem.fecha).getTime();
         const diffDays = Math.abs(bTime - lTime) / (1000 * 60 * 60 * 24);
+        const isAdjustVoucher = /^(?:L|NC|RC|AJ|CA)\b/i.test(lItem.comprobante?.trim() || "");
+        const maxWindowDays = isAdjustVoucher ? 31 : 7;
 
-        if (isNaN(diffDays) || diffDays <= 7) {
+        if (isNaN(diffDays) || diffDays <= maxWindowDays) {
           matchedExtractoIds.add(bItem.id);
           matchedLibroIndices.add(i);
           const { esGmf, esComision, esRendimiento } = classifyMovementConcept(bItem.descripcion);
@@ -1065,12 +1184,25 @@ export function conciliarBancos(
 
   // En libros: Si hubo nota contable de rendimientos del mes anterior (FASE 0) que ya estaba
   // incorporada en el saldo inicial del extracto bancario, no se duplica en los débitos operativos del periodo actual.
+  const sumPrevRendDebitos = cleanLibros
+    .filter((_, idx) => prevRendLineIndices.has(idx))
+    .reduce((a, b) => a + b.debito, 0);
+
   const totalDebitosLibros = cleanLibros
     .filter((_, idx) => !prevRendLineIndices.has(idx))
     .reduce((a, b) => a + b.debito, 0);
   const totalCreditosLibros = cleanLibros.reduce((a, b) => a + b.credito, 0);
+
+  // Si saldoInicialLibros fue suministrado con el saldo al corte anterior (sin incluir aún los rendimientos que se causaron el día 1),
+  // y al sumarle los rendimientos previos iguala el saldo inicial del extracto bancario,
+  // la base de inicio del mes para libros se homologa al saldo inicial del extracto.
+  const baseInicialLibros =
+    saldoInicialLibros > 0 && Math.abs(saldoInicialLibros + sumPrevRendDebitos - saldoInicialExtracto) <= 0.05
+      ? saldoInicialExtracto
+      : saldoInicialLibros || saldoInicialExtracto;
+
   const saldoFinalLibros = cleanLibros.length > 0
-    ? (saldoInicialLibros || saldoInicialExtracto) + totalDebitosLibros - totalCreditosLibros
+    ? baseInicialLibros + totalDebitosLibros - totalCreditosLibros
     : 0;
 
   // Conciliación de Libros a Extracto Bancario (Norma Técnica DIAN / NIIF):
