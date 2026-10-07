@@ -181,15 +181,20 @@ function hasDocToken(blob: string, prefijo: string, folio: string): boolean {
       if (up.includes(pTrans + f) || up.includes(pTrans2 + f)) return true;
     }
   } else {
-    // Empty prefix: search standalone folio with min length 4
+    // Empty prefix: search standalone folio with min length 4, or with common prefix with min length 2
     if (f.length >= 4) {
-      if (up.includes(f) || up.includes("FE" + f)) return true;
+      const standaloneRegex = new RegExp(`(?:^|[^0-9])(?:FE)?0*${f}(?:[^0-9]|$)`);
+      if (standaloneRegex.test(up)) return true;
+    } else if (f.length >= 2) {
+      const prefRegex = new RegExp(`(?:FE|FAC|FC|FV|FVE|F)0*${f}(?:[^0-9]|$)`);
+      if (prefRegex.test(up)) return true;
     }
   }
 
-  // Búsqueda de folio aislado con longitud >= 4 delimitado
-  if (f.length >= 4 && (up.includes(`FAC${f}`) || up.includes(`FC${f}`) || up.includes(`FV${f}`))) {
-    return true;
+  // Búsqueda de prefijos comunes con folio exacto delimitado
+  if (f.length >= 2) {
+    const commonPrefRegex = new RegExp(`(?:FAC|FC|FV|FE)0*${f}(?:[^0-9]|$)`);
+    if (commonPrefRegex.test(up)) return true;
   }
 
   return false;
@@ -256,6 +261,9 @@ function extractKeys(line: MovLine): Set<string> {
   }
   for (const m of text.matchAll(/\bFE([A-Z0-9]{2,8})[-]?0*(\d{1,12})\b/g)) {
     keys.add(compact(m[1]) + stripZeros(m[2]));
+  }
+  for (const m of text.matchAll(/\b(?:FE|FAC|FC|FV|FVE|F)[-]?0*(\d{2,12})\b/g)) {
+    keys.add(stripZeros(m[1]));
   }
   return keys;
 }
@@ -811,6 +819,15 @@ function findCruzes(rows: ConciliacionRow[]): CruceNC[] {
         const bMentioned = Boolean(fNumB && fNumB.length >= 3 && ncText.includes(fNumB));
         if (aMentioned && !bMentioned) return -1;
         if (!aMentioned && bMentioned) return 1;
+
+        // Criterio contable: Priorizar anular facturas que NO están causadas en libros (pendiente/posible_typo)
+        // para preservar las facturas que el usuario efectivamente legalizó y registró en contabilidad
+        const aIsPendiente = a.estado === "pendiente" || a.estado === "posible_typo" ? 1 : 0;
+        const bIsPendiente = b.estado === "pendiente" || b.estado === "posible_typo" ? 1 : 0;
+        if (aIsPendiente !== bIsPendiente) {
+          return bIsPendiente - aIsPendiente;
+        }
+
         return Math.abs(a.totalDian - nc.totalDian) - Math.abs(b.totalDian - nc.totalDian);
       });
     const f = cand[0];

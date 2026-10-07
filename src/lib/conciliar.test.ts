@@ -1754,4 +1754,127 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
     assert.strictEqual(row.diferencia, 4000);
     assert.ok(row.alerta.includes("90400"));
   });
+
+  it("debe conciliar facturas legalizadas en libros (FE562 y FE563) y cruzar notas crédito contra las facturas no causadas (560 y 561)", () => {
+    const nitCamargo = "1041903423";
+    const dianDocs: DianDoc[] = [
+      {
+        tipo: "Factura electrónica",
+        folio: "563",
+        prefijo: "",
+        cufe: "CUFE-563",
+        fechaEmision: "2026-09-17",
+        nitEmisor: nitCamargo,
+        nombreEmisor: "JORGE STEVE CAMARGO YEPES",
+        total: 130000,
+        iva: 0,
+        grupo: "Recibido",
+      },
+      {
+        tipo: "Factura electrónica",
+        folio: "562",
+        prefijo: "",
+        cufe: "CUFE-562",
+        fechaEmision: "2026-09-17",
+        nitEmisor: nitCamargo,
+        nombreEmisor: "JORGE STEVE CAMARGO YEPES",
+        total: 130000,
+        iva: 0,
+        grupo: "Recibido",
+      },
+      {
+        tipo: "Nota de crédito electrónica",
+        folio: "NC28",
+        prefijo: "",
+        cufe: "CUFE-NC28",
+        fechaEmision: "2026-09-17",
+        nitEmisor: nitCamargo,
+        nombreEmisor: "JORGE STEVE CAMARGO YEPES",
+        total: 260000,
+        iva: 0,
+        grupo: "Recibido",
+      },
+      {
+        tipo: "Factura electrónica",
+        folio: "561",
+        prefijo: "",
+        cufe: "CUFE-561",
+        fechaEmision: "2026-09-17",
+        nitEmisor: nitCamargo,
+        nombreEmisor: "JORGE STEVE CAMARGO YEPES",
+        total: 260000,
+        iva: 0,
+        grupo: "Recibido",
+      },
+      {
+        tipo: "Nota de crédito electrónica",
+        folio: "NC27",
+        prefijo: "",
+        cufe: "CUFE-NC27",
+        fechaEmision: "2026-09-17",
+        nitEmisor: nitCamargo,
+        nombreEmisor: "JORGE STEVE CAMARGO YEPES",
+        total: 130000,
+        iva: 0,
+        grupo: "Recibido",
+      },
+      {
+        tipo: "Factura electrónica",
+        folio: "560",
+        prefijo: "",
+        cufe: "CUFE-560",
+        fechaEmision: "2026-09-17",
+        nitEmisor: nitCamargo,
+        nombreEmisor: "JORGE STEVE CAMARGO YEPES",
+        total: 130000,
+        iva: 0,
+        grupo: "Recibido",
+      },
+    ];
+
+    const movLines: MovLine[] = [
+      {
+        cuenta: "73959503",
+        cuentaNombre: "OTROS COSTOS",
+        comprobante: "P 002 00000002922 032",
+        fecha: "2026-09-30",
+        nit: nitCamargo,
+        nombre: "JORGE STEVE CAMARGO YEPES",
+        descripcion: "CM724 FE563 REEMBOLSO CM",
+        cruce: "",
+        debito: 130000,
+        credito: 0,
+        observacion: "",
+      },
+      {
+        cuenta: "73959503",
+        cuentaNombre: "OTROS COSTOS",
+        comprobante: "P 002 00000002922 033",
+        fecha: "2026-09-30",
+        nit: nitCamargo,
+        nombre: "JORGE STEVE CAMARGO YEPES",
+        descripcion: "CM724 FE562 REEMBOLSO CM",
+        cruce: "",
+        debito: 130000,
+        credito: 0,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliar(dianDocs, movLines, "SEP 2026");
+    const row563 = res.rows.find((r) => r.numero === "563");
+    const row562 = res.rows.find((r) => r.numero === "562");
+    const row561 = res.rows.find((r) => r.numero === "561");
+    const row560 = res.rows.find((r) => r.numero === "560");
+    const rowNC28 = res.rows.find((r) => r.numero === "NC28");
+    const rowNC27 = res.rows.find((r) => r.numero === "NC27");
+
+    assert.ok(row563 && row562 && row561 && row560 && rowNC28 && rowNC27);
+    assert.strictEqual(row563.estado, "conciliado", "563 debe conciliarse con libros");
+    assert.strictEqual(row562.estado, "conciliado", "562 debe conciliarse con libros");
+    assert.strictEqual(row561.estado, "cruce_nc", "561 debe anularse con NC28");
+    assert.strictEqual(row560.estado, "cruce_nc", "560 debe anularse con NC27");
+    assert.strictEqual(rowNC28.estado, "cruce_nc", "NC28 debe cruzar con 561");
+    assert.strictEqual(rowNC27.estado, "cruce_nc", "NC27 debe cruzar con 560");
+  });
 });
