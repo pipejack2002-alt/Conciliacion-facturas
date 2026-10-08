@@ -31,26 +31,26 @@ export const BankExecutiveCards = memo(function BankExecutiveCards({
 
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {/* Card 1: GMF 4x1000 */}
         <div
           onClick={() => setActiveModal("gmf")}
-          className="rounded-2xl border border-line bg-bg-surface p-4 shadow-2xs hover:shadow-xs hover:border-amber-500/40 transition cursor-pointer flex flex-col justify-between"
+          className="rounded-xl border border-line bg-bg-surface p-3.5 shadow-2xs hover:shadow-xs hover:border-amber-500/50 transition cursor-pointer flex flex-col justify-between"
           title="Click para ver el desglose detallado de débitos por GMF 4x1000"
         >
           <div>
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <div className="flex items-center gap-2">
-                <span className="rounded-lg bg-amber-500/10 p-1.5 text-amber-600 dark:text-amber-400">
+            <div className="flex items-center justify-between gap-1.5 mb-1.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="rounded-lg bg-amber-500/10 p-1.5 text-amber-600 dark:text-amber-400 shrink-0">
                   <BadgePercent className="size-4" />
                 </span>
-                <span className="text-xs font-bold text-ink uppercase tracking-wider">
+                <span className="text-[11px] font-bold text-ink uppercase tracking-wider truncate">
                   GMF (4×1000)
                 </span>
               </div>
               <span
                 className={cn(
-                  "rounded-full px-2 py-0.5 text-[10px] font-extrabold border",
+                  "rounded-full px-2 py-0.5 text-[10px] font-extrabold border shrink-0",
                   breakdown.gmf.pendiente === 0 && breakdown.gmf.count > 0
                     ? "bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300"
                     : breakdown.gmf.pendiente > 0
@@ -65,14 +65,20 @@ export const BankExecutiveCards = memo(function BankExecutiveCards({
                   : "Sin Movimientos"}
               </span>
             </div>
-            <div className="font-mono text-lg font-black text-ink">
+            <div className="font-mono text-base sm:text-lg font-black text-ink tracking-tight truncate">
               {formatMoneyExact(breakdown.gmf.total)}
             </div>
+            <div className="text-[11px] text-ink-muted flex items-center justify-between mt-1 h-5">
+              <span className="truncate">{breakdown.gmf.count} {breakdown.gmf.count === 1 ? "cargo" : "cargos"} bancarios</span>
+              <span className="font-semibold text-emerald-700 dark:text-emerald-400 text-[11px] shrink-0">
+                Reg: {formatMoneyExact(breakdown.gmf.registrado)}
+              </span>
+            </div>
           </div>
-          <div className="mt-2 text-[11px] text-ink-muted flex items-center justify-between pt-1 border-t border-line/40">
-            <span>{breakdown.gmf.count} cargos bancarios</span>
-            <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-              Reg: {formatMoneyExact(breakdown.gmf.registrado)}
+          <div className="mt-2.5 text-[11px] text-ink-muted flex items-center justify-between pt-1.5 border-t border-line/40">
+            <span className="text-ink-subtle">Gravamen 4x1000</span>
+            <span className="font-semibold text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-0.5 shrink-0">
+              Ver detalle →
             </span>
           </div>
         </div>
@@ -80,22 +86,22 @@ export const BankExecutiveCards = memo(function BankExecutiveCards({
         {/* Card 2: Comisiones Banco */}
         <div
           onClick={() => setActiveModal("comisiones")}
-          className="rounded-2xl border border-line bg-bg-surface p-4 shadow-2xs hover:shadow-xs hover:border-blue-500/40 transition cursor-pointer flex flex-col justify-between"
+          className="rounded-xl border border-line bg-bg-surface p-3.5 shadow-2xs hover:shadow-xs hover:border-blue-500/50 transition cursor-pointer flex flex-col justify-between"
           title="Click para ver el desglose detallado de comisiones y tarifas"
         >
           <div>
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <div className="flex items-center gap-2">
-                <span className="rounded-lg bg-blue-500/10 p-1.5 text-blue-600 dark:text-blue-400">
+            <div className="flex items-center justify-between gap-1.5 mb-1.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="rounded-lg bg-blue-500/10 p-1.5 text-blue-600 dark:text-blue-400 shrink-0">
                   <CreditCard className="size-4" />
                 </span>
-                <span className="text-xs font-bold text-ink uppercase tracking-wider">
+                <span className="text-[11px] font-bold text-ink uppercase tracking-wider truncate">
                   Comisiones Banco
                 </span>
               </div>
               <span
                 className={cn(
-                  "rounded-full px-2 py-0.5 text-[10px] font-extrabold border",
+                  "rounded-full px-2 py-0.5 text-[10px] font-extrabold border shrink-0",
                   breakdown.comisiones.pendiente === 0 && breakdown.comisiones.count > 0
                     ? "bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300"
                     : breakdown.comisiones.pendiente > 0
@@ -110,40 +116,46 @@ export const BankExecutiveCards = memo(function BankExecutiveCards({
                   : "Sin Movimientos"}
               </span>
             </div>
-            <div className="font-mono text-lg font-black text-ink">
+            <div className="font-mono text-base sm:text-lg font-black text-ink tracking-tight truncate">
               {formatMoneyExact(breakdown.comisiones.total)}
             </div>
+            <div className="text-[11px] text-ink-muted flex items-center justify-between mt-1 h-5">
+              <span className="truncate">{breakdown.comisiones.count} {breakdown.comisiones.count === 1 ? "cargo" : "tarifas"}</span>
+              <span className="font-semibold text-emerald-700 dark:text-emerald-400 text-[11px] shrink-0">
+                Reg: {formatMoneyExact(breakdown.comisiones.registrado)}
+              </span>
+            </div>
           </div>
-          <div className="mt-2 text-[11px] text-ink-muted flex items-center justify-between pt-1 border-t border-line/40">
-            <span>{breakdown.comisiones.count} cargos y tarifas</span>
-            <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-              Reg: {formatMoneyExact(breakdown.comisiones.registrado)}
+          <div className="mt-2.5 text-[11px] text-ink-muted flex items-center justify-between pt-1.5 border-t border-line/40">
+            <span className="text-ink-subtle">Tarifas bancarias</span>
+            <span className="font-semibold text-blue-700 dark:text-blue-400 hover:underline flex items-center gap-0.5 shrink-0">
+              Ver detalle →
             </span>
           </div>
         </div>
 
-        {/* Card 3: Rendimientos Financieros (Separado: Periodo Actual vs Periodo Anterior) */}
+        {/* Card 3: Rendimientos Financieros */}
         <div
           onClick={() => setActiveModal("rendimientos")}
           className={cn(
-            "rounded-2xl border bg-bg-surface p-4 shadow-2xs hover:shadow-xs transition cursor-pointer flex flex-col justify-between",
-            hasPriorRend ? "border-teal/50 bg-linear-to-b from-teal-soft/10 via-bg-surface to-bg-surface" : "border-line"
+            "rounded-xl border bg-bg-surface p-3.5 shadow-2xs hover:shadow-xs hover:border-teal/50 transition cursor-pointer flex flex-col justify-between",
+            hasPriorRend ? "border-teal/40 bg-linear-to-b from-teal-soft/10 via-bg-surface to-bg-surface" : "border-line"
           )}
           title="Click para ver el desglose comparativo entre rendimientos del periodo actual y causaciones del periodo anterior"
         >
           <div>
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <div className="flex items-center gap-2">
-                <span className="rounded-lg bg-teal-500/10 p-1.5 text-teal">
+            <div className="flex items-center justify-between gap-1.5 mb-1.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="rounded-lg bg-teal-500/10 p-1.5 text-teal shrink-0">
                   <TrendingUp className="size-4" />
                 </span>
-                <span className="text-xs font-bold text-ink uppercase tracking-wider">
+                <span className="text-[11px] font-bold text-ink uppercase tracking-wider truncate">
                   Rendimientos (+)
                 </span>
               </div>
               <span
                 className={cn(
-                  "rounded-full px-2 py-0.5 text-[10px] font-extrabold border",
+                  "rounded-full px-2 py-0.5 text-[10px] font-extrabold border shrink-0",
                   actualRend.pendiente === 0 && actualRend.count > 0
                     ? "bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300"
                     : actualRend.pendiente > 0
@@ -159,66 +171,31 @@ export const BankExecutiveCards = memo(function BankExecutiveCards({
               </span>
             </div>
 
-            {/* Valor Principal: Rendimiento del Periodo Actual (Extracto) */}
-            <div className="font-mono text-lg font-black text-teal">
+            <div className="font-mono text-base sm:text-lg font-black text-teal tracking-tight truncate">
               +{formatMoneyExact(actualRend.total)}
             </div>
-            <div className="text-[11px] text-ink-muted flex items-center justify-between mt-0.5">
-              <span>Periodo actual ({actualRend.count} abono)</span>
-              {actualRend.pendiente > 0 && (
-                <span className="text-amber-700 dark:text-amber-400 font-bold text-[10px]">
-                  Falta causar: {formatMoneyExact(actualRend.pendiente)}
+            <div className="text-[11px] text-ink-muted flex items-center justify-between mt-1 h-5">
+              <span className="truncate">Periodo actual ({actualRend.count} {actualRend.count === 1 ? "abono" : "abonos"})</span>
+              {hasPriorRend && anteriorRend ? (
+                <span
+                  className="font-semibold text-teal-800 dark:text-teal-300 text-[10px] bg-teal-soft/30 dark:bg-teal-soft/10 px-1.5 py-0.5 rounded border border-teal/20 shrink-0"
+                  title="Causación en libros del periodo anterior (saldo inicial)"
+                >
+                  Ant: +{formatMoneyExact(anteriorRend.total)}
                 </span>
-              )}
+              ) : actualRend.pendiente > 0 ? (
+                <span className="text-amber-700 dark:text-amber-400 font-bold text-[10px] shrink-0">
+                  Falta: {formatMoneyExact(actualRend.pendiente)}
+                </span>
+              ) : null}
             </div>
-
-            {/* Subsección: Rendimientos del Periodo Anterior (Causación Libros que igualan saldo inicial) */}
-            {hasPriorRend && anteriorRend && (
-              <div className="mt-2.5 pt-2 border-t border-teal/20 space-y-1.5">
-                <div className="flex items-center justify-between text-[11px] font-bold">
-                  <span className="flex items-center gap-1 text-teal">
-                    <History className="size-3" />
-                    Periodo Anterior (Libros):
-                  </span>
-                  <span className="font-mono font-bold text-ink">
-                    +{formatMoneyExact(anteriorRend.total)}
-                  </span>
-                </div>
-                <div className="space-y-1">
-                  {anteriorRend.items.map((it, idx) => {
-                    const val = it.montoBanco > 0 ? it.montoBanco : it.montoLibros;
-                    const ctaName =
-                      it.itemLibros?.cuentaNombre ||
-                      it.itemLibros?.cuenta ||
-                      it.referencia ||
-                      "Rendimiento anterior";
-                    const comp = it.itemLibros?.comprobante || `Subcuenta ${idx + 1}`;
-                    return (
-                      <div
-                        key={it.id}
-                        className="flex items-center justify-between text-[10px] bg-teal-soft/25 dark:bg-teal-soft/10 px-2 py-0.5 rounded border border-teal/15"
-                      >
-                        <span className="truncate max-w-[155px] text-ink font-medium" title={it.descripcion}>
-                          • {comp}: {ctaName}
-                        </span>
-                        <span className="font-mono font-bold text-teal whitespace-nowrap">
-                          +{formatMoneyExact(val)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
 
-          <div className="mt-2 text-[10px] text-ink-muted flex items-center justify-between pt-1 border-t border-line/40">
-            <span>
-              {hasPriorRend
-                ? "Separados por periodo"
-                : `${breakdown.rendimientos.count} abonos de intereses`}
+          <div className="mt-2.5 text-[11px] text-ink-muted flex items-center justify-between pt-1.5 border-t border-line/40">
+            <span className="truncate">
+              {hasPriorRend ? "2 periodos auditados" : `${breakdown.rendimientos.count} abonos`}
             </span>
-            <span className="font-semibold text-teal hover:underline flex items-center gap-0.5">
+            <span className="font-semibold text-teal hover:underline flex items-center gap-0.5 shrink-0">
               Ver detalle →
             </span>
           </div>
@@ -227,22 +204,22 @@ export const BankExecutiveCards = memo(function BankExecutiveCards({
         {/* Card 4: Retención en la Fuente (-) */}
         <div
           onClick={() => setActiveModal("retenciones")}
-          className="rounded-2xl border border-line bg-bg-surface p-4 shadow-2xs hover:shadow-xs hover:border-rose-500/40 transition cursor-pointer flex flex-col justify-between"
+          className="rounded-xl border border-line bg-bg-surface p-3.5 shadow-2xs hover:shadow-xs hover:border-rose-500/50 transition cursor-pointer flex flex-col justify-between"
           title="Click para ver el desglose detallado de retenciones en la fuente deducidas en el extracto"
         >
           <div>
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <div className="flex items-center gap-2">
-                <span className="rounded-lg bg-rose-500/10 p-1.5 text-rose-600 dark:text-rose-400">
+            <div className="flex items-center justify-between gap-1.5 mb-1.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="rounded-lg bg-rose-500/10 p-1.5 text-rose-600 dark:text-rose-400 shrink-0">
                   <Receipt className="size-4" />
                 </span>
-                <span className="text-xs font-bold text-ink uppercase tracking-wider">
+                <span className="text-[11px] font-bold text-ink uppercase tracking-wider truncate">
                   Retención en la Fuente (-)
                 </span>
               </div>
               <span
                 className={cn(
-                  "rounded-full px-2 py-0.5 text-[10px] font-extrabold border",
+                  "rounded-full px-2 py-0.5 text-[10px] font-extrabold border shrink-0",
                   breakdown.retenciones.pendiente === 0 && breakdown.retenciones.count > 0
                     ? "bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300"
                     : breakdown.retenciones.pendiente > 0
@@ -257,16 +234,24 @@ export const BankExecutiveCards = memo(function BankExecutiveCards({
                   : "Sin Movimientos"}
               </span>
             </div>
-            <div className="font-mono text-lg font-black text-rose-600 dark:text-rose-400">
+            <div className="font-mono text-base sm:text-lg font-black text-rose-600 dark:text-rose-400 tracking-tight truncate">
               {breakdown.retenciones.total > 0
                 ? `-${formatMoneyExact(breakdown.retenciones.total)}`
                 : formatMoneyExact(0)}
             </div>
+            <div className="text-[11px] text-ink-muted flex items-center justify-between mt-1 h-5">
+              <span className="truncate">
+                {breakdown.retenciones.count} {breakdown.retenciones.count === 1 ? "retención" : "retenciones"}
+              </span>
+              <span className="font-semibold text-emerald-700 dark:text-emerald-400 text-[11px] shrink-0">
+                Reg: {formatMoneyExact(breakdown.retenciones.registrado)}
+              </span>
+            </div>
           </div>
-          <div className="mt-2 text-[11px] text-ink-muted flex items-center justify-between pt-1 border-t border-line/40">
-            <span>{breakdown.retenciones.count} retenciones</span>
-            <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-              Reg: {formatMoneyExact(breakdown.retenciones.registrado)}
+          <div className="mt-2.5 text-[11px] text-ink-muted flex items-center justify-between pt-1.5 border-t border-line/40">
+            <span className="text-ink-subtle">Anticipo de impuesto</span>
+            <span className="font-semibold text-rose-700 dark:text-rose-400 hover:underline flex items-center gap-0.5 shrink-0">
+              Ver detalle →
             </span>
           </div>
         </div>
@@ -274,31 +259,37 @@ export const BankExecutiveCards = memo(function BankExecutiveCards({
         {/* Card 5: Lotes ACH y Pagos Masivos */}
         <div
           onClick={() => setActiveModal("lotesAch")}
-          className="rounded-2xl border border-line bg-bg-surface p-4 shadow-2xs hover:shadow-xs hover:border-purple-500/40 transition cursor-pointer flex flex-col justify-between"
+          className="rounded-xl border border-line bg-bg-surface p-3.5 shadow-2xs hover:shadow-xs hover:border-purple-500/50 transition cursor-pointer flex flex-col justify-between"
           title="Click para ver el desglose de lotes agrupados ACH"
         >
           <div>
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <div className="flex items-center gap-2">
-                <span className="rounded-lg bg-purple-500/10 p-1.5 text-purple-600 dark:text-purple-400">
+            <div className="flex items-center justify-between gap-1.5 mb-1.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="rounded-lg bg-purple-500/10 p-1.5 text-purple-600 dark:text-purple-400 shrink-0">
                   <Layers className="size-4" />
                 </span>
-                <span className="text-xs font-bold text-ink uppercase tracking-wider">
+                <span className="text-[11px] font-bold text-ink uppercase tracking-wider truncate">
                   Lotes ACH / Masivos
                 </span>
               </div>
-              <span className="rounded-full bg-purple-100 text-purple-900 border border-purple-300 dark:bg-purple-950 dark:text-purple-300 px-2 py-0.5 text-[10px] font-extrabold">
+              <span className="rounded-full bg-purple-100 text-purple-900 border border-purple-300 dark:bg-purple-950 dark:text-purple-300 px-2 py-0.5 text-[10px] font-extrabold shrink-0">
                 {breakdown.lotesAch.countLotes} Lotes Auditados
               </span>
             </div>
-            <div className="font-mono text-lg font-black text-ink">
+            <div className="font-mono text-base sm:text-lg font-black text-ink tracking-tight truncate">
               {formatMoneyExact(breakdown.lotesAch.total)}
             </div>
+            <div className="text-[11px] text-ink-muted flex items-center justify-between mt-1 h-5">
+              <span className="truncate">{breakdown.lotesAch.countComprobantes} agrupados</span>
+              <span className="font-black text-emerald-700 dark:text-emerald-400 text-[11px] shrink-0">
+                Dif: $0,00
+              </span>
+            </div>
           </div>
-          <div className="mt-2 text-[11px] text-ink-muted flex items-center justify-between pt-1 border-t border-line/40">
-            <span>{breakdown.lotesAch.countComprobantes} comprobantes agrupados</span>
-            <span className="font-black text-emerald-700 dark:text-emerald-400">
-              Diferencia $0,00
+          <div className="mt-2.5 text-[11px] text-ink-muted flex items-center justify-between pt-1.5 border-t border-line/40">
+            <span className="text-ink-subtle">Dispersión masiva</span>
+            <span className="font-semibold text-purple-700 dark:text-purple-400 hover:underline flex items-center gap-0.5 shrink-0">
+              Ver detalle →
             </span>
           </div>
         </div>
