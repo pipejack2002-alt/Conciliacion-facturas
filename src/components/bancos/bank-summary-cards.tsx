@@ -218,6 +218,18 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                     </div>
                   )}
 
+                  {(summary.notasDebitoRetenciones || 0) > 0 && (
+                    <div className="flex items-center justify-between bg-bg-surface/90 px-2.5 py-1.5 rounded-lg border border-rose-500/20 text-ink">
+                      <div>
+                        <span className="font-bold text-rose-700 dark:text-rose-400">• Retención en la Fuente Deducida en Extracto:</span>
+                        <span className="block text-[10px] text-ink-muted">Anticipo de impuesto retenido sobre rendimientos (PUC 135515)</span>
+                      </div>
+                      <span className="font-mono font-bold text-rose-700 dark:text-rose-400 whitespace-nowrap">
+                        -{formatMoneyExact(summary.notasDebitoRetenciones || 0)}
+                      </span>
+                    </div>
+                  )}
+
                   {(summary.chequesEnTransito || 0) > 0 && (
                     <div className="flex items-center justify-between bg-bg-surface/90 px-2.5 py-1.5 rounded-lg border border-line text-ink">
                       <div>
@@ -477,6 +489,16 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                   </div>
                   <span className="font-mono font-bold text-rose-700 dark:text-rose-400 whitespace-nowrap">
                     -{formatMoneyExact(summary.notasDebitoComisiones || 0)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-ink py-0.5 border-b border-rose-500/10">
+                  <div>
+                    <span className="font-medium">• Retención en la Fuente Deducida en Extracto:</span>
+                    <span className="block text-[10px] text-ink-muted">Anticipo de impuesto retenido sobre rendimientos pendiente de causar (PUC 135515)</span>
+                  </div>
+                  <span className="font-mono font-bold text-rose-700 dark:text-rose-400 whitespace-nowrap">
+                    -{formatMoneyExact(summary.notasDebitoRetenciones || 0)}
                   </span>
                 </div>
 

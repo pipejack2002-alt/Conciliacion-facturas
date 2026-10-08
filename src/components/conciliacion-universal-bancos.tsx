@@ -12,18 +12,13 @@ import {
   Sparkles,
   SlidersHorizontal,
   Table,
-  BadgePercent,
-  CreditCard,
-  TrendingUp,
   Clock,
   Info,
-  Layers,
   ChevronDown,
   Trash2,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  History,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
@@ -1200,6 +1195,12 @@ export function ConciliacionUniversalBancosView({
                       <span>GMF 4×1000: <strong className="text-amber-700 dark:text-amber-300 font-mono">{formatMoneyExact(concilResult.summary.notasDebitoGmf || 0)}</strong></span>
                       <span>•</span>
                       <span>Comisiones: <strong className="text-blue-700 dark:text-blue-300 font-mono">{formatMoneyExact(concilResult.summary.notasDebitoComisiones || 0)}</strong></span>
+                      {(concilResult.summary.notasDebitoRetenciones || 0) > 0 && (
+                        <>
+                          <span>•</span>
+                          <span>Retenciones: <strong className="text-rose-700 dark:text-rose-300 font-mono">{formatMoneyExact(concilResult.summary.notasDebitoRetenciones || 0)}</strong></span>
+                        </>
+                      )}
                       <span>•</span>
                       <span>Pagos/Otros: <strong className="text-ink font-mono">{formatMoneyExact(concilResult.summary.notasDebitoOperativas || 0)}</strong></span>
                     </div>
