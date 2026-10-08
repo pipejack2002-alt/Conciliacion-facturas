@@ -169,25 +169,11 @@ function ConciliadorApp() {
 
         {/* Pestaña: Dashboard BI */}
         <div className={activeModule === "dashboard_bi" ? "block" : "hidden"}>
-          {result ? (
-            <DashboardBi result={result} />
-          ) : (
-            <div className="mx-auto max-w-lg text-center py-16 px-4">
-              <BarChart3 className="size-12 text-ink-subtle mx-auto mb-3 opacity-60" />
-              <h2 className="text-lg font-bold text-ink">Dashboard BI de Compras e IVA</h2>
-              <p className="text-xs text-ink-muted mt-1 mb-5">
-                Carga un archivo de la DIAN y tus libros contables para generar automáticamente los gráficos gerenciales de compras e IVA.
-              </p>
-              <button
-                type="button"
-                onClick={() => setActiveModule("dian")}
-                className="inline-flex items-center gap-2 rounded-xl bg-teal px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-teal-deep transition cursor-pointer"
-              >
-                <FileCheck className="size-4" />
-                Ir a Cargar Archivos DIAN
-              </button>
-            </div>
-          )}
+          <DashboardBi
+            result={result}
+            movLines={mov}
+            onNavigate={(mod) => setActiveModule(mod)}
+          />
         </div>
 
         {/* Pestaña: Bancos (Conciliación Bancaria y Tesorería) */}
