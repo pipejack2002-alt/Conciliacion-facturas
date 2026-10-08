@@ -1,8 +1,7 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { UploadPanel } from "@/components/upload-panel";
 import { ResultBoard } from "@/components/result-board";
-import { DashboardBi } from "@/components/dashboard-bi";
 import { ConciliacionBancariaView } from "@/components/conciliacion-bancaria";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useConciliacion } from "@/lib/store";
@@ -13,6 +12,11 @@ import { AppLogo } from "@/components/app-logo";
 import { cn } from "@/lib/cn";
 
 export const Route = createFileRoute("/")({ component: ProtectedConciliadorApp });
+
+// Carga diferida (lazy loading) de Dashboard BI para garantizar tiempo de carga inicial instantáneo
+const DashboardBi = lazy(() =>
+  import("@/components/dashboard-bi").then((m) => ({ default: m.DashboardBi }))
+);
 
 import {
   type ActiveModuleId,
@@ -53,7 +57,11 @@ function ConciliadorApp() {
     if (typeof window !== "undefined") {
       try {
         const url = new URL(window.location.href);
-        if (!url.searchParams.has("modulo")) {
+        // No pisar tokens de autenticación en tránsito
+        if (url.searchParams.has("auth_token") || url.searchParams.has("token")) {
+          return;
+        }
+        if (url.searchParams.get("modulo") !== activeModule) {
           url.searchParams.set("modulo", activeModule);
           window.history.replaceState(null, "", url.toString());
         }
@@ -163,25 +171,38 @@ function ConciliadorApp() {
       {/* Main Content Area */}
       <main className="flex-1 py-4 sm:py-6">
         {/* Pestaña: Conciliador DIAN (Facturas vs Libros) */}
-        <div className={activeModule === "dian" ? "block" : "hidden"}>
-          {result ? <ResultBoard /> : <UploadPanel />}
-        </div>
-
-        {/* Pestaña: Dashboard BI */}
-        {activeModule === "dashboard_bi" && (
+        {activeModule === "dian" && (
           <div className="w-full">
-            <DashboardBi
-              result={result}
-              movLines={mov}
-              onNavigate={(mod) => setActiveModule(mod)}
-            />
+            {result ? <ResultBoard /> : <UploadPanel />}
           </div>
         )}
 
+        {/* Pestaña: Dashboard BI */}
+        {activeModule === "dashboard_bi" && (
+          <Suspense
+            fallback={
+              <div className="mx-auto w-full max-w-[1600px] p-12 text-center text-ink-muted">
+                <div className="inline-block size-6 animate-spin rounded-full border-2 border-teal border-t-transparent mb-2" />
+                <p className="text-xs">Cargando Centro de Inteligencia Financiera...</p>
+              </div>
+            }
+          >
+            <div className="w-full">
+              <DashboardBi
+                result={result}
+                movLines={mov}
+                onNavigate={(mod) => setActiveModule(mod)}
+              />
+            </div>
+          </Suspense>
+        )}
+
         {/* Pestaña: Bancos (Conciliación Bancaria y Tesorería) */}
-        <div className={activeModule === "bancos" ? "block" : "hidden"}>
-          <ConciliacionBancariaView movLines={mov} />
-        </div>
+        {activeModule === "bancos" && (
+          <div className="w-full">
+            <ConciliacionBancariaView movLines={mov} />
+          </div>
+        )}
       </main>
 
       {/* Footer */}

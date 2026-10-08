@@ -48,6 +48,7 @@ import type { ConciliacionResult, MovLine, DianDoc } from "@/lib/types";
 import { useConciliacion } from "@/lib/store";
 import {
   conciliarBancos,
+  extractLibroBancos,
   getBankExecutiveBreakdown,
   type BankExtractItem,
   type BankConciliacionResult,
@@ -142,12 +143,13 @@ export function DashboardBi({
     if (effectiveExtracto.length === 0) return null;
     try {
       const saldoIni = bankSession?.saldoInicialExtracto || 0;
-      return conciliarBancos(effectiveExtracto, effectiveMov, saldoIni, saldoIni);
+      const treasuryMov = extractLibroBancos(effectiveMov, bankSession?.cuentaSeleccionada || "todas");
+      return conciliarBancos(effectiveExtracto, treasuryMov, saldoIni, saldoIni);
     } catch (e) {
       console.warn("Fallo al calcular conciliación bancaria en Dashboard BI:", e);
       return null;
     }
-  }, [effectiveExtracto, effectiveMov, bankSession?.saldoInicialExtracto]);
+  }, [effectiveExtracto, effectiveMov, bankSession?.saldoInicialExtracto, bankSession?.cuentaSeleccionada]);
 
   const bankExecutive = useMemo(() => {
     if (!bankConcilResult) return null;
@@ -552,6 +554,20 @@ export function DashboardBi({
       },
     ];
   }, [hasDian, dianKpis, hasMov, contabilidadKpis, hasBank, bancoKpis]);
+
+  const [isClientMounted, setIsClientMounted] = useState(false);
+  useEffect(() => {
+    setIsClientMounted(true);
+  }, []);
+
+  if (!isClientMounted) {
+    return (
+      <div className="mx-auto w-full max-w-[1600px] p-12 text-center text-ink-muted">
+        <div className="inline-block size-6 animate-spin rounded-full border-2 border-teal border-t-transparent mb-2" />
+        <p className="text-xs">Cargando Centro de Inteligencia Financiera...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 py-2 sm:px-6 lg:px-8 animate-in fade-in duration-200">

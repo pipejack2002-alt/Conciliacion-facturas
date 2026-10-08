@@ -313,7 +313,12 @@ export function conciliarBancos(
   const rows: BankConciliacionRow[] = [];
 
   // Filtrar posibles filas de totales o resúmenes de software contable (sin comprobante ni fecha)
-  const cleanLibros = libros.filter((l) => Boolean((l.comprobante || "").trim() || (l.fecha || "").trim()));
+  let rawClean = libros.filter((l) => Boolean((l.comprobante || "").trim() || (l.fecha || "").trim()));
+
+  // Si el libro recibido contiene cuentas no relacionadas con tesorería (ej. se pasó el auxiliar completo de la empresa),
+  // auto-filtrar a cuentas de tesorería para evitar combinatoria explosiva y cruces contablemente espurios
+  const hasNonTreasury = rawClean.some((l) => !isTreasuryAccount(l.cuenta, l.cuentaNombre));
+  const cleanLibros = hasNonTreasury ? extractLibroBancos(rawClean, "todas") : rawClean;
 
   if (extracto.length === 0 && cleanLibros.length === 0) {
     return {
@@ -567,22 +572,27 @@ export function conciliarBancos(
         continue;
       }
 
-      // Probar subconjunto en misma fecha con poda temprana (pruning)
+      // Probar subconjunto en misma fecha con poda temprana (pruning) y límite de seguridad
       let foundSameDateSubset: number[] | null = null;
-      const maxSubSize = Math.min(sameDateCandidates.length, 12);
+      const maxSubSize = Math.min(sameDateCandidates.length, 5);
+      let sameDateSteps = 0;
+      const MAX_SEARCH_STEPS = 5000;
       for (let size = 2; size <= maxSubSize; size++) {
+        if (sameDateSteps >= MAX_SEARCH_STEPS) break;
         function findSameDateSub(
           start: number,
           remaining: number,
           currentSum: number,
           currentIndices: number[]
         ): number[] | null {
+          if (++sameDateSteps > MAX_SEARCH_STEPS) return null;
           if (currentSum > montoBanco + 0.05) return null; // Poda: no seguir si ya supera el monto
           if (remaining === 0) {
             if (Math.abs(currentSum - montoBanco) <= 0.05) return currentIndices;
             return null;
           }
           for (let i = start; i <= sameDateCandidates.length - remaining; i++) {
+            if (sameDateSteps > MAX_SEARCH_STEPS) return null;
             const val = isRetiro ? sameDateCandidates[i].credito : sameDateCandidates[i].debito;
             const res = findSameDateSub(i + 1, remaining - 1, currentSum + val, [
               ...currentIndices,
@@ -679,19 +689,24 @@ export function conciliarBancos(
       }
 
       let foundSubset: number[] | null = null;
-      for (let size = 2; size <= Math.min(candidates.length, 12); size++) {
+      const maxSubSize = Math.min(candidates.length, 5);
+      let subsetSteps = 0;
+      for (let size = 2; size <= maxSubSize; size++) {
+        if (subsetSteps >= 5000) break;
         function findSubset(
           start: number,
           remainingCount: number,
           currentSum: number,
           currentIndices: number[]
         ): number[] | null {
+          if (++subsetSteps > 5000) return null;
           if (currentSum > montoBanco + 0.05) return null;
           if (remainingCount === 0) {
             if (Math.abs(currentSum - montoBanco) <= 0.05) return currentIndices;
             return null;
           }
           for (let i = start; i <= candidates.length - remainingCount; i++) {
+            if (subsetSteps > 5000) return null;
             const val = isRetiro ? candidates[i].credito : candidates[i].debito;
             const res = findSubset(i + 1, remainingCount - 1, currentSum + val, [
               ...currentIndices,
@@ -784,19 +799,23 @@ export function conciliarBancos(
 
     if (bankCandidates.length >= 2) {
       let foundBankSubset: BankExtractItem[] | null = null;
-      for (let size = 2; size <= Math.min(bankCandidates.length, 6); size++) {
+      let bankSteps = 0;
+      for (let size = 2; size <= Math.min(bankCandidates.length, 5); size++) {
+        if (bankSteps >= 5000) break;
         function findBankSub(
           start: number,
           remaining: number,
           currentSum: number,
           currentItems: BankExtractItem[]
         ): BankExtractItem[] | null {
+          if (++bankSteps > 5000) return null;
           if (currentSum > montoLibro + 0.05) return null;
           if (remaining === 0) {
             if (Math.abs(currentSum - montoLibro) <= 0.05) return currentItems;
             return null;
           }
           for (let j = start; j <= bankCandidates.length - remaining; j++) {
+            if (bankSteps > 5000) return null;
             const val = isRetiro ? bankCandidates[j].debito : bankCandidates[j].credito;
             const res = findBankSub(j + 1, remaining - 1, currentSum + val, [...currentItems, bankCandidates[j]]);
             if (res) return res;
