@@ -21,6 +21,7 @@ import {
   ArrowDown,
   ZoomIn,
   ZoomOut,
+  Layers,
 } from "lucide-react";
 import { formatMoneyExact, formatDate } from "@/lib/format";
 import {

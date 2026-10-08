@@ -52,7 +52,11 @@ import {
   type BankExtractItem,
   type BankConciliacionResult,
 } from "@/lib/conciliar-bancos";
-import { loadStoredBankSession, type StoredBankSession } from "@/lib/bank-cache";
+import {
+  loadStoredBankSession,
+  getInitialBankSessionSync,
+  type StoredBankSession,
+} from "@/lib/bank-cache";
 import { cn } from "@/lib/cn";
 
 const COLORS_PIE = ["#0f766e", "#3b82f6", "#f59e0b", "#8b5cf6", "#ec4899", "#64748b"];
@@ -79,49 +83,59 @@ export function DashboardBi({
 }: DashboardBiProps) {
   const storeResult = useConciliacion((s) => s.result);
   const storeMov = useConciliacion((s) => s.mov);
-  const storeDian = useConciliacion((s) => s.dian);
   const reset = useConciliacion((s) => s.reset);
 
   const result = propResult ?? storeResult;
   const storeOrPropMov = propMovLines && propMovLines.length > 0 ? propMovLines : storeMov;
 
-  // Estado para la sesión bancaria
-  const [bankSession, setBankSession] = useState<StoredBankSession | null>(null);
-  const [isBankLoading, setIsBankLoading] = useState(true);
+  // Estado para la sesión bancaria (síncrono inicial para evitar layout shifts y re-renders tardíos)
+  const [bankSession, setBankSession] = useState<StoredBankSession | null>(() => getInitialBankSessionSync());
+  const [isBankLoading, setIsBankLoading] = useState(false);
 
   // Selector de Pestaña Interna del BI
   const [activeTab, setActiveTab] = useState<"resumen_360" | "bancos" | "contabilidad" | "dian">("resumen_360");
 
-  // Cargar sesión bancaria persistida
+  // Cargar sesión bancaria persistida desde IndexedDB con protección contra loops
   useEffect(() => {
     let isMounted = true;
     async function loadBank() {
       try {
         const session = await loadStoredBankSession();
-        if (isMounted) setBankSession(session);
+        if (isMounted && session) {
+          setBankSession((prev) => {
+            if (!prev) return session;
+            if (
+              (session.extractoItems?.length || 0) !== (prev.extractoItems?.length || 0) ||
+              (session.customMovLines?.length || 0) !== (prev.customMovLines?.length || 0)
+            ) {
+              return session;
+            }
+            return prev;
+          });
+        }
       } catch (err) {
         console.warn("Error cargando sesión bancaria para Dashboard BI:", err);
       } finally {
         if (isMounted) setIsBankLoading(false);
       }
     }
-    loadBank();
+    void loadBank();
     return () => {
       isMounted = false;
     };
   }, []);
 
-  // Movimientos contables efectivos (prioriza store o prop, y recurre a customMovLines de la sesión bancaria si existe)
+  // Movimientos contables efectivos
   const effectiveMov: MovLine[] = useMemo(() => {
     if (storeOrPropMov && storeOrPropMov.length > 0) return storeOrPropMov;
     if (bankSession?.customMovLines && bankSession.customMovLines.length > 0) return bankSession.customMovLines;
     return [];
-  }, [storeOrPropMov, bankSession]);
+  }, [storeOrPropMov, bankSession?.customMovLines]);
 
   // Extracto bancario efectivo
   const effectiveExtracto: BankExtractItem[] = useMemo(() => {
     return bankSession?.extractoItems || [];
-  }, [bankSession]);
+  }, [bankSession?.extractoItems]);
 
   // Conciliación bancaria viva calculada para el BI
   const bankConcilResult: BankConciliacionResult | null = useMemo(() => {
@@ -133,7 +147,7 @@ export function DashboardBi({
       console.warn("Fallo al calcular conciliación bancaria en Dashboard BI:", e);
       return null;
     }
-  }, [effectiveExtracto, effectiveMov, bankSession]);
+  }, [effectiveExtracto, effectiveMov, bankSession?.saldoInicialExtracto]);
 
   const bankExecutive = useMemo(() => {
     if (!bankConcilResult) return null;
@@ -480,9 +494,64 @@ export function DashboardBi({
   const hasDian = comprasRows.length > 0;
   const hasMov = effectiveMov.length > 0;
   const hasBank = effectiveExtracto.length > 0;
-
-  // Si no hay ningún dato cargado
   const hasAnyData = hasDian || hasMov || hasBank;
+
+  // Matriz de magnitudes de triangulación financiera (renderizado nativo 100% fluido y libre de loops de ResizeObserver)
+  const dataTriangulacion = useMemo(() => {
+    const comprasVal = hasDian ? dianKpis.totalCompras : 0;
+    const librosVal = hasMov ? contabilidadKpis.totalDebitos : 0;
+    const salidasBancoVal = hasBank ? bancoKpis.totalRetiros : 0;
+    const entradasBancoVal = hasBank ? bancoKpis.totalAbonos : 0;
+
+    const maxVal = Math.max(comprasVal, librosVal, salidasBancoVal, entradasBancoVal, 1);
+
+    return [
+      {
+        id: "dian",
+        name: "Compras Facturadas DIAN",
+        tipo: "Fiscal",
+        monto: comprasVal,
+        colorBg: "bg-purple-600",
+        colorBadge: "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30",
+        pctOfMax: Math.round((comprasVal / maxVal) * 100),
+        desc: hasDian ? `${dianKpis.totalDocs} facturas electrónicas recibidas` : "Sin facturas DIAN cargadas",
+        icon: Receipt,
+      },
+      {
+        id: "libros",
+        name: "Débitos en Libros ERP",
+        tipo: "Contabilidad Oficial",
+        monto: librosVal,
+        colorBg: "bg-teal",
+        colorBadge: "bg-teal-soft text-teal border-teal/30",
+        pctOfMax: Math.round((librosVal / maxVal) * 100),
+        desc: hasMov ? `${contabilidadKpis.totalMovs} asientos en libros (${contabilidadKpis.totalCuentas} cuentas)` : "Sin auxiliar contable cargado",
+        icon: BookOpen,
+      },
+      {
+        id: "salidas_banco",
+        name: "Salidas Bancarias (Egresos)",
+        tipo: "Flujo Real de Caja",
+        monto: salidasBancoVal,
+        colorBg: "bg-amber-500",
+        colorBadge: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30",
+        pctOfMax: Math.round((salidasBancoVal / maxVal) * 100),
+        desc: hasBank ? `Pagos a terceros y cargos en ${bancoKpis.bancoNombre}` : "Sin extracto bancario cargado",
+        icon: Landmark,
+      },
+      {
+        id: "entradas_banco",
+        name: "Entradas Bancarias (Ingresos)",
+        tipo: "Flujo Real de Caja",
+        monto: entradasBancoVal,
+        colorBg: "bg-emerald-600",
+        colorBadge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+        pctOfMax: Math.round((entradasBancoVal / maxVal) * 100),
+        desc: hasBank ? `Abonos y transferencias en ${bancoKpis.bancoNombre}` : "Sin extracto bancario cargado",
+        icon: Landmark,
+      },
+    ];
+  }, [hasDian, dianKpis, hasMov, contabilidadKpis, hasBank, bancoKpis]);
 
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 py-2 sm:px-6 lg:px-8 animate-in fade-in duration-200">
@@ -744,74 +813,73 @@ export function DashboardBi({
 
           {/* Gráfico Comparativo: Triangulación Financiera */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-8 rounded-2xl border border-line bg-bg-surface p-5 shadow-xs">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4">
-                <div>
-                  <h3 className="font-bold text-sm text-ink flex items-center gap-2">
-                    <Scale className="size-4 text-teal" />
-                    <span>Triangulación Financiera: DIAN vs Libros vs Tesorería</span>
-                  </h3>
-                  <p className="text-xs text-ink-muted mt-0.5">
-                    Comparativa de magnitud entre lo facturado fiscalmente, lo causado en libros y los desembolsos reales en banco.
-                  </p>
+            <div className="lg:col-span-8 min-w-0 rounded-2xl border border-line bg-bg-surface p-5 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4">
+                  <div>
+                    <h3 className="font-bold text-sm text-ink flex items-center gap-2">
+                      <Scale className="size-4 text-teal" />
+                      <span>Triangulación Financiera: DIAN vs Libros vs Tesorería</span>
+                    </h3>
+                    <p className="text-xs text-ink-muted mt-0.5">
+                      Comparativa de magnitud proporcional entre lo facturado fiscalmente, lo causado en libros y el flujo real bancario.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4 py-2">
+                  {dataTriangulacion.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <div key={item.id} className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className={cn("p-1 rounded-md border", item.colorBadge)}>
+                              <Icon className="size-3.5" />
+                            </span>
+                            <span className="font-bold text-ink">{item.name}</span>
+                            <span className="text-[10px] text-ink-muted hidden sm:inline">({item.desc})</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-black text-sm text-ink">
+                              {formatMoney(item.monto)}
+                            </span>
+                            <span className="text-[10px] font-mono text-ink-muted w-10 text-right">
+                              {item.pctOfMax}%
+                            </span>
+                          </div>
+                        </div>
+                        {/* Barra de Magnitud Proporcional */}
+                        <div className="h-3 w-full rounded-full bg-bg-subtle overflow-hidden border border-line/60">
+                          <div
+                            className={cn("h-full rounded-full transition-all duration-500", item.colorBg)}
+                            style={{ width: `${Math.max(item.pctOfMax, item.monto > 0 ? 3 : 0)}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={[
-                      {
-                        name: "Compras DIAN",
-                        monto: hasDian ? dianKpis.totalCompras : 0,
-                        fill: "#8b5cf6",
-                        desc: "Facturación fiscal recibida",
-                      },
-                      {
-                        name: "Débitos Libros ERP",
-                        monto: hasMov ? contabilidadKpis.totalDebitos : 0,
-                        fill: "#0f766e",
-                        desc: "Causaciones contables oficiales",
-                      },
-                      {
-                        name: "Salidas Bancarias",
-                        monto: hasBank ? bancoKpis.totalRetiros : 0,
-                        fill: "#f59e0b",
-                        desc: "Desembolsos reales en banco",
-                      },
-                      {
-                        name: "Entradas Bancarias",
-                        monto: hasBank ? bancoKpis.totalAbonos : 0,
-                        fill: "#10b981",
-                        desc: "Abonos y consignaciones reales",
-                      },
-                    ]}
-                    margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
-                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--color-ink)" }} />
-                    <YAxis
-                      tickFormatter={(val) => `$${(val / 1000000).toFixed(0)}M`}
-                      tick={{ fontSize: 11, fill: "var(--color-ink-subtle)" }}
-                    />
-                    <Tooltip
-                      formatter={(val: number) => [formatMoney(val), "Monto Total"]}
-                      contentStyle={{
-                        backgroundColor: "var(--color-bg-elevated)",
-                        borderColor: "var(--color-line)",
-                        borderRadius: "10px",
-                        fontSize: "12px",
-                        color: "var(--color-ink)",
-                      }}
-                    />
-                    <Bar dataKey="monto" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+              {/* Insight Ejecutivo al pie */}
+              <div className="mt-4 pt-3 border-t border-line flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px] text-ink-muted">
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className="size-3.5 text-teal shrink-0" />
+                  <span>
+                    {hasDian && hasMov
+                      ? `Tasa de correlación: ${dianKpis.tasaCobertura}% de compras DIAN tienen trazabilidad en libros.`
+                      : "Carga las fuentes financieras para obtener correlaciones cruzadas automáticas."}
+                  </span>
+                </span>
+                <span className="font-medium text-ink-subtle">
+                  Escala normalizada al mayor valor transado
+                </span>
               </div>
             </div>
 
             {/* Panel de Semáforos y Control de Salud Financiera */}
-            <div className="lg:col-span-4 rounded-2xl border border-line bg-bg-surface p-5 shadow-xs flex flex-col justify-between">
+            <div className="lg:col-span-4 min-w-0 rounded-2xl border border-line bg-bg-surface p-5 shadow-xs flex flex-col justify-between">
               <div>
                 <h3 className="font-bold text-sm text-ink flex items-center gap-2 mb-1">
                   <ShieldCheck className="size-4 text-teal" />
@@ -1038,8 +1106,8 @@ export function DashboardBi({
                   </div>
                 </div>
 
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-64 w-full min-w-0 overflow-hidden">
+                  <ResponsiveContainer width="100%" height={250} minWidth={0} debounce={50}>
                     <BarChart data={dataFlujoBancarioDiario} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
                       <XAxis dataKey="fechaCorta" tick={{ fontSize: 11, fill: "var(--color-ink-subtle)" }} />
@@ -1061,8 +1129,8 @@ export function DashboardBi({
                           color: "var(--color-ink)",
                         }}
                       />
-                      <Bar dataKey="abonos" fill="#10b981" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="retiros" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="abonos" fill="#10b981" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                      <Bar dataKey="retiros" fill="#f43f5e" radius={[4, 4, 0, 0]} isAnimationActive={false} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -1162,13 +1230,13 @@ export function DashboardBi({
               {/* Gráficos de Clases PUC y Tipos de Comprobante */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 {/* Gráfico: Distribución por Clases del PUC */}
-                <div className="lg:col-span-7 rounded-2xl border border-line bg-bg-surface p-5 shadow-xs">
+                <div className="lg:col-span-7 min-w-0 rounded-2xl border border-line bg-bg-surface p-5 shadow-xs">
                   <h3 className="font-bold text-sm text-ink mb-1">Distribución de Movimiento por Clases PUC</h3>
                   <p className="text-xs text-ink-muted mb-4">
                     Volumen transaccional (Débitos + Créditos) clasificado por la clase del plan de cuentas.
                   </p>
-                  <div className="h-64 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
+                  <div className="h-64 w-full min-w-0 overflow-hidden">
+                    <ResponsiveContainer width="100%" height={250} minWidth={0} debounce={50}>
                       <BarChart data={dataClasesPuc} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
                         <XAxis dataKey="clase" tick={{ fontSize: 11, fill: "var(--color-ink)" }} />
@@ -1187,7 +1255,7 @@ export function DashboardBi({
                             color: "var(--color-ink)",
                           }}
                         />
-                        <Bar dataKey="totalMovimiento" fill="#0f766e" radius={[6, 6, 0, 0]} />
+                        <Bar dataKey="totalMovimiento" fill="#0f766e" radius={[6, 6, 0, 0]} isAnimationActive={false} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -1202,14 +1270,14 @@ export function DashboardBi({
                 </div>
 
                 {/* Donut: Comprobantes Contables */}
-                <div className="lg:col-span-5 rounded-2xl border border-line bg-bg-surface p-5 shadow-xs flex flex-col justify-between">
+                <div className="lg:col-span-5 min-w-0 rounded-2xl border border-line bg-bg-surface p-5 shadow-xs flex flex-col justify-between">
                   <div>
                     <h3 className="font-bold text-sm text-ink mb-1">Tipos de Comprobante Contable</h3>
                     <p className="text-xs text-ink-muted mb-2">
                       Proporción de asientos por tipo de documento contable.
                     </p>
-                    <div className="h-56 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
+                    <div className="h-56 w-full min-w-0 overflow-hidden">
+                      <ResponsiveContainer width="100%" height={220} minWidth={0} debounce={50}>
                         <PieChart>
                           <Pie
                             data={dataComprobantesTipos}
@@ -1219,6 +1287,7 @@ export function DashboardBi({
                             outerRadius={75}
                             paddingAngle={3}
                             dataKey="total"
+                            isAnimationActive={false}
                           >
                             {dataComprobantesTipos.map((_, idx) => (
                               <Cell key={`cell-${idx}`} fill={COLORS_PIE[idx % COLORS_PIE.length]} />
@@ -1254,13 +1323,13 @@ export function DashboardBi({
               </div>
 
               {/* Top 10 Terceros Contables */}
-              <div className="rounded-2xl border border-line bg-bg-surface p-5 shadow-xs">
+              <div className="rounded-2xl border border-line bg-bg-surface p-5 shadow-xs min-w-0">
                 <h3 className="font-bold text-sm text-ink mb-1">Top 10 Terceros por Volumen Contable</h3>
                 <p className="text-xs text-ink-muted mb-4">
                   Proveedores, entidades financieras y terceros con mayor movimiento en el auxiliar contable.
                 </p>
-                <div className="h-72 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-72 w-full min-w-0 overflow-hidden">
+                  <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
                     <BarChart data={dataTopTercerosContables} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.3} />
                       <XAxis
@@ -1279,7 +1348,7 @@ export function DashboardBi({
                           color: "var(--color-ink)",
                         }}
                       />
-                      <Bar dataKey="volumenTotal" fill="#0f766e" radius={[0, 6, 6, 0]} />
+                      <Bar dataKey="volumenTotal" fill="#0f766e" radius={[0, 6, 6, 0]} isAnimationActive={false} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -1369,7 +1438,7 @@ export function DashboardBi({
 
               {/* Gráficos de Tarifas de IVA y Top Proveedores */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                <div className="lg:col-span-5 rounded-2xl border border-line bg-bg-surface p-5 shadow-xs flex flex-col justify-between">
+                <div className="lg:col-span-5 min-w-0 rounded-2xl border border-line bg-bg-surface p-5 shadow-xs flex flex-col justify-between">
                   <div>
                     <h3 className="font-semibold text-sm text-ink flex items-center gap-2">
                       <PieIcon className="size-4 text-teal" />
@@ -1378,8 +1447,8 @@ export function DashboardBi({
                     <p className="text-xs text-ink-muted mt-0.5">
                       Proporción de compras gravadas al 19%, 5% y exentas/excluidas.
                     </p>
-                    <div className="h-64 w-full my-3">
-                      <ResponsiveContainer width="100%" height="100%">
+                    <div className="h-64 w-full my-3 min-w-0 overflow-hidden">
+                      <ResponsiveContainer width="100%" height={250} minWidth={0} debounce={50}>
                         <PieChart>
                           <Pie
                             data={dataTarifasIva}
@@ -1389,6 +1458,7 @@ export function DashboardBi({
                             outerRadius={88}
                             paddingAngle={3}
                             dataKey="value"
+                            isAnimationActive={false}
                           >
                             {dataTarifasIva.map((_, index) => (
                               <Cell key={`cell-${index}`} fill={COLORS_PIE[index % COLORS_PIE.length]} />
@@ -1422,7 +1492,7 @@ export function DashboardBi({
                   </div>
                 </div>
 
-                <div className="lg:col-span-7 rounded-2xl border border-line bg-bg-surface p-5 shadow-xs flex flex-col justify-between">
+                <div className="lg:col-span-7 min-w-0 rounded-2xl border border-line bg-bg-surface p-5 shadow-xs flex flex-col justify-between">
                   <div>
                     <h3 className="font-semibold text-sm text-ink flex items-center gap-2">
                       <BarChart3 className="size-4 text-teal" />
@@ -1431,8 +1501,8 @@ export function DashboardBi({
                     <p className="text-xs text-ink-muted mt-0.5">
                       Terceros con mayor volumen facturado en el período analizado.
                     </p>
-                    <div className="h-72 w-full my-3">
-                      <ResponsiveContainer width="100%" height="100%">
+                    <div className="h-72 w-full my-3 min-w-0 overflow-hidden">
+                      <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
                         <BarChart data={dataTopProveedoresDian} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.3} />
                           <XAxis
@@ -1452,7 +1522,7 @@ export function DashboardBi({
                               color: "var(--color-ink)",
                             }}
                           />
-                          <Bar dataKey="total" fill="#0f766e" radius={[0, 6, 6, 0]} />
+                          <Bar dataKey="total" fill="#0f766e" radius={[0, 6, 6, 0]} isAnimationActive={false} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -1465,7 +1535,7 @@ export function DashboardBi({
               </div>
 
               {/* Tendencia Diaria de Compras e IVA */}
-              <div className="rounded-2xl border border-line bg-bg-surface p-5 shadow-xs">
+              <div className="rounded-2xl border border-line bg-bg-surface p-5 shadow-xs min-w-0">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4">
                   <div>
                     <h3 className="font-semibold text-sm text-ink flex items-center gap-2">
@@ -1486,8 +1556,8 @@ export function DashboardBi({
                   </div>
                 </div>
 
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-64 w-full min-w-0 overflow-hidden">
+                  <ResponsiveContainer width="100%" height={250} minWidth={0} debounce={50}>
                     <AreaChart data={dataTendenciaDian} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
                       <defs>
                         <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
@@ -1519,8 +1589,8 @@ export function DashboardBi({
                           color: "var(--color-ink)",
                         }}
                       />
-                      <Area type="monotone" dataKey="total" stroke="#0f766e" strokeWidth={2} fillOpacity={1} fill="url(#colorTotal)" />
-                      <Area type="monotone" dataKey="ivaAcumulado" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorIva)" />
+                      <Area type="monotone" dataKey="total" stroke="#0f766e" strokeWidth={2} fillOpacity={1} fill="url(#colorTotal)" isAnimationActive={false} />
+                      <Area type="monotone" dataKey="ivaAcumulado" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorIva)" isAnimationActive={false} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>

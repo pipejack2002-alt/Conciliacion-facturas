@@ -168,13 +168,15 @@ function ConciliadorApp() {
         </div>
 
         {/* Pestaña: Dashboard BI */}
-        <div className={activeModule === "dashboard_bi" ? "block" : "hidden"}>
-          <DashboardBi
-            result={result}
-            movLines={mov}
-            onNavigate={(mod) => setActiveModule(mod)}
-          />
-        </div>
+        {activeModule === "dashboard_bi" && (
+          <div className="w-full">
+            <DashboardBi
+              result={result}
+              movLines={mov}
+              onNavigate={(mod) => setActiveModule(mod)}
+            />
+          </div>
+        )}
 
         {/* Pestaña: Bancos (Conciliación Bancaria y Tesorería) */}
         <div className={activeModule === "bancos" ? "block" : "hidden"}>
