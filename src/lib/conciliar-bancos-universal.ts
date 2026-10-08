@@ -320,14 +320,42 @@ export function parseUniversalBankRows(rawRows: any[][], config: UniversalColumn
  * Escanea de forma resiliente fechas, conceptos, referencias y valores débito/crédito
  */
 export async function parseUniversalPdfBankExtract(
-  buffer: ArrayBuffer | Uint8Array
+  buffer: ArrayBuffer | Uint8Array,
+  password?: string,
+  fileName?: string
 ): Promise<UniversalExtractPreview> {
   const uint8 =
     buffer instanceof Uint8Array
       ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
       : new Uint8Array(buffer);
 
-  const doc = await getDocumentProxy(uint8);
+  let effectivePassword = password;
+  if (!effectivePassword && fileName) {
+    const passMatch = fileName.match(/(?:clave|pass(?:word)?|pin)\s*[:=_\-\s]?\s*([a-zA-Z0-9]+)/i);
+    if (passMatch) effectivePassword = passMatch[1];
+  }
+
+  let doc;
+  try {
+    doc = await getDocumentProxy(uint8, effectivePassword ? { password: effectivePassword } : undefined);
+  } catch (err: any) {
+    const errMsg = String(err?.message || err || "").toLowerCase();
+    if (errMsg.includes("password") || errMsg.includes("encrypted") || err?.name === "PasswordException") {
+      if (typeof window !== "undefined") {
+        const userPass = window.prompt("El archivo PDF está protegido con clave. Ingrese la contraseña para desbloquearlo:");
+        if (userPass) {
+          doc = await getDocumentProxy(uint8.slice(), { password: userPass });
+        } else {
+          throw new Error("El extracto PDF requiere clave.");
+        }
+      } else {
+        throw err;
+      }
+    } else {
+      throw err;
+    }
+  }
+
   const { text: pages } = await extractText(doc, { mergePages: false });
   const fullText = pages.join("\n");
 
@@ -549,7 +577,7 @@ export async function processUniversalExtractFile(
 
   if (isPdf) {
     try {
-      const specialized = await parsePdfBankExtract(buffer, onProgress);
+      const specialized = await parsePdfBankExtract(buffer, onProgress, undefined, file.name);
       if (specialized && specialized.items.length > 0) {
         return {
           fileName: file.name,
@@ -589,7 +617,7 @@ export async function processUniversalExtractFile(
       console.warn("Fallo en parsePdfBankExtract especializado, usando fallback universal:", e);
     }
 
-    return parseUniversalPdfBankExtract(buffer);
+    return parseUniversalPdfBankExtract(buffer, undefined, file.name);
   }
 
   // Si es Excel o CSV

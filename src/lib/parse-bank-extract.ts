@@ -481,7 +481,7 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
   const ficAltaSaldoIni = altaRowMatch ? cleanMoneyNumber(altaRowMatch[1]) : 0;
   const ficAltaSaldoFin = altaRowMatch ? cleanMoneyNumber(altaRowMatch[6]) : 0;
   const ficAltaRend = altaRowMatch ? cleanMoneyNumber(altaRowMatch[4]) : 0;
-  const _ficAltaRetefuente = altaRowMatch ? cleanMoneyNumber(altaRowMatch[5]) : 0;
+  const ficAltaRetefuente = altaRowMatch ? cleanMoneyNumber(altaRowMatch[5]) : 0;
 
   // 3. Fondos de Inversión Colectiva (Vista)
   let ficVistaCta = "";
@@ -489,6 +489,7 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
   const ficVistaSaldoIni = vistaRowMatch ? cleanMoneyNumber(vistaRowMatch[1]) : 0;
   const ficVistaSaldoFin = vistaRowMatch ? cleanMoneyNumber(vistaRowMatch[6]) : 0;
   const ficVistaRend = vistaRowMatch ? cleanMoneyNumber(vistaRowMatch[4]) : 0;
+  const ficVistaRetefuente = vistaRowMatch ? cleanMoneyNumber(vistaRowMatch[5]) : 0;
 
   // 4. Totales Portafolio
   const portafolioSaldoIni = totalRowMatch ? cleanMoneyNumber(totalRowMatch[1]) : ficAltaSaldoIni + ficVistaSaldoIni;
@@ -692,6 +693,19 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
     });
   }
 
+  // Si no se capturaron retenciones específicas de vista pero hay en la tabla resumen
+  if (ficVistaRetefuente > 0 && !ficVistaItems.some((it) => /retenci|retefuente/i.test(it.descripcion))) {
+    ficVistaItems.push({
+      id: "cre_vista_retefte",
+      fecha: `${currentYear}-08-31`,
+      descripcion: "RETENCION EN LA FUENTE RENDIMIENTOS (CREDICORP CAPITAL VISTA)",
+      referencia: ficVistaCta || "VISTA",
+      debito: ficVistaRetefuente,
+      credito: 0,
+      saldo: ficVistaSaldoFin,
+    });
+  }
+
   // Asegurar que Alta Liquidez tenga sus rendimientos si no vinieron en la tabla de movimientos
   if (ficAltaRend > 0 && !ficAltaItems.some((it) => /rendimiento/i.test(it.descripcion))) {
     ficAltaItems.push({
@@ -701,6 +715,19 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
       referencia: ficAltaCta || "1-1-44413-6",
       debito: 0,
       credito: ficAltaRend,
+      saldo: ficAltaSaldoFin,
+    });
+  }
+
+  // Asegurar que Alta Liquidez tenga su retención si no vino en la tabla de movimientos
+  if (ficAltaRetefuente > 0 && !ficAltaItems.some((it) => /retenci|retefuente/i.test(it.descripcion))) {
+    ficAltaItems.push({
+      id: "cre_alta_retefte",
+      fecha: `${currentYear}-09-30`,
+      descripcion: "RETENCION EN LA FUENTE RENDIMIENTOS (CREDICORP CAPITAL ALTA LIQUIDEZ)",
+      referencia: ficAltaCta || "1-1-44413-6",
+      debito: ficAltaRetefuente,
+      credito: 0,
       saldo: ficAltaSaldoFin,
     });
   }
@@ -737,6 +764,19 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
     });
   }
 
+  // Asegurar que la retención en la fuente de Vista esté en el consolidado si no estaba ya
+  if (ficVistaRetefuente > 0 && !consolidatedItems.some((it) => /vista.*retenci|retenci.*vista/i.test(it.descripcion))) {
+    consolidatedItems.push({
+      id: "cons_retefte_vista",
+      fecha: `${currentYear}-08-31`,
+      descripcion: "RETENCION EN LA FUENTE RENDIMIENTOS (CREDICORP CAPITAL VISTA)",
+      referencia: "VISTA",
+      debito: ficVistaRetefuente,
+      credito: 0,
+      saldo: ficVistaSaldoFin,
+    });
+  }
+
   // Asegurar que los rendimientos de Alta Liquidez estén en el portafolio consolidado si no estaban ya
   if (ficAltaRend > 0 && !consolidatedItems.some((it) => /rendimiento/i.test(it.descripcion))) {
     consolidatedItems.push({
@@ -746,6 +786,19 @@ function parseCredicorpCapital(pages: string[]): ParsedBankExtractResult {
       referencia: ficAltaCta || "1-1-44413-6",
       debito: 0,
       credito: ficAltaRend,
+      saldo: ficAltaSaldoFin,
+    });
+  }
+
+  // Asegurar que la retención en la fuente de Alta Liquidez esté en el consolidado si no estaba ya
+  if (ficAltaRetefuente > 0 && !consolidatedItems.some((it) => /retenci|retefuente/i.test(it.descripcion))) {
+    consolidatedItems.push({
+      id: "cons_retefte_alta",
+      fecha: `${currentYear}-09-30`,
+      descripcion: "RETENCION EN LA FUENTE RENDIMIENTOS (CREDICORP CAPITAL ALTA LIQUIDEZ)",
+      referencia: ficAltaCta || "1-1-44413-6",
+      debito: ficAltaRetefuente,
+      credito: 0,
       saldo: ficAltaSaldoFin,
     });
   }
@@ -1089,7 +1142,9 @@ export function parseTextBankExtract(pages: string[]): ParsedBankExtractResult {
  */
 export async function parsePdfBankExtract(
   buffer: ArrayBuffer | Uint8Array,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  password?: string,
+  fileName?: string
 ): Promise<ParsedBankExtractResult> {
   const uint8 =
     buffer instanceof Uint8Array
@@ -1100,7 +1155,43 @@ export async function parsePdfBankExtract(
   // pueda transferir o desasociar (detach) el ArrayBuffer subyacente.
   const uint8Copy = uint8.slice();
 
-  const doc = await getDocumentProxy(uint8);
+  // Detección automática de clave si está indicada en el nombre de archivo (ej. "(Clave 8001)")
+  let effectivePassword = password;
+  if (!effectivePassword && fileName) {
+    const passMatch = fileName.match(/(?:clave|pass(?:word)?|pin)\s*[:=_\-\s]?\s*([a-zA-Z0-9]+)/i);
+    if (passMatch) {
+      effectivePassword = passMatch[1];
+    }
+  }
+
+  let doc;
+  try {
+    doc = await getDocumentProxy(uint8, effectivePassword ? { password: effectivePassword } : undefined);
+  } catch (err: any) {
+    const errMsg = String(err?.message || err || "").toLowerCase();
+    const isPass =
+      errMsg.includes("password") ||
+      errMsg.includes("encrypted") ||
+      err?.name === "PasswordException";
+
+    if (isPass) {
+      if (typeof window !== "undefined") {
+        const userPass = window.prompt(
+          "El archivo PDF está protegido con contraseña. Por favor ingrese la clave para desbloquearlo:"
+        );
+        if (userPass) {
+          doc = await getDocumentProxy(uint8Copy.slice(), { password: userPass });
+        } else {
+          throw new Error("El extracto bancario en PDF requiere contraseña para ser procesado.");
+        }
+      } else {
+        throw new Error("El extracto bancario en PDF requiere contraseña para ser procesado.");
+      }
+    } else {
+      throw err;
+    }
+  }
+
   let { text: pages } = await extractText(doc, { mergePages: false });
   let fullText = pages.join("\n");
 
@@ -1248,7 +1339,8 @@ export function parseExcelBankExtract(data: ArrayBuffer | Uint8Array | string): 
  */
 export async function parseBankExtractFile(
   file: File,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  password?: string
 ): Promise<ParsedBankExtractResult> {
   const isPdf = isPdfFile(file);
   const isImg = isImageFile(file);
@@ -1260,7 +1352,7 @@ export async function parseBankExtractFile(
 
   const buffer = await file.arrayBuffer();
   if (isPdf) {
-    return parsePdfBankExtract(buffer, onProgress);
+    return parsePdfBankExtract(buffer, onProgress, password, file.name);
   }
   return parseExcelBankExtract(buffer);
 }
