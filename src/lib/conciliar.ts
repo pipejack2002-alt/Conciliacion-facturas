@@ -1510,6 +1510,7 @@ export function conciliar(
       diferencias,
       duplicados,
       crucesNc: cruzes.length,
+      valorCrucesNc: cruzes.reduce((s, c) => s + c.valor, 0),
       noAplica: rows.filter((r) => r.estado === "no_aplica").length,
       soloSiigo: orphans.length,
       valorDian: recibidos.reduce((s, r) => s + r.totalDian, 0),
@@ -1587,7 +1588,6 @@ export function inCola(r: ConciliacionRow): boolean {
   if (r.estado === "pendiente" && r.prioridad === "audit") return true;
   if (r.estado === "duplicado") return true;
   if (r.estado === "diferencia") return true;
-  if (r.estado === "cruce_nc") return true;
   if (r.estado === "posible_typo") return true;
   return false;
 }

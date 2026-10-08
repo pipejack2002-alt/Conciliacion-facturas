@@ -1757,8 +1757,15 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
 
   it("debe conciliar facturas legalizadas en libros (FE562 y FE563) y cruzar notas crédito contra las facturas no causadas (560 y 561)", () => {
     const nitCamargo = "1041903423";
+    const baseDoc = {
+      fechaRecepcion: "2026-09-17",
+      nitReceptor: "900123456",
+      nombreReceptor: "EMPRESA MODELO",
+      estadoDian: "Aceptado",
+    };
     const dianDocs: DianDoc[] = [
       {
+        ...baseDoc,
         tipo: "Factura electrónica",
         folio: "563",
         prefijo: "",
@@ -1771,6 +1778,7 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
         grupo: "Recibido",
       },
       {
+        ...baseDoc,
         tipo: "Factura electrónica",
         folio: "562",
         prefijo: "",
@@ -1783,6 +1791,7 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
         grupo: "Recibido",
       },
       {
+        ...baseDoc,
         tipo: "Nota de crédito electrónica",
         folio: "NC28",
         prefijo: "",
@@ -1795,6 +1804,7 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
         grupo: "Recibido",
       },
       {
+        ...baseDoc,
         tipo: "Factura electrónica",
         folio: "561",
         prefijo: "",
@@ -1807,6 +1817,7 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
         grupo: "Recibido",
       },
       {
+        ...baseDoc,
         tipo: "Nota de crédito electrónica",
         folio: "NC27",
         prefijo: "",
@@ -1819,6 +1830,7 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
         grupo: "Recibido",
       },
       {
+        ...baseDoc,
         tipo: "Factura electrónica",
         folio: "560",
         prefijo: "",
@@ -1876,5 +1888,11 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
     assert.strictEqual(row560.estado, "cruce_nc", "560 debe anularse con NC27");
     assert.strictEqual(rowNC28.estado, "cruce_nc", "NC28 debe cruzar con 561");
     assert.strictEqual(rowNC27.estado, "cruce_nc", "NC27 debe cruzar con 560");
+
+    // Verificar que las facturas y NC compensadas (cruce_nc) NO se agreguen a la cola de auditoría ni inflen el valor
+    assert.strictEqual(res.totals.cola, 0, "No debe haber alertas en cola de auditoría porque todo está conciliado o compensado con NC");
+    assert.strictEqual(res.totals.valorCola, 0, "El valor de la cola debe ser 0");
+    assert.strictEqual(res.totals.crucesNc, 2, "Deben identificarse 2 cruces con NC");
+    assert.strictEqual(res.totals.valorCrucesNc, 390000, "Valor compensado simple (no duplicado): 260.000 + 130.000 = 390.000");
   });
 });

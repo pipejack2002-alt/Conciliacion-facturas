@@ -174,6 +174,7 @@ export type Totales = {
   diferencias: number;
   duplicados: number;
   crucesNc: number;
+  valorCrucesNc?: number;
   noAplica: number;
   soloSiigo: number;
   valorDian: number;

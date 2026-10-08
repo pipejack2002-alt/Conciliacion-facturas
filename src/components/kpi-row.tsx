@@ -1,4 +1,4 @@
-import { ShieldAlert, Clock, AlertTriangle, Copy, Scale, CheckCircle2, FileSpreadsheet } from "lucide-react";
+import { ShieldAlert, Clock, AlertTriangle, Copy, Scale, CheckCircle2, FileSpreadsheet, ArrowLeftRight } from "lucide-react";
 import { formatMoney, formatPct } from "@/lib/format";
 import type { ConciliacionResult } from "@/lib/types";
 import { cn } from "@/lib/cn";
@@ -81,6 +81,18 @@ export function KpiRow({
       alert: t.diferencias > 0,
       tab: "diferencia",
     },
+    ...(t.crucesNc > 0
+      ? [
+          {
+            label: "Cruces NC",
+            value: String(t.crucesNc),
+            hint: `${formatMoney(t.valorCrucesNc || 0)} compensado`,
+            icon: ArrowLeftRight,
+            highlight: true,
+            tab: "cruce_nc" as TabId,
+          },
+        ]
+      : []),
     {
       label: "Recibidos OK",
       value: formatPct(t.pctRecibidos),
@@ -94,11 +106,13 @@ export function KpiRow({
     <div
       className={cn(
         "grid grid-cols-2 gap-3",
-        items.length >= 7
-          ? "sm:grid-cols-3 lg:grid-cols-7"
-          : items.length === 6
-            ? "sm:grid-cols-3 lg:grid-cols-6"
-            : "sm:grid-cols-3 lg:grid-cols-5",
+        items.length >= 8
+          ? "sm:grid-cols-3 lg:grid-cols-8"
+          : items.length === 7
+            ? "sm:grid-cols-3 lg:grid-cols-7"
+            : items.length === 6
+              ? "sm:grid-cols-3 lg:grid-cols-6"
+              : "sm:grid-cols-3 lg:grid-cols-5",
       )}
     >
       {items.map((k) => {
@@ -116,7 +130,9 @@ export function KpiRow({
                 ? "border-teal bg-teal-soft/40 shadow-sm ring-2 ring-teal/30 -translate-y-0.5"
                 : k.alert
                   ? "border-danger/40 bg-bg-surface hover:border-danger hover:bg-danger-bg/40 hover:-translate-y-0.5 hover:shadow-sm"
-                  : "border-line bg-bg-surface hover:border-teal/50 hover:bg-teal-soft/20 hover:-translate-y-0.5 hover:shadow-sm",
+                  : k.highlight
+                    ? "border-teal/30 bg-teal-soft/20 hover:border-teal hover:bg-teal-soft/30 hover:-translate-y-0.5 hover:shadow-sm"
+                    : "border-line bg-bg-surface hover:border-teal/50 hover:bg-teal-soft/20 hover:-translate-y-0.5 hover:shadow-sm",
             )}
           >
             {/* Header del KPI con Icono y Alerta */}
@@ -138,7 +154,9 @@ export function KpiRow({
                       ? "text-teal"
                       : k.alert
                         ? "text-danger"
-                        : "text-ink-subtle group-hover:text-ink-muted",
+                        : k.highlight
+                          ? "text-teal"
+                          : "text-ink-subtle group-hover:text-ink-muted",
                   )}
                 />
               </div>
