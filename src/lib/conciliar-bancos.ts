@@ -30,6 +30,7 @@ export interface BankConciliacionRow {
   esGmf: boolean;
   esComision: boolean;
   esRendimiento: boolean;
+  esRetencion?: boolean;
   esRendimientoPeriodoAnterior?: boolean;
   esRendimientoPeriodoActual?: boolean;
   itemBanco?: BankExtractItem;
@@ -48,6 +49,7 @@ export interface BankConciliacionSummary {
   notasCreditoNoRegistradas: number;
   notasDebitoGmf?: number;
   notasDebitoComisiones?: number;
+  notasDebitoRetenciones?: number;
   notasDebitoOperativas?: number;
   notasCreditoRendimientos?: number;
   notasCreditoOperativas?: number;
@@ -244,6 +246,7 @@ export function extractLibroBancos(mov: MovLine[], cuentaFiltro?: string): MovLi
 /**
  * Clasifica de forma estricta y mutuamente excluyente los conceptos de un movimiento bancario:
  * - GMF (Gravamen a los Movimientos Financieros / 4x1000)
+ * - Retención en la Fuente (deducciones tributarias en extracto sobre rendimientos o transacciones)
  * - Rendimientos Financieros (abonos de intereses del banco)
  * - Comisiones Bancarias (cuotas de manejo, tarifas, chequeras, costos de transferencia / operaciones bancarias con IVA)
  */
@@ -251,27 +254,39 @@ export function classifyMovementConcept(desc: string): {
   esGmf: boolean;
   esComision: boolean;
   esRendimiento: boolean;
+  esRetencion: boolean;
 } {
   const d = (desc || "").toLowerCase();
 
   // 1. Detección de GMF (4x1000)
   const esGmf = /gmf|4x1000|4\s*x\s*1000|gravamen|cobro\s*gm|impuesto.*gobierno/i.test(d);
 
-  // 2. Detección de Rendimientos / Abono de intereses
-  const esRendimiento = /rendimiento|inter[eé]s(?:es)?\b|abono.*inter[eé]s|inter[eé]s.*abono|intereses.*liquidados/i.test(d);
+  // 2. Detección de Retención en la Fuente bancaria (deducción tributaria sobre rendimientos o transacciones)
+  // IMPORTANTE: Un movimiento como "RETENCION RENDIMIENTOS" o "RET. FTE RENDIMIENTOS" es una RETENCIÓN, nunca un abono de rendimientos.
+  const esRetencion =
+    !esGmf &&
+    /retenci[oó]n|retefuente|ret\.?\s*fte|rte\.?\s*fte/i.test(d);
 
-  // 3. Detección de Comisiones Bancarias:
-  // IMPORTANTE: Una comisión bancaria NUNCA es GMF ni Rendimiento.
+  // 3. Detección de Rendimientos / Abono de intereses
+  // Un rendimiento NUNCA es GMF ni Retención en la fuente.
+  const esRendimiento =
+    !esGmf &&
+    !esRetencion &&
+    /rendimiento|inter[eé]s(?:es)?\b|abono.*inter[eé]s|inter[eé]s.*abono|intereses.*liquidados/i.test(d);
+
+  // 4. Detección de Comisiones Bancarias:
+  // IMPORTANTE: Una comisión bancaria NUNCA es GMF, Retención ni Rendimiento.
   // Debe describir expresamente comisiones, cuotas de manejo, chequeras, tarifas bancarias,
   // costo de transferencia/transaccional, cobro de operación bancaria o IVA financiero asociado.
   const esComision =
     !esGmf &&
+    !esRetencion &&
     !esRendimiento &&
     /comis(?:i[oó]n|\.|\b)|cuota.*manejo|chequera|tarifa|costo.*transf|costo.*transaccional|cobro.*(?:op|operaci[oó]n|bancar|tarifa|transf|servicio|cuota|mantenimiento)|cargo.*servicio|iva.*(?:comis|cuota|tarifa|bancar)/i.test(
       d
     );
 
-  return { esGmf, esComision, esRendimiento };
+  return { esGmf, esComision, esRendimiento, esRetencion };
 }
 
 /**
@@ -421,9 +436,8 @@ export function conciliarBancos(
   for (const bItem of extracto) {
     if (matchedExtractoIds.has(bItem.id)) continue;
     // Excluir conceptos fiscales/tributarios y rendimientos de cruces por referencia con facturas/terceros
-    if (classifyMovementConcept(bItem.descripcion).esGmf) continue;
-    if (classifyMovementConcept(bItem.descripcion).esRendimiento) continue;
-    if (/retenci[oó]n/i.test(bItem.descripcion)) continue;
+    const bConceptPhase1 = classifyMovementConcept(bItem.descripcion);
+    if (bConceptPhase1.esGmf || bConceptPhase1.esRendimiento || bConceptPhase1.esRetencion) continue;
 
     const isRetiro = bItem.debito > 0;
     const montoBanco = isRetiro ? bItem.debito : bItem.credito;
@@ -455,7 +469,7 @@ export function conciliarBancos(
           if (Math.abs(montoBanco - montoLibro) <= 0.05) {
             matchedExtractoIds.add(bItem.id);
             matchedLibroIndices.add(i);
-            const { esGmf, esComision, esRendimiento } = classifyMovementConcept(bItem.descripcion);
+            const { esGmf, esComision, esRendimiento, esRetencion } = classifyMovementConcept(bItem.descripcion);
             rows.push({
               id: `match_${bItem.id}_${i}`,
               estado: "conciliado",
@@ -469,6 +483,7 @@ export function conciliarBancos(
               esGmf,
               esComision,
               esRendimiento,
+              esRetencion,
               itemBanco: bItem,
               itemLibros: lItem,
               nota: "Conciliado por referencia de documento/cheque y valor exacto.",
@@ -486,8 +501,8 @@ export function conciliarBancos(
   for (const bItem of extracto) {
     if (matchedExtractoIds.has(bItem.id)) continue;
     // CRÍTICO: Excluir GMF, Retenciones y Rendimientos para que no se absorban en lotes operativos
-    const { esGmf: isGmfB, esRendimiento: isRendB } = classifyMovementConcept(bItem.descripcion);
-    if (isGmfB || isRendB || /retenci[oó]n/i.test(bItem.descripcion)) continue;
+    const { esGmf: isGmfB, esRendimiento: isRendB, esRetencion: isRetB } = classifyMovementConcept(bItem.descripcion);
+    if (isGmfB || isRendB || isRetB) continue;
 
     const isRetiro = bItem.debito > 0;
     const montoBanco = isRetiro ? bItem.debito : bItem.credito;
@@ -511,8 +526,9 @@ export function conciliarBancos(
       .filter((l) => {
         if (matchedLibroIndices.has(l.originalIdx)) return false;
         const lDescAll = `${l.descripcion || ""} ${l.nombre || ""}`;
-        if (classifyMovementConcept(lDescAll).esGmf) return false;
-        if (/retenci[oó]n/i.test(lDescAll) || (l.cuenta && l.cuenta.startsWith("135515"))) return false;
+        const lConcept = classifyMovementConcept(lDescAll);
+        if (lConcept.esGmf || lConcept.esRetencion) return false;
+        if (l.cuenta && (l.cuenta.startsWith("135515") || l.cuenta.startsWith("1355"))) return false;
         const val = isRetiro ? l.credito : l.debito;
         if (val <= 0) return false;
         return l.fecha === bItem.fecha;
@@ -619,8 +635,9 @@ export function conciliarBancos(
       .filter((l) => {
         if (matchedLibroIndices.has(l.originalIdx)) return false;
         const lDescAll = `${l.descripcion || ""} ${l.nombre || ""}`;
-        if (classifyMovementConcept(lDescAll).esGmf) return false;
-        if (/retenci[oó]n/i.test(lDescAll) || (l.cuenta && l.cuenta.startsWith("135515"))) return false;
+        const lConcept = classifyMovementConcept(lDescAll);
+        if (lConcept.esGmf || lConcept.esRetencion) return false;
+        if (l.cuenta && (l.cuenta.startsWith("135515") || l.cuenta.startsWith("1355"))) return false;
         const val = isRetiro ? l.credito : l.debito;
         if (val <= 0) return false;
         const lTime = new Date(l.fecha).getTime();
@@ -735,7 +752,7 @@ export function conciliarBancos(
 
     const lDescAll = `${lItem.descripcion || ""} ${lItem.nombre || ""}`;
     const lConcept = classifyMovementConcept(lDescAll);
-    if (lConcept.esGmf || lConcept.esRendimiento || /retenci[oó]n/i.test(lDescAll)) continue;
+    if (lConcept.esGmf || lConcept.esRendimiento || lConcept.esRetencion) continue;
 
     const lTime = new Date(lItem.fecha).getTime();
 
@@ -745,7 +762,7 @@ export function conciliarBancos(
       const bRetiro = b.debito > 0;
       if (bRetiro !== isRetiro) return false;
       const bConcept = classifyMovementConcept(b.descripcion);
-      if (bConcept.esGmf || bConcept.esRendimiento || /retenci[oó]n/i.test(b.descripcion)) return false;
+      if (bConcept.esGmf || bConcept.esRendimiento || bConcept.esRetencion) return false;
       const bTime = new Date(b.fecha).getTime();
       const diffDays = Math.abs(lTime - bTime) / (1000 * 60 * 60 * 24);
       if (!isNaN(diffDays) && diffDays > 4) return false;
@@ -850,9 +867,55 @@ export function conciliarBancos(
     }
   }
 
-  // B. Retención en la fuente Consolidada
+  // B. Retenciones en la Fuente Bancarias (1 a 1 y Consolidadas)
+  // B1. Cruce 1 a 1 de retenciones si coinciden por valor exacto con un comprobante en libros
+  for (const bItem of extracto) {
+    if (matchedExtractoIds.has(bItem.id)) continue;
+    if (bItem.debito <= 0) continue;
+    if (!classifyMovementConcept(bItem.descripcion).esRetencion) continue;
+
+    for (let i = 0; i < cleanLibros.length; i++) {
+      if (matchedLibroIndices.has(i)) continue;
+      const l = cleanLibros[i];
+      if (l.credito <= 0) continue;
+
+      if (Math.abs(bItem.debito - l.credito) <= 0.05) {
+        const textL = `${l.cuenta || ""} ${l.cuentaNombre || ""} ${l.descripcion || ""} ${l.nombre || ""} ${l.comprobante || ""}`.toLowerCase();
+        const isRetLibro =
+          /retenci[oó]n|retefuente|ret\.?\s*fte|rte\.?\s*fte/i.test(textL) ||
+          /^(?:1355|135515)\b/.test((l.cuenta || "").trim()) ||
+          /^(?:L|NC|RC|AJ|CA)\b/i.test(l.comprobante?.trim() || "");
+
+        if (isRetLibro) {
+          matchedExtractoIds.add(bItem.id);
+          matchedLibroIndices.add(i);
+          rows.push({
+            id: `match_retefuente_${bItem.id}_${i}`,
+            estado: "conciliado",
+            fecha: bItem.fecha,
+            descripcion: `${bItem.descripcion} ↔ ${l.descripcion || l.nombre || "Retención en la Fuente en Libros"}`,
+            referencia: bItem.referencia || l.comprobante || "Retefuente Conciliada",
+            tipo: "retiro",
+            montoBanco: bItem.debito,
+            montoLibros: l.credito,
+            diferencia: 0,
+            esGmf: false,
+            esComision: false,
+            esRendimiento: false,
+            esRetencion: true,
+            itemBanco: bItem,
+            itemLibros: l,
+            nota: "Retención en la fuente bancaria conciliada contra comprobante en libros.",
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  // B2. Retención en la fuente Consolidada (N extracto = 1 comprobante acumulado en libros)
   const unassignedRetItems = extracto.filter(
-    (it) => !matchedExtractoIds.has(it.id) && /retenci[oó]n/i.test(it.descripcion)
+    (it) => !matchedExtractoIds.has(it.id) && classifyMovementConcept(it.descripcion).esRetencion
   );
   if (unassignedRetItems.length > 0) {
     const sumRet = unassignedRetItems.reduce((s, it) => s + it.debito, 0);
@@ -875,7 +938,9 @@ export function conciliarBancos(
           esGmf: false,
           esComision: false,
           esRendimiento: false,
+          esRetencion: true,
           itemLibros: l,
+          itemsBancoLote: unassignedRetItems,
           nota: `Retención en la fuente mensual conciliada (${unassignedRetItems.length} cargos diarios = 1 comprobante en libros).`,
         });
         break;
@@ -1160,7 +1225,7 @@ export function conciliarBancos(
         if (isNaN(diffDays) || diffDays <= maxWindowDays) {
           matchedExtractoIds.add(bItem.id);
           matchedLibroIndices.add(i);
-          const { esGmf, esComision, esRendimiento } = classifyMovementConcept(bItem.descripcion);
+          const { esGmf, esComision, esRendimiento, esRetencion } = classifyMovementConcept(bItem.descripcion);
           rows.push({
             id: `match_val_${bItem.id}_${i}`,
             estado: "conciliado",
@@ -1174,6 +1239,7 @@ export function conciliarBancos(
             esGmf,
             esComision,
             esRendimiento,
+            esRetencion,
             esRendimientoPeriodoAnterior: false,
             esRendimientoPeriodoActual: esRendimiento,
             itemBanco: bItem,
@@ -1191,12 +1257,13 @@ export function conciliarBancos(
     if (matchedExtractoIds.has(bItem.id)) continue;
     const isRetiro = bItem.debito > 0;
     const montoBanco = isRetiro ? bItem.debito : bItem.credito;
-    const { esGmf, esComision, esRendimiento } = classifyMovementConcept(bItem.descripcion);
+    const { esGmf, esComision, esRendimiento, esRetencion } = classifyMovementConcept(bItem.descripcion);
 
     let nota = "Movimiento en extracto pendiente de causar en contabilidad.";
     if (esGmf) nota = "Gravamen a los Movimientos Financieros (4x1000) descontado por el banco. Pendiente comprobante de gasto (PUC 511595).";
     if (esComision) nota = "Comisión o costo financiero bancario con IVA. Requiere nota contable de gastos bancarios (PUC 530515).";
     if (esRendimiento) nota = "Rendimientos financieros abonados por la entidad en el extracto. Pendientes de causar en libros (se registran el 1 de septiembre).";
+    if (esRetencion) nota = "Retención en la fuente descontada por el banco/entidad. Pendiente causar en contabilidad (Anticipo de Impuestos PUC 135515).";
 
     rows.push({
       id: `extracto_pend_${bItem.id}`,
@@ -1211,6 +1278,7 @@ export function conciliarBancos(
       esGmf,
       esComision,
       esRendimiento,
+      esRetencion,
       esRendimientoPeriodoAnterior: false,
       esRendimientoPeriodoActual: esRendimiento,
       itemBanco: bItem,
@@ -1229,9 +1297,10 @@ export function conciliarBancos(
       ? "Giro, cheque o transferencia contabilizada en libros aún no debitada por el banco (Partida en Tránsito)."
       : "Consignación o ingreso contabilizado en libros en trámite de acreditación bancaria (Consignación en Tránsito).";
 
-    const { esGmf, esComision, esRendimiento } = classifyMovementConcept(
+    const { esGmf, esComision, esRendimiento, esRetencion: isRetDesc } = classifyMovementConcept(
       lItem.descripcion || lItem.nombre || ""
     );
+    const esRetencion = isRetDesc || Boolean(lItem.cuenta && (lItem.cuenta.startsWith("135515") || lItem.cuenta.startsWith("1355")));
 
     rows.push({
       id: `libro_pend_${i}`,
@@ -1246,6 +1315,7 @@ export function conciliarBancos(
       esGmf,
       esComision,
       esRendimiento,
+      esRetencion,
       esRendimientoPeriodoAnterior: false,
       esRendimientoPeriodoActual: esRendimiento,
       itemLibros: lItem,
@@ -1260,6 +1330,7 @@ export function conciliarBancos(
   let notasCreditoNoRegistradas = 0;
   let notasDebitoGmf = 0;
   let notasDebitoComisiones = 0;
+  let notasDebitoRetenciones = 0;
   let notasDebitoOperativas = 0;
   let notasCreditoRendimientos = 0;
   let notasCreditoOperativas = 0;
@@ -1274,6 +1345,8 @@ export function conciliarBancos(
         notasDebitoGmf += r.montoBanco;
       } else if (r.esComision) {
         notasDebitoComisiones += r.montoBanco;
+      } else if (r.esRetencion) {
+        notasDebitoRetenciones += r.montoBanco;
       } else {
         notasDebitoOperativas += r.montoBanco;
       }
@@ -1348,6 +1421,7 @@ export function conciliarBancos(
     notasCreditoNoRegistradas,
     notasDebitoGmf,
     notasDebitoComisiones,
+    notasDebitoRetenciones,
     notasDebitoOperativas,
     notasCreditoRendimientos,
     notasCreditoOperativas,
@@ -1388,6 +1462,7 @@ export interface BankExecutiveBreakdown {
   gmf: BankConceptBreakdown;
   comisiones: BankConceptBreakdown;
   rendimientos: BankRendimientosBreakdown;
+  retenciones: BankConceptBreakdown;
   lotesAch: {
     total: number;
     countLotes: number;
@@ -1400,6 +1475,7 @@ export function getBankExecutiveBreakdown(rows: BankConciliacionRow[]): BankExec
   const gmfRows = rows.filter((r) => r.esGmf);
   const comisionRows = rows.filter((r) => r.esComision);
   const rendimientoRows = rows.filter((r) => r.esRendimiento);
+  const retencionRows = rows.filter((r) => r.esRetencion);
   const loteRows = rows.filter((r) => r.itemsLibrosLote && r.itemsLibrosLote.length > 0);
 
   const calcBreakdown = (items: BankConciliacionRow[]): BankConceptBreakdown => {
@@ -1455,6 +1531,7 @@ export function getBankExecutiveBreakdown(rows: BankConciliacionRow[]): BankExec
     gmf: calcBreakdown(gmfRows),
     comisiones: calcBreakdown(comisionRows),
     rendimientos: rendimientosBreakdown,
+    retenciones: calcBreakdown(retencionRows),
     lotesAch: {
       total: lotesTotal,
       countLotes: loteRows.length,

@@ -1224,6 +1224,51 @@ describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuen
     assert.strictEqual(res.summary.soloRendimientos, true, "soloRendimientos debe ser true");
     assert.strictEqual(res.summary.cuadrado, true, "Conciliación debe estar cuadrada");
     assert.ok(Math.abs(res.summary.diferenciaCuadre) <= 0.01, "Diferencia de cuadre debe ser 0");
+
+    // Verificación de Retenciones en la fuente conciliadas
+    const exec = getBankExecutiveBreakdown(res.rows);
+    assert.strictEqual(exec.retenciones.total, 89636, "Retenciones totales deben ser 89.636");
+    assert.strictEqual(exec.retenciones.registrado, 89636, "Retenciones deben estar 100% registradas");
+    assert.strictEqual(exec.retenciones.pendiente, 0, "No debe haber retenciones pendientes en Credicorp");
+  });
+
+  it("debe detectar y clasificar automáticamente retenciones en la fuente bancarias pendientes por causar en extractos", () => {
+    // 1. Verificación de clasificación estricta
+    const ret1 = classifyMovementConcept("RETENCION EN LA FUENTE 7%");
+    assert.strictEqual(ret1.esRetencion, true);
+    assert.strictEqual(ret1.esGmf, false);
+    assert.strictEqual(ret1.esComision, false);
+    assert.strictEqual(ret1.esRendimiento, false);
+
+    const ret2 = classifyMovementConcept("RET. FTE RENDIMIENTOS");
+    assert.strictEqual(ret2.esRetencion, true);
+    assert.strictEqual(ret2.esRendimiento, false);
+
+    const ret3 = classifyMovementConcept("RETEFUENTE");
+    assert.strictEqual(ret3.esRetencion, true);
+
+    const ret4 = classifyMovementConcept("CORREVAL - FONVAL RETENCION");
+    assert.strictEqual(ret4.esRetencion, true);
+
+    // 2. Conciliación automática con extracto conteniendo retenciones
+    const extracto: BankExtractItem[] = [
+      { id: "e1", fecha: "2026-09-15", descripcion: "RETENCION EN LA FUENTE 7%", referencia: "RF01", debito: 45000, credito: 0 },
+      { id: "e2", fecha: "2026-09-30", descripcion: "RET. FTE RENDIMIENTOS", referencia: "RF02", debito: 18500, credito: 0 },
+      { id: "e3", fecha: "2026-09-30", descripcion: "RENDIMIENTOS FINANCIEROS", referencia: "RF03", debito: 0, credito: 900000 },
+    ];
+
+    const conc = conciliarBancos(extracto, []);
+    assert.strictEqual(conc.summary.notasDebitoRetenciones, 63500);
+    assert.strictEqual(conc.summary.notasDebitoNoRegistradas, 63500);
+
+    const exec = getBankExecutiveBreakdown(conc.rows);
+    assert.strictEqual(exec.retenciones.total, 63500);
+    assert.strictEqual(exec.retenciones.pendiente, 63500);
+    assert.strictEqual(exec.retenciones.registrado, 0);
+    assert.strictEqual(exec.retenciones.count, 2);
+    assert.strictEqual(exec.retenciones.items.length, 2);
+    assert.strictEqual(exec.retenciones.items[0].esRetencion, true);
+    assert.strictEqual(exec.retenciones.items[1].esRetencion, true);
   });
 });
 

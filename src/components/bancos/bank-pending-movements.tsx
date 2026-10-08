@@ -705,6 +705,10 @@ export const BankPendingMovements = memo(function BankPendingMovements({
                           <span className="inline-flex items-center gap-1 rounded-md bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-300 px-2 py-0.5 text-[10px] font-bold">
                             Comisión Bancaria
                           </span>
+                        ) : r.esRetencion ? (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-rose-100 text-rose-900 dark:bg-rose-950/60 dark:text-rose-300 px-2 py-0.5 text-[10px] font-bold">
+                            Retención en la Fuente
+                          </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-md bg-rose-100 text-rose-900 dark:bg-rose-950/60 dark:text-rose-300 px-2 py-0.5 text-[10px] font-bold">
                             Nota Débito (Cargo)
@@ -841,7 +845,18 @@ export const BankPendingMovements = memo(function BankPendingMovements({
                         </div>
                       )}
 
-                      {isNotaDebito && !r.esGmf && !r.esComision && (
+                      {isNotaDebito && r.esRetencion && (
+                        <div className="space-y-0.5">
+                          <div className="font-bold text-rose-700 dark:text-rose-400">
+                            Débito: 135515 (Retención en la Fuente - Rendimientos)
+                          </div>
+                          <div className="text-ink-muted">
+                            Crédito: {cuentaContable || "111005"} (Bancos / Fondos)
+                          </div>
+                        </div>
+                      )}
+
+                      {isNotaDebito && !r.esGmf && !r.esComision && !r.esRetencion && (
                         <div className="space-y-0.5">
                           <div className="font-bold text-rose-700 dark:text-rose-400">
                             Débito: 530595 (Gastos Bancarios) / 2205 (Proveedores)

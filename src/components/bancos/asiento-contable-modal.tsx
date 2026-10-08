@@ -137,6 +137,8 @@ export function AsientoContableModal({
         ? "51159501 (GMF 4x1000)"
         : row.esComision
         ? "53051501 (Comisiones Bancarias)"
+        : row.esRetencion
+        ? "13551501 (Retención en la Fuente - Rendimientos)"
         : row.esRendimiento
         ? "42100502 (Rendimientos Financieros)"
         : "53059501 (Gastos Bancarios)";
@@ -349,17 +351,25 @@ export function AsientoContableModal({
                         <>
                           <tr className="hover:bg-bg-subtle/50 transition">
                             <td className="px-3.5 py-2.5 font-mono font-bold text-teal">
-                              {row.esGmf ? "51159501" : row.esComision ? "53051501" : "53059501"}
+                              {row.esGmf
+                                ? "51159501"
+                                : row.esComision
+                                ? "53051501"
+                                : row.esRetencion
+                                ? "13551501"
+                                : "53059501"}
                             </td>
                             <td className="px-3.5 py-2.5 font-medium text-ink">
                               {row.esGmf
                                 ? "Gravamen a los Movimientos Financieros (GMF 4x1000)"
                                 : row.esComision
                                 ? "Comisiones y Servicios Bancarios"
+                                : row.esRetencion
+                                ? "Retención en la Fuente sobre Rendimientos Financieros (Anticipo Impuestos)"
                                 : "Gastos Bancarios y Financieros Varios"}
                             </td>
                             <td className="px-3.5 py-2.5 text-ink-muted">
-                              {row.esGmf ? "DIAN - DIRECCION DE IMPUESTOS" : bancoNombre}
+                              {row.esGmf || row.esRetencion ? "DIAN - DIRECCION DE IMPUESTOS" : bancoNombre}
                             </td>
                             <td className="px-3.5 py-2.5 text-ink-muted">{row.descripcion}</td>
                             <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap">

@@ -3,6 +3,7 @@ import {
   BadgePercent,
   CreditCard,
   TrendingUp,
+  Receipt,
   Layers,
   History,
   Sparkles,
@@ -19,7 +20,9 @@ interface BankExecutiveCardsProps {
 export const BankExecutiveCards = memo(function BankExecutiveCards({
   breakdown,
 }: BankExecutiveCardsProps) {
-  const [activeModal, setActiveModal] = useState<"gmf" | "comisiones" | "rendimientos" | "lotesAch" | null>(null);
+  const [activeModal, setActiveModal] = useState<
+    "gmf" | "comisiones" | "rendimientos" | "retenciones" | "lotesAch" | null
+  >(null);
   const [rendimientoTab, setRendimientoTab] = useState<"actual" | "anterior">("actual");
 
   const hasPriorRend = (breakdown.rendimientos.periodoAnterior?.count || 0) > 0;
@@ -28,7 +31,7 @@ export const BankExecutiveCards = memo(function BankExecutiveCards({
 
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
         {/* Card 1: GMF 4x1000 */}
         <div
           onClick={() => setActiveModal("gmf")}
@@ -221,7 +224,54 @@ export const BankExecutiveCards = memo(function BankExecutiveCards({
           </div>
         </div>
 
-        {/* Card 4: Lotes ACH y Pagos Masivos */}
+        {/* Card 4: Retención en la Fuente (-) */}
+        <div
+          onClick={() => setActiveModal("retenciones")}
+          className="rounded-2xl border border-line bg-bg-surface p-4 shadow-2xs hover:shadow-xs hover:border-rose-500/40 transition cursor-pointer flex flex-col justify-between"
+          title="Click para ver el desglose detallado de retenciones en la fuente deducidas en el extracto"
+        >
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                <span className="rounded-lg bg-rose-500/10 p-1.5 text-rose-600 dark:text-rose-400">
+                  <Receipt className="size-4" />
+                </span>
+                <span className="text-xs font-bold text-ink uppercase tracking-wider">
+                  Retención en la Fuente (-)
+                </span>
+              </div>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[10px] font-extrabold border",
+                  breakdown.retenciones.pendiente === 0 && breakdown.retenciones.count > 0
+                    ? "bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300"
+                    : breakdown.retenciones.pendiente > 0
+                    ? "bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950 dark:text-amber-300"
+                    : "bg-bg-subtle text-ink-subtle border-line"
+                )}
+              >
+                {breakdown.retenciones.pendiente === 0 && breakdown.retenciones.count > 0
+                  ? "✓ 100% Contabilizado"
+                  : breakdown.retenciones.pendiente > 0
+                  ? `⚠️ ${formatMoneyExact(breakdown.retenciones.pendiente)} Por Registrar`
+                  : "Sin Movimientos"}
+              </span>
+            </div>
+            <div className="font-mono text-lg font-black text-rose-600 dark:text-rose-400">
+              {breakdown.retenciones.total > 0
+                ? `-${formatMoneyExact(breakdown.retenciones.total)}`
+                : formatMoneyExact(0)}
+            </div>
+          </div>
+          <div className="mt-2 text-[11px] text-ink-muted flex items-center justify-between pt-1 border-t border-line/40">
+            <span>{breakdown.retenciones.count} retenciones</span>
+            <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+              Reg: {formatMoneyExact(breakdown.retenciones.registrado)}
+            </span>
+          </div>
+        </div>
+
+        {/* Card 5: Lotes ACH y Pagos Masivos */}
         <div
           onClick={() => setActiveModal("lotesAch")}
           className="rounded-2xl border border-line bg-bg-surface p-4 shadow-2xs hover:shadow-xs hover:border-purple-500/40 transition cursor-pointer flex flex-col justify-between"
@@ -287,6 +337,16 @@ export const BankExecutiveCards = memo(function BankExecutiveCards({
                     </span>
                     <h3 className="font-bold text-base text-ink">
                       Desglose Separado de Rendimientos Financieros
+                    </h3>
+                  </>
+                )}
+                {activeModal === "retenciones" && (
+                  <>
+                    <span className="rounded-lg bg-rose-500/10 p-1.5 text-rose-600 dark:text-rose-400">
+                      <Receipt className="size-5" />
+                    </span>
+                    <h3 className="font-bold text-base text-ink">
+                      Detalle de Retención en la Fuente Deducida en Extracto
                     </h3>
                   </>
                 )}
@@ -462,6 +522,51 @@ export const BankExecutiveCards = memo(function BankExecutiveCards({
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {activeModal === "retenciones" && (
+                <div className="space-y-2">
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs">
+                    <span className="font-bold text-rose-800 dark:text-rose-400 block mb-0.5">
+                      Retención en la Fuente Deducida en Extracto:
+                    </span>
+                    <p className="text-ink-muted text-[11px]">
+                      Deducciones fiscales aplicadas por la entidad financiera o fiduciaria (ej. 7% sobre rendimientos de inversiones o traslados). Si figura pendiente, se debe causar en libros como anticipo de impuestos (PUC 135515) acreditando la cuenta bancaria.
+                    </p>
+                  </div>
+                  <div className="divide-y divide-line/60 rounded-xl border border-line overflow-hidden max-h-96 overflow-y-auto">
+                    {breakdown.retenciones.items.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-ink-muted">
+                        No se detectaron movimientos de retención en la fuente en este extracto o auxiliar contable.
+                      </div>
+                    ) : (
+                      breakdown.retenciones.items.map((r) => (
+                        <div key={r.id} className="p-3 text-xs flex items-center justify-between bg-bg-surface hover:bg-bg-subtle/50 transition">
+                          <div>
+                            <div className="font-bold text-ink">{r.descripcion}</div>
+                            <div className="text-[11px] text-ink-muted flex items-center gap-2 mt-0.5">
+                              <span>Fecha: {formatDate(r.fecha)}</span>
+                              <span>Ref / Comp: {r.referencia || r.itemLibros?.comprobante || "—"}</span>
+                              <span
+                                className={cn(
+                                  "px-1.5 py-0.2 rounded text-[10px] font-bold",
+                                  r.estado === "conciliado"
+                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                    : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                )}
+                              >
+                                {r.estado === "conciliado" ? "Contabilizado" : "Pendiente por Registrar"}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="font-mono font-black text-sm text-rose-600 dark:text-rose-400">
+                            -{formatMoneyExact(r.montoBanco > 0 ? r.montoBanco : r.montoLibros)}
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               )}
