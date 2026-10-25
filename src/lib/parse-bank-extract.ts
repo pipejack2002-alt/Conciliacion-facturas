@@ -308,7 +308,7 @@ export function parseBancoCajaSocial(pages: string[]): ParsedBankExtractResult {
             }
           }
 
-          let valor = cleanMoneyNumber(valorRaw);
+          const valor = cleanMoneyNumber(valorRaw);
 
           // En BCSC los retiros/débitos son negativos (-valor). Si el signo menos fue omitido por OCR:
           const isDebitoKeyword = /DEBITO|COMIS|GRAVAMEN|IVA|PAGO/i.test(descAndDoc);

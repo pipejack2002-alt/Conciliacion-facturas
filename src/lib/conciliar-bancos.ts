@@ -313,7 +313,7 @@ export function conciliarBancos(
   const rows: BankConciliacionRow[] = [];
 
   // Filtrar posibles filas de totales o resúmenes de software contable (sin comprobante ni fecha)
-  let rawClean = libros.filter((l) => Boolean((l.comprobante || "").trim() || (l.fecha || "").trim()));
+  const rawClean = libros.filter((l) => Boolean((l.comprobante || "").trim() || (l.fecha || "").trim()));
 
   // Si el libro recibido contiene cuentas no relacionadas con tesorería (ej. se pasó el auxiliar completo de la empresa),
   // auto-filtrar a cuentas de tesorería para evitar combinatoria explosiva y cruces contablemente espurios
