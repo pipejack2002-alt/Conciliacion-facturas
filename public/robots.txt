@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Disallow: /__grok/
+Disallow: /api/
