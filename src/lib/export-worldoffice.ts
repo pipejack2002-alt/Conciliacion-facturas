@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
-import type { CompanyInfo, ConciliacionRow } from "./types.ts";
+import type { CompanyInfo, ConciliacionRow, MovLine } from "./types.ts";
+import { inferPucAccountForRow } from "./puc-classifier.ts";
 
 /**
  * Genera la plantilla oficial de importación masiva de compras y causaciones
@@ -9,14 +10,16 @@ export function exportWorldOfficeTemplateXlsx(
   rows: ConciliacionRow[],
   company: CompanyInfo,
   periodLabel: string,
+  movLines: MovLine[] = [],
 ): void {
   const pendingRows = rows.filter(
     (r) => r.prioridad === "audit" && (r.estado === "pendiente" || r.estado === "posible_typo"),
   );
+  const targetRows = pendingRows.length > 0 ? pendingRows : rows;
 
   const data: Array<Record<string, any>> = [];
 
-  pendingRows.forEach((r, idx) => {
+  targetRows.forEach((r, idx) => {
     const net = Math.max(0, r.totalDian - (r.iva || 0));
     const iva = r.iva || 0;
     const total = r.totalDian;
@@ -25,6 +28,7 @@ export function exportWorldOfficeTemplateXlsx(
     const folio = r.folio || String(idx + 1);
     const docRef = r.numero || `${prefijo}-${folio}`;
     const cleanNit = (r.nitContraparte || "").replace(/\D/g, "");
+    const puc = inferPucAccountForRow(r, movLines);
 
     // 1. Registro Débito: Gasto / Costo / Compra
     data.push({
@@ -34,8 +38,8 @@ export function exportWorldOfficeTemplateXlsx(
       "Fecha (AAAA-MM-DD)": docDate,
       "Identificación Tercero": cleanNit,
       "Razón Social": r.nombreContraparte,
-      "Código Cuenta Contable": "51359501",
-      "Nombre Cuenta": "Gastos y Servicios Diversos",
+      "Código Cuenta Contable": puc.cuentaGasto,
+      "Nombre Cuenta": puc.nombreGasto,
       "Centro Costo": "01",
       "Documento Referencia": docRef,
       "Valor Débito": net,
@@ -53,8 +57,8 @@ export function exportWorldOfficeTemplateXlsx(
         "Fecha (AAAA-MM-DD)": docDate,
         "Identificación Tercero": cleanNit,
         "Razón Social": r.nombreContraparte,
-        "Código Cuenta Contable": "24080301",
-        "Nombre Cuenta": "IVA Descontable en Compras y Servicios",
+        "Código Cuenta Contable": puc.cuentaIva,
+        "Nombre Cuenta": puc.nombreIva,
         "Centro Costo": "01",
         "Documento Referencia": docRef,
         "Valor Débito": iva,
@@ -72,8 +76,8 @@ export function exportWorldOfficeTemplateXlsx(
       "Fecha (AAAA-MM-DD)": docDate,
       "Identificación Tercero": cleanNit,
       "Razón Social": r.nombreContraparte,
-      "Código Cuenta Contable": "22050101",
-      "Nombre Cuenta": "Proveedores Nacionales",
+      "Código Cuenta Contable": puc.cuentaPasivo,
+      "Nombre Cuenta": puc.nombrePasivo,
       "Centro Costo": "01",
       "Documento Referencia": docRef,
       "Valor Débito": 0,

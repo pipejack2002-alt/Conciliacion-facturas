@@ -8,18 +8,20 @@ interface Props {
   open: boolean;
   onClose: () => void;
   result: ConciliacionResult;
-  _mov?: MovLine[];
+  movLines?: MovLine[];
 }
 
-export function NominaAuditModal({ open, onClose, result, _mov = [] }: Props) {
+export function NominaAuditModal({ open, onClose, result, movLines = [] }: Props) {
   const [isMaximized, setIsMaximized] = useState(false);
 
   if (!open) return null;
 
   const { company, periodLabel, rows } = result;
 
+  const sourceMovs = movLines.length > 0 ? movLines : (result.orphans || []);
+
   // Find payroll related movement lines from software (accounts starting with 5105, 5205, 7205, 2505, 2370, 2380)
-  const payrollMovs = (result.orphans || []).filter((m) => {
+  const payrollMovs = sourceMovs.filter((m) => {
     const c = (m.cuenta || "").trim();
     const d = (m.descripcion || "").toLowerCase();
     const cn = (m.nombre || "").toLowerCase();
@@ -28,6 +30,8 @@ export function NominaAuditModal({ open, onClose, result, _mov = [] }: Props) {
       c.startsWith("5205") ||
       c.startsWith("7205") ||
       c.startsWith("2505") ||
+      c.startsWith("2370") ||
+      c.startsWith("2380") ||
       d.includes("nomina") ||
       d.includes("sueldo") ||
       d.includes("salario") ||

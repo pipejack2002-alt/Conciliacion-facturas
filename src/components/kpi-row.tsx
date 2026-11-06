@@ -181,7 +181,7 @@ export function KpiRow({
               <div className="mt-1.5 w-full bg-line rounded-full h-1.5 overflow-hidden">
                 <div
                   className="bg-ok h-full rounded-full transition-all duration-700"
-                  style={{ width: `${Math.min(100, Math.max(0, t.pctRecibidos))}%` }}
+                  style={{ width: `${Math.min(100, Math.max(0, Math.round(t.pctRecibidos * 100)))}%` }}
                 />
               </div>
             )}

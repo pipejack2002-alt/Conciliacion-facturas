@@ -1,9 +1,13 @@
 import { useEffect } from "react";
-import { AlertTriangle, Check, Copy, Sparkles, X, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Check, Copy, Sparkles, X, ShieldCheck, BookOpen } from "lucide-react";
 import { BadgeEstado } from "../badge-estado";
 import { reviewOf, useConciliacion } from "@/lib/store";
 import { daysAgo, formatDate, formatMoneyExact } from "@/lib/format";
 import { getTaxInsight } from "@/lib/tax-insights";
+import { inferPucAccountForRow } from "@/lib/puc-classifier";
+import { exportSiigoTemplateXlsx } from "@/lib/export-siigo";
+import { exportWorldOfficeTemplateXlsx } from "@/lib/export-worldoffice";
+import { exportHelisaTemplateXlsx } from "@/lib/export-helisa";
 import type { ConciliacionRow } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { CopyButton, Field } from "./board-utils";
@@ -23,8 +27,14 @@ export function DetailDrawer({
   const setReview = useConciliacion((s) => s.setReview);
   const markValidated = useConciliacion((s) => s.markValidated);
   const flash = useConciliacion((s) => s.flash);
+  const mov = useConciliacion((s) => s.mov);
+  const result = useConciliacion((s) => s.result);
   const dias = daysAgo(row.fecha);
   const insight = getTaxInsight(row);
+  const pucSuggestion =
+    row.grupo === "Recibido" && row.estado !== "solo_siigo" && row.totalDian > 0
+      ? inferPucAccountForRow(row, mov)
+      : null;
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -89,21 +99,21 @@ export function DetailDrawer({
             className={cn(
               "mb-4 rounded-xl border p-3.5 text-xs shadow-xs",
               insight.tipo === "contado_exento"
-                ? "border-emerald-300 bg-emerald-50/95 text-emerald-950 ring-1 ring-emerald-200"
+                ? "border-emerald-300 bg-emerald-50/95 text-emerald-950 ring-1 ring-emerald-200 dark:border-emerald-700/60 dark:bg-emerald-950/60 dark:text-emerald-100 dark:ring-emerald-800/60"
                 : insight.tipo === "trm_diferencia"
-                ? "border-sky-300 bg-sky-50/90 text-sky-950"
+                ? "border-sky-300 bg-sky-50/90 text-sky-950 dark:border-sky-700/60 dark:bg-sky-950/60 dark:text-sky-100"
                 : insight.tipo === "comision_bancaria"
-                ? "border-emerald-300 bg-emerald-50/90 text-emerald-950"
+                ? "border-emerald-300 bg-emerald-50/90 text-emerald-950 dark:border-emerald-700/60 dark:bg-emerald-950/60 dark:text-emerald-100"
                 : insight.tipo === "riesgo_fiscal_radian"
-                ? "border-rose-300 bg-rose-50/95 text-rose-950 ring-1 ring-rose-200"
-                : "border-amber-300 bg-amber-50/90 text-amber-950",
+                ? "border-rose-300 bg-rose-50/95 text-rose-950 ring-1 ring-rose-200 dark:border-rose-700/60 dark:bg-rose-950/60 dark:text-rose-100 dark:ring-rose-800/60"
+                : "border-amber-300 bg-amber-50/90 text-amber-950 dark:border-amber-700/60 dark:bg-amber-950/60 dark:text-amber-100",
             )}
           >
             <div className="flex items-center gap-1.5 font-bold mb-1.5 text-sm">
               {insight.tipo === "riesgo_fiscal_radian" ? (
-                <AlertTriangle className="size-4 shrink-0 text-rose-600" />
+                <AlertTriangle className="size-4 shrink-0 text-rose-600 dark:text-rose-400" />
               ) : insight.tipo === "contado_exento" ? (
-                <ShieldCheck className="size-4 shrink-0 text-emerald-600" />
+                <ShieldCheck className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
               ) : (
                 <Sparkles className="size-4 shrink-0 text-current" />
               )}
@@ -132,26 +142,26 @@ export function DetailDrawer({
           <Field label="Cruce" value={row.matchVia || "sin match"} copyable={Boolean(row.matchVia)} />
         </dl>
         {row.estado === "posible_typo" && (
-          <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50/95 p-3.5 text-xs text-amber-950 shadow-xs">
+          <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50/95 dark:border-amber-700/60 dark:bg-amber-950/60 p-3.5 text-xs text-amber-950 dark:text-amber-100 shadow-xs">
             <div className="flex items-center justify-between gap-2 mb-1.5">
-              <div className="flex items-center gap-1.5 font-bold text-sm text-amber-900">
-                <Sparkles className="size-4 shrink-0 text-amber-600" />
+              <div className="flex items-center gap-1.5 font-bold text-sm text-amber-900 dark:text-amber-200">
+                <Sparkles className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
                 Sugerencia de Conciliación Inteligente
               </div>
-              <span className="rounded bg-amber-200/80 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-900">
+              <span className="rounded bg-amber-200/80 dark:bg-amber-800/60 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-900 dark:text-amber-200">
                 Revisar Factura
               </span>
             </div>
-            <p className="leading-relaxed text-xs text-amber-900/90 font-medium">
+            <p className="leading-relaxed text-xs text-amber-900/90 dark:text-amber-200/90 font-medium">
               {row.alerta}
             </p>
             {review?.done && review.action === "validada" ? (
-              <div className="mt-2.5 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200">
-                <Check className="size-3.5 text-emerald-600" />
+              <div className="mt-2.5 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-700/60">
+                <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
                 Sugerencia aceptada y validada en auditoría
               </div>
             ) : (
-              <div className="mt-3 flex items-center gap-2 pt-2 border-t border-amber-200/60">
+              <div className="mt-3 flex items-center gap-2 pt-2 border-t border-amber-200/60 dark:border-amber-700/50">
                 <button
                   type="button"
                   onClick={() => {
@@ -181,7 +191,7 @@ export function DetailDrawer({
               {row.linked.map((l) => (
                 <div
                   key={l.id}
-                  className="flex items-center justify-between gap-3 bg-white p-3 rounded-lg border border-line shadow-2xs"
+                  className="flex items-center justify-between gap-3 bg-bg-surface p-3 rounded-lg border border-line shadow-2xs"
                 >
                   <div>
                     <span className="font-bold text-ink text-sm block">{l.numero}</span>
@@ -201,6 +211,112 @@ export function DetailDrawer({
             </div>
           </div>
         ) : null}
+
+        {/* Asiento Contable Sugerido (Partida Doble PUC) */}
+        {pucSuggestion && (
+          <div className="mt-4 rounded-xl border border-teal/30 bg-bg-surface p-3.5 text-xs shadow-xs">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-1.5 font-bold text-ink">
+                <BookOpen className="size-4 text-teal shrink-0" />
+                <span>Asiento Contable PUC (Partida Doble)</span>
+              </div>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[10px] font-bold",
+                  pucSuggestion.origen === "historial_tercero"
+                    ? "bg-teal/15 text-teal"
+                    : "bg-bg-subtle text-ink-muted",
+                )}
+              >
+                {pucSuggestion.origen === "historial_tercero" ? "Historial Tercero" : "Clasificador PUC"}
+              </span>
+            </div>
+
+            <div className="overflow-hidden rounded-lg border border-line bg-bg-elevated">
+              <table className="w-full text-[11px]">
+                <thead className="border-b border-line bg-bg-subtle/60 text-ink-subtle uppercase">
+                  <tr>
+                    <th className="px-2.5 py-1.5 text-left">Cuenta PUC</th>
+                    <th className="px-2 py-1.5 text-right">Débito</th>
+                    <th className="px-2.5 py-1.5 text-right">Crédito</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  <tr>
+                    <td className="px-2.5 py-1.5">
+                      <span className="font-mono font-bold text-ink">{pucSuggestion.cuentaGasto}</span>
+                      <span className="ml-1.5 text-ink-muted">{pucSuggestion.nombreGasto}</span>
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-mono font-semibold text-ink">
+                      {formatMoneyExact(Math.max(0, row.totalDian - (row.iva || 0)))}
+                    </td>
+                    <td className="px-2.5 py-1.5 text-right font-mono text-ink-subtle">—</td>
+                  </tr>
+                  {(row.iva || 0) > 0 && (
+                    <tr>
+                      <td className="px-2.5 py-1.5">
+                        <span className="font-mono font-bold text-ink">{pucSuggestion.cuentaIva}</span>
+                        <span className="ml-1.5 text-ink-muted">{pucSuggestion.nombreIva}</span>
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-mono font-semibold text-ink">
+                        {formatMoneyExact(row.iva)}
+                      </td>
+                      <td className="px-2.5 py-1.5 text-right font-mono text-ink-subtle">—</td>
+                    </tr>
+                  )}
+                  <tr>
+                    <td className="px-2.5 py-1.5">
+                      <span className="font-mono font-bold text-teal">{pucSuggestion.cuentaPasivo}</span>
+                      <span className="ml-1.5 text-ink-muted">{pucSuggestion.nombrePasivo}</span>
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-mono text-ink-subtle">—</td>
+                    <td className="px-2.5 py-1.5 text-right font-mono font-semibold text-teal">
+                      {formatMoneyExact(row.totalDian)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {result && row.hits.length === 0 && (
+              <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-line">
+                <span className="text-[11px] text-ink-muted font-medium">Causar esta factura en ERP:</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      exportSiigoTemplateXlsx([row], result.company, result.periodLabel, mov);
+                      flash(`Asiento Siigo descargado para ${row.numero}`);
+                    }}
+                    className="rounded-md border border-line bg-bg-elevated px-2 py-1 text-[11px] font-semibold text-ink hover:border-teal hover:text-teal transition cursor-pointer"
+                  >
+                    📘 Siigo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      exportWorldOfficeTemplateXlsx([row], result.company, result.periodLabel, mov);
+                      flash(`Asiento World Office descargado para ${row.numero}`);
+                    }}
+                    className="rounded-md border border-line bg-bg-elevated px-2 py-1 text-[11px] font-semibold text-ink hover:border-teal hover:text-teal transition cursor-pointer"
+                  >
+                    📗 World Office
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      exportHelisaTemplateXlsx([row], result.company, result.periodLabel, mov);
+                      flash(`Asiento Helisa descargado para ${row.numero}`);
+                    }}
+                    className="rounded-md border border-line bg-bg-elevated px-2 py-1 text-[11px] font-semibold text-ink hover:border-teal hover:text-teal transition cursor-pointer"
+                  >
+                    📙 Helisa
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {row.cufe ? (
           <button
             type="button"

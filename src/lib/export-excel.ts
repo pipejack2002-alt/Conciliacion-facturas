@@ -1,7 +1,7 @@
 import XLSX from "xlsx-js-style";
 import { ESTADO_LABEL } from "./conciliar.ts";
 import { getTaxInsight } from "./tax-insights.ts";
-import type { Review } from "./reviews.ts";
+import { docKey, type Review } from "./reviews.ts";
 import type { ConciliacionResult, ConciliacionRow, EstadoConciliacion } from "./types.ts";
 
 // Estilos corporativos prémium
@@ -55,7 +55,7 @@ function buildAuditSheet(
   const auditData: (string | number)[][] = [auditHeaders];
 
   for (const r of dataRows) {
-    const rev = reviews ? reviews[r.id] : undefined;
+    const rev = reviews ? (reviews[docKey(r)] ?? reviews[r.id]) : undefined;
     const revNota = rev?.note || "";
     let revEstado = "Pendiente de Revisión";
     if (rev?.done) {
@@ -253,6 +253,15 @@ export function exportAuditoriaXlsx(
   
   // 1. Hoja: Resumen Ejecutivo
   XLSX.utils.book_append_sheet(wb, wsSummary, "1. Resumen Ejecutivo");
+
+  // Si el usuario exportó una selección puntual de filas, incluir hoja destacada
+  if (tab === "seleccionadas" && rows.length > 0) {
+    XLSX.utils.book_append_sheet(
+      wb,
+      buildAuditSheet(rows, reviews),
+      `Selección (${rows.length})`,
+    );
+  }
 
   // 2. Hoja: Universo Completo (DIAN) - Todas las facturas
   XLSX.utils.book_append_sheet(wb, buildAuditSheet(allDataRows, reviews), "2. Universo Completo DIAN");

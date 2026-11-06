@@ -28,6 +28,7 @@ import {
 } from "@/lib/parse-excel";
 import type { ColumnMapping, DetectedProfile, SoftwareProfileId } from "@/lib/types";
 import { useConciliacion } from "@/lib/store";
+import { buildDemoConciliacionData } from "@/lib/demo-data";
 import { getHistoryEntries, syncUserHistoryWithCloud } from "@/lib/history-store";
 import { useTributoAuth } from "./tributo-auth-guardian";
 import { HistoryModal } from "./history-modal";
@@ -215,8 +216,8 @@ export function UploadPanel() {
           Cruce automático e instantáneo de facturación electrónica. Identifique facturas no causadas, omisiones, diferencias en IVA y cruces con notas crédito en segundos.
         </p>
 
-        {/* Barra de acceso rápido a la guía */}
-        <div className="pt-0.5 flex items-center justify-center gap-2">
+        {/* Barra de acceso rápido a la guía y demo */}
+        <div className="pt-0.5 flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
             onClick={() => setShowGuia(true)}
@@ -224,6 +225,24 @@ export function UploadPanel() {
           >
             <HelpCircle className="size-3.5 text-teal" />
             <span>¿Cómo exportar y conciliar? Ver Guía Rápida</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const demo = buildDemoConciliacionData();
+              setFiles(
+                demo.dian,
+                demo.mov,
+                { dian: demo.dianName, mov: demo.movName },
+                demo.period,
+              );
+            }}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-teal hover:bg-teal-deep px-3.5 py-1.5 rounded-xl shadow-xs hover:shadow-sm transition cursor-pointer"
+            title="Cargar caso real demostrativo con facturas DIAN, auxiliar contable Siigo, retenciones, notas crédito y nómina electrónica"
+          >
+            <Sparkles className="size-3.5" />
+            <span>Probar con Caso Demo DIAN + Libros</span>
           </button>
         </div>
       </div>

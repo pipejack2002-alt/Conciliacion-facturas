@@ -1,6 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import { conciliar } from "./conciliar.ts";
+import { inferPucAccountForRow } from "./puc-classifier.ts";
+import { buildDemoConciliacionData } from "./demo-data.ts";
 import type { DianDoc, MovLine } from "./types.ts";
 
 describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
@@ -1894,5 +1896,31 @@ describe("Motor de Conciliación DIAN vs Libros (Multi-Empresa)", () => {
     assert.strictEqual(res.totals.valorCola, 0, "El valor de la cola debe ser 0");
     assert.strictEqual(res.totals.crucesNc, 2, "Deben identificarse 2 cruces con NC");
     assert.strictEqual(res.totals.valorCrucesNc, 390000, "Valor compensado simple (no duplicado): 260.000 + 130.000 = 390.000");
+  });
+
+  it("debe clasificar inteligentemente cuentas PUC por historial de tercero o naturaleza comercial", () => {
+    const demo = buildDemoConciliacionData();
+    const res = conciliar(demo.dian, demo.mov, demo.period);
+
+    // 1. Terpel (sin historial en libros, debe clasificarse como Combustibles y Lubricantes 51953501)
+    const rowTerpel = res.rows.find((r) => r.nitContraparte === "830053812");
+    assert.ok(rowTerpel, "Debe existir la factura de Terpel");
+    const pucTerpel = inferPucAccountForRow(rowTerpel, demo.mov);
+    assert.strictEqual(pucTerpel.cuentaGasto, "51953501");
+    assert.strictEqual(pucTerpel.origen, "regla_comercial");
+
+    // 2. Bancolombia (sin historial en libros, debe clasificarse como Gastos Bancarios 53051501)
+    const rowBanco = res.rows.find((r) => r.nitContraparte === "890903938");
+    assert.ok(rowBanco, "Debe existir la factura de Bancolombia");
+    const pucBanco = inferPucAccountForRow(rowBanco, demo.mov);
+    assert.strictEqual(pucBanco.cuentaGasto, "53051501");
+
+    // 3. Claro (tiene historial en libros con cuenta 51353501 y pasivo 23355001)
+    const rowClaro = res.rows.find((r) => r.nitContraparte === "800153993");
+    assert.ok(rowClaro, "Debe existir la factura de Claro");
+    const pucClaro = inferPucAccountForRow(rowClaro, demo.mov);
+    assert.strictEqual(pucClaro.origen, "historial_tercero");
+    assert.strictEqual(pucClaro.cuentaGasto, "51353501");
+    assert.strictEqual(pucClaro.cuentaPasivo, "23355001");
   });
 });

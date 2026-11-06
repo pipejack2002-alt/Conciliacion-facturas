@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import {
   AlertTriangle,
   Building2,
+  Calculator,
   Check,
   Download,
   FileCheck,
@@ -95,6 +96,7 @@ export function ResultBoard() {
   const reset = useConciliacion((s) => s.reset);
   const dianName = useConciliacion((s) => s.dianName);
   const movName = useConciliacion((s) => s.movName);
+  const mov = useConciliacion((s) => s.mov);
   const delta = useConciliacion((s) => s.delta);
   const markValidated = useConciliacion((s) => s.markValidated);
   const flash = useConciliacion((s) => s.flash);
@@ -395,10 +397,32 @@ export function ResultBoard() {
           <button
             type="button"
             onClick={() => setShowReportModal(true)}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-bg-elevated px-3 text-xs font-medium text-ink hover:border-line-strong transition"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-bg-elevated px-3 text-xs font-medium text-ink hover:border-line-strong transition cursor-pointer"
           >
             <FileCheck className="size-3.5 text-teal" />
             Informe Ejecutivo
+          </button>
+
+          {/* Botón Simulador IVA & ReteFuente (Form. 300 y 350) */}
+          <button
+            type="button"
+            onClick={() => setShowTaxModal(true)}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-bg-elevated px-3 text-xs font-medium text-ink hover:border-line-strong transition cursor-pointer"
+            title="Simulador Tributario IVA (Form. 300), ReteFuente (Form. 350) y Control Art. 771-2 E.T."
+          >
+            <Calculator className="size-3.5 text-teal" />
+            IVA / ReteFuente
+          </button>
+
+          {/* Botón Auditoría Nómina Electrónica */}
+          <button
+            type="button"
+            onClick={() => setShowNominaModal(true)}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-bg-elevated px-3 text-xs font-medium text-ink hover:border-line-strong transition cursor-pointer"
+            title="Auditoría de Nómina Electrónica y Cargas Parafiscales"
+          >
+            <Users className="size-3.5 text-teal" />
+            Auditoría Nómina
           </button>
 
           {/* Botón Historial de Sesiones */}
@@ -880,8 +904,8 @@ export function ResultBoard() {
             <button
               type="button"
               onClick={() => {
-                exportSiigoTemplateXlsx(result.rows, result.company, result.periodLabel);
-                flash("Plantilla de importación Siigo descargada");
+                exportSiigoTemplateXlsx(result.rows, result.company, result.periodLabel, mov);
+                flash("Plantilla de importación Siigo descargada (con cuentas PUC inteligentes)");
               }}
               className="inline-flex items-center gap-1.5 rounded-lg border border-teal/40 bg-bg-surface px-3 py-1.5 text-xs font-semibold text-teal hover:bg-teal hover:text-white transition shadow-2xs cursor-pointer"
             >
@@ -890,8 +914,8 @@ export function ResultBoard() {
             <button
               type="button"
               onClick={() => {
-                exportWorldOfficeTemplateXlsx(result.rows, result.company, result.periodLabel);
-                flash("Plantilla de importación World Office descargada");
+                exportWorldOfficeTemplateXlsx(result.rows, result.company, result.periodLabel, mov);
+                flash("Plantilla de importación World Office descargada (con cuentas PUC inteligentes)");
               }}
               className="inline-flex items-center gap-1.5 rounded-lg border border-teal/40 bg-bg-surface px-3 py-1.5 text-xs font-semibold text-teal hover:bg-teal hover:text-white transition shadow-2xs cursor-pointer"
             >
@@ -900,8 +924,8 @@ export function ResultBoard() {
             <button
               type="button"
               onClick={() => {
-                exportHelisaTemplateXlsx(result.rows, result.company, result.periodLabel);
-                flash("Plantilla de importación Helisa descargada");
+                exportHelisaTemplateXlsx(result.rows, result.company, result.periodLabel, mov);
+                flash("Plantilla de importación Helisa descargada (con cuentas PUC inteligentes)");
               }}
               className="inline-flex items-center gap-1.5 rounded-lg border border-teal/40 bg-bg-surface px-3 py-1.5 text-xs font-semibold text-teal hover:bg-teal hover:text-white transition shadow-2xs cursor-pointer"
             >
@@ -989,6 +1013,7 @@ export function ResultBoard() {
         open={showNominaModal}
         onClose={() => setShowNominaModal(false)}
         result={result}
+        movLines={mov}
       />
       <ActaConciliacionModal
         open={showActaModal}

@@ -20,9 +20,12 @@ export function ExecutiveReportModal({ open, onClose, result, dianName: _dianNam
   const { company, periodLabel, totals, rows, orphans } = result;
 
   const totalDian = totals.valorDian || 0;
-  const totalMov = totals.valorTotalizado || 0;
+  const totalMovCalculado = rows
+    .filter((r) => r.grupo === "Recibido" && r.estado !== "no_aplica" && r.estado !== "solo_siigo" && r.hits.length > 0)
+    .reduce((s, r) => s + (r.totalSiigo || r.totalDian || 0), 0);
+  const totalMov = totalMovCalculado > 0 ? totalMovCalculado : Math.max(0, totalDian - (totals.valorPendienteRecibido || 0));
   const totalDocs = totals.recibidos || 1;
-  const pctConciliado = Math.min(100, Math.round((totals.conciliados / totalDocs) * 100));
+  const pctConciliado = Math.min(100, Math.round((totals.pctRecibidos || totals.conciliados / totalDocs) * 100));
 
   // Top 10 Proveedores
   const proveedorMap = new Map<string, { nit: string; nombre: string; totalDian: number; count: number; pendientes: number }>();

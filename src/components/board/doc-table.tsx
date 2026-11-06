@@ -803,27 +803,27 @@ export function DocTable({
                       className={cn(
                         "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold border shadow-2xs whitespace-nowrap",
                         insight.tipo === "contado_exento"
-                          ? "bg-emerald-50 text-emerald-900 border-emerald-300 font-semibold"
+                          ? "bg-emerald-50 text-emerald-900 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-200 dark:border-emerald-700/60 font-semibold"
                           : insight.tipo === "redondeo"
-                          ? "bg-slate-100 text-slate-800 border-slate-300"
+                          ? "bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600"
                           : insight.tipo === "retefuente"
-                          ? "bg-amber-100 text-amber-950 border-amber-400"
+                          ? "bg-amber-100 text-amber-950 border-amber-400 dark:bg-amber-950/70 dark:text-amber-200 dark:border-amber-700/60"
                           : insight.tipo === "iva"
-                          ? "bg-blue-100 text-blue-950 border-blue-400"
+                          ? "bg-blue-100 text-blue-950 border-blue-400 dark:bg-blue-950/70 dark:text-blue-200 dark:border-blue-700/60"
                           : insight.tipo === "trm_diferencia"
-                          ? "bg-sky-100 text-sky-950 border-sky-400"
+                          ? "bg-sky-100 text-sky-950 border-sky-400 dark:bg-sky-950/70 dark:text-sky-200 dark:border-sky-700/60"
                           : insight.tipo === "comision_bancaria"
-                          ? "bg-emerald-100 text-emerald-950 border-emerald-400"
+                          ? "bg-emerald-100 text-emerald-950 border-emerald-400 dark:bg-emerald-950/70 dark:text-emerald-200 dark:border-emerald-700/60"
                           : insight.tipo === "riesgo_fiscal_radian"
-                          ? "bg-rose-100 text-rose-950 border-rose-300 font-extrabold"
-                          : "bg-teal-100 text-teal-950 border-teal-400",
+                          ? "bg-rose-100 text-rose-950 border-rose-300 dark:bg-rose-950/70 dark:text-rose-200 dark:border-rose-700/60 font-extrabold"
+                          : "bg-teal-100 text-teal-950 border-teal-400 dark:bg-teal-950/70 dark:text-teal-200 dark:border-teal-700/60",
                       )}
                       title={insight.detalle}
                     >
                       {insight.tipo === "riesgo_fiscal_radian" ? (
-                        <AlertTriangle className="size-2.5 shrink-0 text-rose-600" />
+                        <AlertTriangle className="size-2.5 shrink-0 text-rose-600 dark:text-rose-400" />
                       ) : insight.tipo === "contado_exento" ? (
-                        <ShieldCheck className="size-2.5 shrink-0 text-emerald-600" />
+                        <ShieldCheck className="size-2.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                       ) : (
                         <Sparkles className="size-2.5 shrink-0 text-current" />
                       )}
@@ -895,15 +895,15 @@ export function DocTable({
                     {r.alerta ? (
                       r.estado === "posible_typo" ? (
                         <div
-                          className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900 border border-amber-200/90 leading-snug select-text max-w-80 shadow-2xs"
+                          className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 text-[11px] font-medium text-amber-900 dark:text-amber-200 border border-amber-200/90 dark:border-amber-700/60 leading-snug select-text max-w-80 shadow-2xs"
                           title={r.alerta}
                         >
-                          <Sparkles className="size-3 text-amber-600 shrink-0" />
+                          <Sparkles className="size-3 text-amber-600 dark:text-amber-400 shrink-0" />
                           <span className="truncate">{r.alerta}</span>
                         </div>
                       ) : (
                         <div
-                          className="mt-0.5 line-clamp-2 text-[11px] text-amber-800 font-medium leading-snug select-text max-w-75"
+                          className="mt-0.5 line-clamp-2 text-[11px] text-amber-800 dark:text-amber-300 font-medium leading-snug select-text max-w-75"
                           title={r.alerta}
                         >
                           {r.alerta}
@@ -963,19 +963,35 @@ export function DocTable({
           );
         })}
       </tbody>
-      {footer ? (
-        <tfoot className="border-t border-line bg-bg-subtle/60 text-xs font-medium text-ink-muted">
-          <tr>
-            <td colSpan={!compact ? 6 : 5} className="px-3 py-2.5 text-right">
-              Total DIAN visible
-            </td>
-            <td className="px-3 py-2.5 text-right font-mono font-semibold text-ink whitespace-nowrap">
-              {footer}
-            </td>
-            <td className="px-3 py-2.5" />
-          </tr>
-        </tfoot>
-      ) : null}
+      {footer ? (() => {
+        const totalDianVis = rows.reduce((s, r) => s + (r.estado === "solo_siigo" ? 0 : r.totalDian), 0);
+        const totalIvaVis = rows.reduce((s, r) => s + (r.iva || 0), 0);
+        const totalLibrosVis = rows.reduce((s, r) => s + (r.hits.length || r.estado === "solo_siigo" ? r.totalSiigo : 0), 0);
+        const difVis = totalDianVis - totalLibrosVis;
+        return (
+          <tfoot className="border-t border-line bg-bg-subtle/60 text-xs font-medium text-ink-muted">
+            <tr>
+              <td colSpan={!compact ? 6 : 5} className="px-3 py-2.5 text-right">
+                <span className="font-semibold text-ink">Totales visibles ({rows.length} {rows.length === 1 ? "registro" : "registros"})</span>
+              </td>
+              <td className="px-2.5 py-2.5 text-right font-mono whitespace-nowrap">
+                <div className="font-bold text-ink">{footer}</div>
+                {totalIvaVis > 0 && (
+                  <div className="text-[10px] text-ink-subtle">IVA {formatMoneyExact(totalIvaVis)}</div>
+                )}
+              </td>
+              <td className="px-2.5 py-2.5 text-right font-mono whitespace-nowrap">
+                <div className="font-bold text-ink">{totalLibrosVis > 0 ? formatMoneyExact(totalLibrosVis) : "—"}</div>
+                {totalLibrosVis > 0 && (
+                  <div className={cn("text-[10px] font-semibold", difVis === 0 ? "text-ok" : "text-danger")}>
+                    {difVis === 0 ? "Cuadrado" : `Dif. ${formatMoneyExact(difVis)}`}
+                  </div>
+                )}
+              </td>
+            </tr>
+          </tfoot>
+        );
+      })() : null}
     </table>
 
     {!compact && (

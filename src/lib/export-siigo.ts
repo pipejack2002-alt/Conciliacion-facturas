@@ -1,18 +1,21 @@
 import * as XLSX from "xlsx";
-import type { CompanyInfo, ConciliacionRow } from "./types.ts";
+import type { CompanyInfo, ConciliacionRow, MovLine } from "./types.ts";
+import { inferPucAccountForRow } from "./puc-classifier.ts";
 
 export function exportSiigoTemplateXlsx(
   rows: ConciliacionRow[],
   company: CompanyInfo,
   periodLabel: string,
+  movLines: MovLine[] = [],
 ): void {
   const pendingRows = rows.filter(
     (r) => r.prioridad === "audit" && (r.estado === "pendiente" || r.estado === "posible_typo"),
   );
+  const targetRows = pendingRows.length > 0 ? pendingRows : rows;
 
   const data: Array<Record<string, any>> = [];
 
-  pendingRows.forEach((r, idx) => {
+  targetRows.forEach((r, idx) => {
     const seq = String(idx + 1).padStart(3, "0");
     const net = Math.max(0, r.totalDian - (r.iva || 0));
     const iva = r.iva || 0;
@@ -20,14 +23,15 @@ export function exportSiigoTemplateXlsx(
     const docDate = r.fecha ? r.fecha.slice(0, 10) : new Date().toISOString().slice(0, 10);
     const prefijo = r.prefijo || "FAC";
     const folio = r.folio || "1";
+    const puc = inferPucAccountForRow(r, movLines);
 
     // 1. Line: Expense / Purchase (Debit)
     data.push({
       "Tipo Comprobante": "P",
       "Consecutivo": seq,
       "Fecha": docDate,
-      "Cuenta Contable": "51359501",
-      "Nombre Cuenta": "Gastos / Servicios Diversos",
+      "Cuenta Contable": puc.cuentaGasto,
+      "Nombre Cuenta": puc.nombreGasto,
       "NIT / Cédula Tercero": r.nitContraparte,
       "Razón Social Tercero": r.nombreContraparte,
       "Prefijo Factura": prefijo,
@@ -43,8 +47,8 @@ export function exportSiigoTemplateXlsx(
         "Tipo Comprobante": "P",
         "Consecutivo": seq,
         "Fecha": docDate,
-        "Cuenta Contable": "24080326",
-        "Nombre Cuenta": "IVA Descontable en Compras y Servicios",
+        "Cuenta Contable": puc.cuentaIva,
+        "Nombre Cuenta": puc.nombreIva,
         "NIT / Cédula Tercero": r.nitContraparte,
         "Razón Social Tercero": r.nombreContraparte,
         "Prefijo Factura": prefijo,
@@ -60,8 +64,8 @@ export function exportSiigoTemplateXlsx(
       "Tipo Comprobante": "P",
       "Consecutivo": seq,
       "Fecha": docDate,
-      "Cuenta Contable": "22050101",
-      "Nombre Cuenta": "Proveedores Nacionales",
+      "Cuenta Contable": puc.cuentaPasivo,
+      "Nombre Cuenta": puc.nombrePasivo,
       "NIT / Cédula Tercero": r.nitContraparte,
       "Razón Social Tercero": r.nombreContraparte,
       "Prefijo Factura": prefijo,

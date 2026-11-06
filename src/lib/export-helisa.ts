@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
-import type { CompanyInfo, ConciliacionRow } from "./types.ts";
+import type { CompanyInfo, ConciliacionRow, MovLine } from "./types.ts";
+import { inferPucAccountForRow } from "./puc-classifier.ts";
 
 /**
  * Genera la plantilla oficial de importación de movimientos y compras
@@ -9,14 +10,16 @@ export function exportHelisaTemplateXlsx(
   rows: ConciliacionRow[],
   company: CompanyInfo,
   periodLabel: string,
+  movLines: MovLine[] = [],
 ): void {
   const pendingRows = rows.filter(
     (r) => r.prioridad === "audit" && (r.estado === "pendiente" || r.estado === "posible_typo"),
   );
+  const targetRows = pendingRows.length > 0 ? pendingRows : rows;
 
   const data: Array<Record<string, any>> = [];
 
-  pendingRows.forEach((r, idx) => {
+  targetRows.forEach((r, idx) => {
     const compNum = String(idx + 1).padStart(6, "0");
     const net = Math.max(0, r.totalDian - (r.iva || 0));
     const iva = r.iva || 0;
@@ -24,14 +27,15 @@ export function exportHelisaTemplateXlsx(
     const docDate = r.fecha ? r.fecha.slice(0, 10).replace(/-/g, "/") : new Date().toISOString().slice(0, 10).replace(/-/g, "/");
     const docRef = r.numero || `FAC-${idx + 1}`;
     const cleanNit = (r.nitContraparte || "").replace(/\D/g, "");
+    const puc = inferPucAccountForRow(r, movLines);
 
     // 1. Débito a cuenta de Gasto / Servicio
     data.push({
       "Tipo Comprobante": "01",
       "Número Comprobante": compNum,
       "Fecha (AAAA/MM/DD)": docDate,
-      "Cuenta Contable": "51359501",
-      "Nombre de Cuenta": "Gastos / Servicios Diversos",
+      "Cuenta Contable": puc.cuentaGasto,
+      "Nombre de Cuenta": puc.nombreGasto,
       "NIT / Tercero": cleanNit,
       "Razón Social Tercero": r.nombreContraparte,
       "Cheque / Documento Ref": docRef,
@@ -48,8 +52,8 @@ export function exportHelisaTemplateXlsx(
         "Tipo Comprobante": "01",
         "Número Comprobante": compNum,
         "Fecha (AAAA/MM/DD)": docDate,
-        "Cuenta Contable": "24080326",
-        "Nombre de Cuenta": "IVA Descontable en Compras",
+        "Cuenta Contable": puc.cuentaIva,
+        "Nombre de Cuenta": puc.nombreIva,
         "NIT / Tercero": cleanNit,
         "Razón Social Tercero": r.nombreContraparte,
         "Cheque / Documento Ref": docRef,
@@ -66,8 +70,8 @@ export function exportHelisaTemplateXlsx(
       "Tipo Comprobante": "01",
       "Número Comprobante": compNum,
       "Fecha (AAAA/MM/DD)": docDate,
-      "Cuenta Contable": "22050101",
-      "Nombre de Cuenta": "Proveedores Nacionales",
+      "Cuenta Contable": puc.cuentaPasivo,
+      "Nombre de Cuenta": puc.nombrePasivo,
       "NIT / Tercero": cleanNit,
       "Razón Social Tercero": r.nombreContraparte,
       "Cheque / Documento Ref": docRef,
