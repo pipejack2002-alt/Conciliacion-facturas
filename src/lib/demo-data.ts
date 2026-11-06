@@ -1,4 +1,274 @@
 import type { DianDoc, MovLine } from "./types.ts";
+import type { BankExtractItem } from "./conciliar-bancos.ts";
+
+export function buildDemoConciliacionBancariaData(): {
+  extracto: BankExtractItem[];
+  libros: MovLine[];
+  saldoInicialExtracto: number;
+  saldoFinalExtracto: number;
+  saldoInicialLibros: number;
+  bancoNombre: string;
+  numeroCuenta: string;
+  periodo: string;
+  cuentaContable: string;
+  extractFileName: string;
+} {
+  const bancoNombre = "Bancolombia";
+  const numeroCuenta = "031-894520-11";
+  const periodo = "Marzo 2026";
+  const cuentaContable = "11100501";
+  const saldoInicialExtracto = 45000000;
+  const saldoInicialLibros = 45000000;
+
+  const extracto: BankExtractItem[] = [
+    // 1. Abono cliente conciliado exacto (+$14.280.000)
+    {
+      id: "demo_b1",
+      fecha: "2026-03-05",
+      descripcion: "ABONO TRANSFERENCIA PSE GRUPO BOLIVAR",
+      referencia: "1001",
+      debito: 0,
+      credito: 14280000,
+    },
+    // 2. Pago proveedor conciliado exacto (-$2.380.000)
+    {
+      id: "demo_b2",
+      fecha: "2026-03-08",
+      descripcion: "PAGO PROVEEDORES SUC VIRTUAL EXITO",
+      referencia: "45890",
+      debito: 2380000,
+      credito: 0,
+    },
+    // 3. Lote ACH conciliado 1 a 3 (-$6.400.000 = $2.100.000 + $1.800.000 + $2.500.000)
+    {
+      id: "demo_b3",
+      fecha: "2026-03-15",
+      descripcion: "PAGO DISPERSION LOTE ACH PROVEEDORES NACIONALES",
+      referencia: "99015",
+      debito: 6400000,
+      credito: 0,
+    },
+    // 4. Nota Crédito Bancaria: Rendimientos Financieros (+$420.000) - Pendiente en Libros
+    {
+      id: "demo_b4",
+      fecha: "2026-03-31",
+      descripcion: "ABONO INTERESES Y RENDIMIENTOS CUENTA AHORROS",
+      referencia: "REND0326",
+      debito: 0,
+      credito: 420000,
+    },
+    // 5. Nota Débito Bancaria: Retención en la Fuente 7% sobre Rendimientos (-$29.400) - Pendiente en Libros
+    {
+      id: "demo_b5",
+      fecha: "2026-03-31",
+      descripcion: "RETENCION EN LA FUENTE SOBRE RENDIMIENTOS FINANCIEROS",
+      referencia: "RETE0326",
+      debito: 29400,
+      credito: 0,
+    },
+    // 6. Nota Débito Bancaria: Comisión Cuota de Manejo (-$54.900) - Pendiente en Libros
+    {
+      id: "demo_b6",
+      fecha: "2026-03-31",
+      descripcion: "COBRO CUOTA DE MANEJO SUCURSAL VIRTUAL EMPRESAS",
+      referencia: "COM0326",
+      debito: 54900,
+      credito: 0,
+    },
+    // 7. Nota Débito Bancaria: GMF 4x1000 (-$35.120) - Pendiente en Libros
+    {
+      id: "demo_b7",
+      fecha: "2026-03-31",
+      descripcion: "IMPUESTO GOBIERNO 4X1000 GMF DEL PERIODO",
+      referencia: "GMF0326",
+      debito: 35120,
+      credito: 0,
+    },
+  ];
+
+  // Cálculo del saldo final del extracto:
+  // 45.000.000 + 14.280.000 - 2.380.000 - 6.400.000 + 420.000 - 29.400 - 54.900 - 35.120 = 50.800.580
+  const saldoFinalExtracto = 50800580;
+
+  const libros: MovLine[] = [
+    // 1. Recaudo cliente FV-1001 (+$14.280.000 en Bancos y -$14.280.000 en Clientes)
+    {
+      cuenta: "11100501",
+      cuentaNombre: "Bancolombia Cta Ahorros 031-894520-11",
+      comprobante: "RC-001-501",
+      fecha: "2026-03-05",
+      nit: "860002964",
+      nombre: "GRUPO BOLÍVAR S.A.",
+      descripcion: "Recaudo factura FV-1001 transferencia PSE",
+      cruce: "1001",
+      referencia: "1001",
+      debito: 14280000,
+      credito: 0,
+      observacion: "",
+    },
+    {
+      cuenta: "13050501",
+      cuentaNombre: "Clientes Nacionales",
+      comprobante: "RC-001-501",
+      fecha: "2026-03-05",
+      nit: "860002964",
+      nombre: "GRUPO BOLÍVAR S.A.",
+      descripcion: "Cancelación factura FV-1001",
+      cruce: "1001",
+      referencia: "1001",
+      debito: 0,
+      credito: 14280000,
+      observacion: "",
+    },
+
+    // 2. Egreso pago Éxito (-$2.380.000 en Bancos)
+    {
+      cuenta: "11100501",
+      cuentaNombre: "Bancolombia Cta Ahorros 031-894520-11",
+      comprobante: "CE-001-801",
+      fecha: "2026-03-08",
+      nit: "890900608",
+      nombre: "ALMACENES ÉXITO S.A.",
+      descripcion: "Pago factura FE-45890 sucursal virtual",
+      cruce: "45890",
+      referencia: "45890",
+      debito: 0,
+      credito: 2380000,
+      observacion: "",
+    },
+    {
+      cuenta: "22050501",
+      cuentaNombre: "Proveedores Nacionales",
+      comprobante: "CE-001-801",
+      fecha: "2026-03-08",
+      nit: "890900608",
+      nombre: "ALMACENES ÉXITO S.A.",
+      descripcion: "Cancelación factura FE-45890",
+      cruce: "45890",
+      referencia: "45890",
+      debito: 2380000,
+      credito: 0,
+      observacion: "",
+    },
+
+    // 3. Tres egresos del 15 de marzo que suman el Lote ACH de $6.400.000
+    {
+      cuenta: "11100501",
+      cuentaNombre: "Bancolombia Cta Ahorros 031-894520-11",
+      comprobante: "CE-001-810",
+      fecha: "2026-03-15",
+      nit: "830053812",
+      nombre: "ORGANIZACIÓN TERPEL S.A.",
+      descripcion: "Pago lote ACH combustible flota",
+      cruce: "SETT-99214",
+      referencia: "99214",
+      debito: 0,
+      credito: 2100000,
+      observacion: "",
+    },
+    {
+      cuenta: "11100501",
+      cuentaNombre: "Bancolombia Cta Ahorros 031-894520-11",
+      comprobante: "CE-001-811",
+      fecha: "2026-03-15",
+      nit: "860051894",
+      nombre: "SERVIENTREGA S.A.",
+      descripcion: "Pago lote ACH transporte nacional",
+      cruce: "SV-30500",
+      referencia: "30500",
+      debito: 0,
+      credito: 1800000,
+      observacion: "",
+    },
+    {
+      cuenta: "11100501",
+      cuentaNombre: "Bancolombia Cta Ahorros 031-894520-11",
+      comprobante: "CE-001-812",
+      fecha: "2026-03-15",
+      nit: "800242106",
+      nombre: "SODIMAC COLOMBIA S.A.",
+      descripcion: "Pago lote ACH materiales mantenimiento",
+      cruce: "HM-12055",
+      referencia: "12055",
+      debito: 0,
+      credito: 2500000,
+      observacion: "",
+    },
+
+    // 4. Cheque en Tránsito girado el 29 de marzo (-$1.950.000 en Libros, no cobrado aún en Banco)
+    {
+      cuenta: "11100501",
+      cuentaNombre: "Bancolombia Cta Ahorros 031-894520-11",
+      comprobante: "CE-001-845",
+      fecha: "2026-03-29",
+      nit: "800153993",
+      nombre: "COMUNICACIÓN CELULAR S.A. CLARO",
+      descripcion: "Giro cheque gerencia servicio telecomunicaciones (En tránsito)",
+      cruce: "CH-7410",
+      referencia: "7410",
+      debito: 0,
+      credito: 1950000,
+      observacion: "",
+    },
+    {
+      cuenta: "23355001",
+      cuentaNombre: "Costos y gastos por pagar - Servicios públicos",
+      comprobante: "CE-001-845",
+      fecha: "2026-03-29",
+      nit: "800153993",
+      nombre: "COMUNICACIÓN CELULAR S.A. CLARO",
+      descripcion: "Cancelación factura telecomunicaciones",
+      cruce: "CH-7410",
+      referencia: "7410",
+      debito: 1950000,
+      credito: 0,
+      observacion: "",
+    },
+
+    // 5. Consignación en Tránsito del 31 de marzo (+$3.200.000 en Libros, en canje bancario)
+    {
+      cuenta: "11100501",
+      cuentaNombre: "Bancolombia Cta Ahorros 031-894520-11",
+      comprobante: "RC-001-540",
+      fecha: "2026-03-31",
+      nit: "900450112",
+      nombre: "DISTRIBUIDORA DEL CARIBE S.A.S.",
+      descripcion: "Consignación cheque local cierre de mes (En canje)",
+      cruce: "FV-1044",
+      referencia: "1044",
+      debito: 3200000,
+      credito: 0,
+      observacion: "",
+    },
+    {
+      cuenta: "13050501",
+      cuentaNombre: "Clientes Nacionales",
+      comprobante: "RC-001-540",
+      fecha: "2026-03-31",
+      nit: "900450112",
+      nombre: "DISTRIBUIDORA DEL CARIBE S.A.S.",
+      descripcion: "Abono cartera factura FV-1044",
+      cruce: "FV-1044",
+      referencia: "1044",
+      debito: 0,
+      credito: 3200000,
+      observacion: "",
+    },
+  ];
+
+  return {
+    extracto,
+    libros,
+    saldoInicialExtracto,
+    saldoFinalExtracto,
+    saldoInicialLibros,
+    bancoNombre,
+    numeroCuenta,
+    periodo,
+    cuentaContable,
+    extractFileName: "Extracto_Bancolombia_Marzo2026_Demo.xlsx",
+  };
+}
 
 export function buildDemoConciliacionData(): {
   dian: DianDoc[];

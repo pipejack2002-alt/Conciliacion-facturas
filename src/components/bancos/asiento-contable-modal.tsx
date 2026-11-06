@@ -16,7 +16,13 @@ import {
 import { formatMoneyExact, formatDate } from "@/lib/format";
 import type { BankConciliacionRow } from "@/lib/conciliar-bancos";
 import type { MovLine } from "@/lib/types";
-import { exportAsientoAjusteBancario } from "@/lib/export-bancos-excel";
+import {
+  exportAsientoAjusteBancario,
+  exportBancosSiigoXlsx,
+  exportBancosWorldOfficeXlsx,
+  exportBancosHelisaXlsx,
+} from "@/lib/export-bancos-excel";
+import { inferBankPucForRow } from "@/lib/puc-classifier";
 import { resolveVoucherFullEntry, type ResolvedVoucherLine } from "@/lib/voucher-entry-resolver";
 
 interface Props {
@@ -119,6 +125,12 @@ export function AsientoContableModal({
     return resolveVoucherFullEntry(activeComprobante, currentLine, allMovLines, row);
   }, [activeComprobante, currentLine, allMovLines, row]);
 
+  // Clasificación inteligente PUC para partidas pendientes de causar en el banco
+  const bankPuc = useMemo(() => {
+    if (!row) return null;
+    return inferBankPucForRow(row, bancoNombre, cuentaContable, allMovLines);
+  }, [row, bancoNombre, cuentaContable, allMovLines]);
+
   const displayLines: ResolvedVoucherLine[] = resolvedVoucher.lines;
   const totalDebitos = resolvedVoucher.totalDebito;
   const totalCreditos = resolvedVoucher.totalCredito;
@@ -132,19 +144,11 @@ export function AsientoContableModal({
 
   const handleCopySuggestion = () => {
     let text = "";
-    if (isBankNote) {
-      const ctaSugerida = row.esGmf
-        ? "51159501 (GMF 4x1000)"
-        : row.esComision
-        ? "53051501 (Comisiones Bancarias)"
-        : row.esRetencion
-        ? "13551501 (Retención en la Fuente - Rendimientos)"
-        : row.esRendimiento
-        ? "42100502 (Rendimientos Financieros)"
-        : "53059501 (Gastos Bancarios)";
-      text = `Asiento Sugerido para: ${row.descripcion} (${formatMoneyExact(row.montoBanco)})\n` +
-        `Débito: ${row.estado === "nota_debito_banco" ? ctaSugerida : cuentaContable} - ${formatMoneyExact(row.montoBanco)}\n` +
-        `Crédito: ${row.estado === "nota_debito_banco" ? cuentaContable : ctaSugerida} - ${formatMoneyExact(row.montoBanco)}`;
+    if (isBankNote && bankPuc) {
+      text =
+        `Asiento Sugerido (${bankPuc.naturalezaLabel}): ${row.descripcion} (${formatMoneyExact(row.montoBanco)})\n` +
+        `Débito: ${bankPuc.cuentaDebito} ${bankPuc.nombreDebito} | NIT ${bankPuc.nitDebito} (${bankPuc.terceroDebito}) - ${formatMoneyExact(row.montoBanco)}\n` +
+        `Crédito: ${bankPuc.cuentaCredito} ${bankPuc.nombreCredito} | NIT ${bankPuc.nitCredito} (${bankPuc.terceroCredito}) - ${formatMoneyExact(row.montoBanco)}`;
     } else {
       text = `Comprobante: ${activeComprobante}\n` +
         displayLines
@@ -218,7 +222,7 @@ export function AsientoContableModal({
             {isBankNote && (
               <button
                 type="button"
-                onClick={() => exportAsientoAjusteBancario([row], bancoNombre, cuentaContable)}
+                onClick={() => exportAsientoAjusteBancario([row], bancoNombre, cuentaContable, allMovLines)}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-teal px-2.5 py-1.5 sm:px-3 text-xs font-semibold text-white hover:bg-teal-deep transition shadow-xs cursor-pointer"
               >
                 <Download className="size-3.5" />
@@ -307,18 +311,58 @@ export function AsientoContableModal({
           </div>
 
           {/* CASO A: PARTIDA PENDIENTE EN BANCOS (NOTA DÉBITO O CRÉDITO) */}
-          {isBankNote ? (
+          {isBankNote && bankPuc ? (
             <div className="space-y-4">
               <div className="rounded-xl border border-amber-300 bg-amber-50/60 dark:bg-amber-950/30 dark:border-amber-800 p-4 text-xs space-y-2">
-                <div className="flex items-center gap-2 font-bold text-amber-950 dark:text-amber-200">
-                  <AlertCircle className="size-4 text-amber-600" />
-                  <span>Diagnóstico Contable y Causa de la Diferencia</span>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 font-bold text-amber-950 dark:text-amber-200">
+                    <AlertCircle className="size-4 text-amber-600" />
+                    <span>Diagnóstico Contable · {bankPuc.naturalezaLabel}</span>
+                  </div>
+                  <span className="rounded-full bg-teal-soft text-teal-deep dark:text-teal px-2.5 py-0.5 text-[10px] font-bold">
+                    {bankPuc.origen === "regla_fisc_bancaria"
+                      ? "Regla Tributaria / Bancaria PUC"
+                      : bankPuc.origen === "regla_operativa"
+                      ? "Clasificación Inteligente PUC"
+                      : "PUC Estándar"}
+                  </span>
                 </div>
                 <p className="text-amber-900 dark:text-amber-300 leading-relaxed">
                   {row.nota}
                 </p>
                 <div className="text-[11px] text-amber-800 dark:text-amber-400 font-medium">
-                  Para que el libro contable de tesorería cuadre al 100% con el saldo de {bancoNombre}, debes causar este comprobante de ajuste en tu software contable.
+                  Para que el libro contable de tesorería cuadre al 100% con el saldo de {bancoNombre}, causa este comprobante de ajuste o descárgalo directamente para tu ERP.
+                </div>
+              </div>
+
+              {/* Barra de Exportación Rápida a ERPs (Siigo / World Office / Helisa) */}
+              <div className="rounded-xl border border-line bg-bg-subtle/60 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="font-bold text-ink flex items-center gap-1.5">
+                  <Download className="size-3.5 text-teal" />
+                  Exportar este ajuste en plantilla oficial ERP:
+                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => exportBancosSiigoXlsx([row], bancoNombre, cuentaContable, allMovLines)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1.5 text-[11px] font-bold text-sky-700 dark:text-sky-300 hover:bg-sky-500/20 transition cursor-pointer"
+                  >
+                    📘 Siigo (.xlsx)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => exportBancosWorldOfficeXlsx([row], bancoNombre, cuentaContable, allMovLines)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition cursor-pointer"
+                  >
+                    📗 World Office (.xlsx)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => exportBancosHelisaXlsx([row], bancoNombre, cuentaContable, allMovLines)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-800 dark:text-amber-300 hover:bg-amber-500/20 transition cursor-pointer"
+                  >
+                    📙 Helisa (.xlsx)
+                  </button>
                 </div>
               </div>
 
@@ -340,90 +384,53 @@ export function AsientoContableModal({
                       <tr>
                         <th className="px-3.5 py-2.5 w-32 shrink-0">Código PUC</th>
                         <th className="px-3.5 py-2.5 min-w-[160px]">Nombre de la Cuenta</th>
-                        <th className="px-3.5 py-2.5 min-w-[160px]">Tercero / Razón Social</th>
+                        <th className="px-3.5 py-2.5 min-w-[160px]">Tercero / NIT</th>
                         <th className="px-3.5 py-2.5 min-w-[200px]">Concepto Contable</th>
                         <th className="px-3.5 py-2.5 text-right whitespace-nowrap w-36">Débito (COP)</th>
                         <th className="px-3.5 py-2.5 text-right whitespace-nowrap w-36">Crédito (COP)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-line">
-                      {row.estado === "nota_debito_banco" ? (
-                        <>
-                          <tr className="hover:bg-bg-subtle/50 transition">
-                            <td className="px-3.5 py-2.5 font-mono font-bold text-teal">
-                              {row.esGmf
-                                ? "51159501"
-                                : row.esComision
-                                ? "53051501"
-                                : row.esRetencion
-                                ? "13551501"
-                                : "53059501"}
-                            </td>
-                            <td className="px-3.5 py-2.5 font-medium text-ink">
-                              {row.esGmf
-                                ? "Gravamen a los Movimientos Financieros (GMF 4x1000)"
-                                : row.esComision
-                                ? "Comisiones y Servicios Bancarios"
-                                : row.esRetencion
-                                ? "Retención en la Fuente sobre Rendimientos Financieros (Anticipo Impuestos)"
-                                : "Gastos Bancarios y Financieros Varios"}
-                            </td>
-                            <td className="px-3.5 py-2.5 text-ink-muted">
-                              {row.esGmf || row.esRetencion ? "DIAN - DIRECCION DE IMPUESTOS" : bancoNombre}
-                            </td>
-                            <td className="px-3.5 py-2.5 text-ink-muted">{row.descripcion}</td>
-                            <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap">
-                              {formatMoneyExact(row.montoBanco)}
-                            </td>
-                            <td className="px-3.5 py-2.5 font-mono text-right text-ink-subtle whitespace-nowrap">—</td>
-                          </tr>
-                          <tr className="hover:bg-bg-subtle/50 transition">
-                            <td className="px-3.5 py-2.5 font-mono font-bold text-teal">{cuentaContable}</td>
-                            <td className="px-3.5 py-2.5 font-medium text-ink">
-                              Bancos Moneda Nacional ({bancoNombre})
-                            </td>
-                            <td className="px-3.5 py-2.5 text-ink-muted">{bancoNombre}</td>
-                            <td className="px-3.5 py-2.5 text-ink-muted">Cargo bancario extracto</td>
-                            <td className="px-3.5 py-2.5 font-mono text-right text-ink-subtle whitespace-nowrap">—</td>
-                            <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap">
-                              {formatMoneyExact(row.montoBanco)}
-                            </td>
-                          </tr>
-                        </>
-                      ) : (
-                        <>
-                          <tr className="hover:bg-bg-subtle/50 transition">
-                            <td className="px-3.5 py-2.5 font-mono font-bold text-teal">{cuentaContable}</td>
-                            <td className="px-3.5 py-2.5 font-medium text-ink">
-                              Bancos Moneda Nacional ({bancoNombre})
-                            </td>
-                            <td className="px-3.5 py-2.5 text-ink-muted">{bancoNombre}</td>
-                            <td className="px-3.5 py-2.5 text-ink-muted">Abono bancario extracto</td>
-                            <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap">
-                              {formatMoneyExact(row.montoBanco)}
-                            </td>
-                            <td className="px-3.5 py-2.5 font-mono text-right text-ink-subtle whitespace-nowrap">—</td>
-                          </tr>
-                          <tr className="hover:bg-bg-subtle/50 transition">
-                            <td className="px-3.5 py-2.5 font-mono font-bold text-teal">
-                              {row.esRendimiento ? "42100502" : "13050501"}
-                            </td>
-                            <td className="px-3.5 py-2.5 font-medium text-ink">
-                              {row.esRendimiento
-                                ? "Intereses y Rendimientos Financieros Cuentas"
-                                : "Clientes Nacionales / Anticipos Pendientes"}
-                            </td>
-                            <td className="px-3.5 py-2.5 text-ink-muted">
-                              {row.esRendimiento ? bancoNombre : "Clientes Varios"}
-                            </td>
-                            <td className="px-3.5 py-2.5 text-ink-muted">{row.descripcion}</td>
-                            <td className="px-3.5 py-2.5 font-mono text-right text-ink-subtle whitespace-nowrap">—</td>
-                            <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap">
-                              {formatMoneyExact(row.montoBanco)}
-                            </td>
-                          </tr>
-                        </>
-                      )}
+                      <tr className="hover:bg-bg-subtle/50 transition">
+                        <td className="px-3.5 py-2.5 font-mono font-bold text-teal">
+                          {bankPuc.cuentaDebito}
+                        </td>
+                        <td className="px-3.5 py-2.5 font-medium text-ink">
+                          {bankPuc.nombreDebito}
+                        </td>
+                        <td className="px-3.5 py-2.5 text-ink">
+                          <span className="font-medium">{bankPuc.terceroDebito}</span>
+                          <span className="block text-[10px] font-mono text-ink-muted">
+                            NIT: {bankPuc.nitDebito}
+                          </span>
+                        </td>
+                        <td className="px-3.5 py-2.5 text-ink-muted">{row.descripcion}</td>
+                        <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap">
+                          {formatMoneyExact(row.montoBanco)}
+                        </td>
+                        <td className="px-3.5 py-2.5 font-mono text-right text-ink-subtle whitespace-nowrap">—</td>
+                      </tr>
+                      <tr className="hover:bg-bg-subtle/50 transition">
+                        <td className="px-3.5 py-2.5 font-mono font-bold text-teal">
+                          {bankPuc.cuentaCredito}
+                        </td>
+                        <td className="px-3.5 py-2.5 font-medium text-ink">
+                          {bankPuc.nombreCredito}
+                        </td>
+                        <td className="px-3.5 py-2.5 text-ink">
+                          <span className="font-medium">{bankPuc.terceroCredito}</span>
+                          <span className="block text-[10px] font-mono text-ink-muted">
+                            NIT: {bankPuc.nitCredito}
+                          </span>
+                        </td>
+                        <td className="px-3.5 py-2.5 text-ink-muted">
+                          Contrapartida {bankPuc.naturalezaLabel} ({bancoNombre})
+                        </td>
+                        <td className="px-3.5 py-2.5 font-mono text-right text-ink-subtle whitespace-nowrap">—</td>
+                        <td className="px-3.5 py-2.5 font-mono font-bold text-right text-ink whitespace-nowrap">
+                          {formatMoneyExact(row.montoBanco)}
+                        </td>
+                      </tr>
                     </tbody>
                     <tfoot className="bg-bg-subtle/80 font-bold border-t border-line">
                       <tr>

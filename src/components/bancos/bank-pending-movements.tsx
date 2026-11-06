@@ -17,7 +17,13 @@ import {
 import { formatMoneyExact, formatDate } from "@/lib/format";
 import type { BankConciliacionRow, BankConciliacionSummary } from "@/lib/conciliar-bancos";
 import type { MovLine } from "@/lib/types";
-import { exportAsientoAjusteBancario } from "@/lib/export-bancos-excel";
+import {
+  exportAsientoAjusteBancario,
+  exportBancosSiigoXlsx,
+  exportBancosWorldOfficeXlsx,
+  exportBancosHelisaXlsx,
+} from "@/lib/export-bancos-excel";
+import { inferBankPucForRow } from "@/lib/puc-classifier";
 import { AsientoContableModal } from "./asiento-contable-modal";
 import { cn } from "@/lib/cn";
 import * as XLSX from "xlsx";
@@ -202,45 +208,30 @@ export const BankPendingMovements = memo(function BankPendingMovements({
       let efecto = "Suma al saldo de libros (+)";
       let asientoDebito = "111005 (Bancos)";
       let asientoCredito = "130505 (Clientes)";
+      let terceroSug = "—";
 
-      if (r.estado === "nota_credito_banco") {
-        if (r.esRendimiento) {
-          naturaleza = "Rendimientos Financieros";
-          asientoDebito = cuentaContable || "125035 / 111005 (Bancos/Fondos)";
-          asientoCredito = "42100502 (Intereses y Rendimientos Financieros)";
-        } else {
-          naturaleza = "Abono / Transferencia Bancaria no causada";
-          asientoDebito = cuentaContable || "111005 (Bancos)";
-          asientoCredito = "130505 (Clientes / Anticipos)";
-        }
-      } else if (r.estado === "nota_debito_banco") {
-        efecto = "Resta al saldo de libros (-)";
-        if (r.esGmf) {
-          naturaleza = "Gravamen al Movimiento Financiero (GMF 4x1000)";
-          asientoDebito = "51159501 (GMF Deducible) / 51159502 (No Deducible)";
-          asientoCredito = cuentaContable || "111005 (Bancos)";
-        } else if (r.esComision) {
-          naturaleza = "Comisiones y Gastos Bancarios con IVA";
-          asientoDebito = "530515 (Comisiones) + 2408 (IVA Descontable)";
-          asientoCredito = cuentaContable || "111005 (Bancos)";
-        } else {
-          naturaleza = "Cargo bancario no registrado";
-          asientoDebito = "530595 (Otros Gastos Financieros) / 2205 (Proveedores)";
-          asientoCredito = cuentaContable || "111005 (Bancos)";
-        }
-      } else if (r.estado === "partida_en_transito_libros") {
+      if (r.estado === "partida_en_transito_libros") {
         origen = "Libros Contables";
         if (r.tipo === "retiro") {
           naturaleza = "Cheque / Giro en Tránsito";
           efecto = "Suma al conciliar extracto (+)";
           asientoDebito = "Ya registrado en libros";
           asientoCredito = "Pendiente cobro en banco";
+          terceroSug = r.itemLibros?.nombre ? `${r.itemLibros.nombre} [${r.itemLibros.nit || ""}]` : "Beneficiario giro";
         } else {
           naturaleza = "Consignación en Tránsito";
           efecto = "Resta al conciliar extracto (-)";
           asientoDebito = "Ya registrado en libros";
           asientoCredito = "Pendiente canje en banco";
+          terceroSug = r.itemLibros?.nombre ? `${r.itemLibros.nombre} [${r.itemLibros.nit || ""}]` : "Depositante";
         }
+      } else {
+        const puc = inferBankPucForRow(r, bancoNombre, cuentaContable, allMovLines);
+        naturaleza = puc.naturalezaLabel;
+        efecto = r.estado === "nota_debito_banco" ? "Resta al saldo de libros (-)" : "Suma al saldo de libros (+)";
+        asientoDebito = `${puc.cuentaDebito} (${puc.nombreDebito})`;
+        asientoCredito = `${puc.cuentaCredito} (${puc.nombreCredito})`;
+        terceroSug = `${puc.nombreTercero} [${puc.nitTercero}]`;
       }
 
       const valor = r.montoBanco > 0 ? r.montoBanco : r.montoLibros;
@@ -256,6 +247,7 @@ export const BankPendingMovements = memo(function BankPendingMovements({
         "Efecto en Conciliación": efecto,
         "Cuenta Débito Sugerida": asientoDebito,
         "Cuenta Crédito Sugerida": asientoCredito,
+        "Tercero / NIT Sugerido": terceroSug,
         "Nota Explicativa": r.nota,
       };
     });
@@ -288,17 +280,43 @@ export const BankPendingMovements = memo(function BankPendingMovements({
         </div>
 
         {pendingRows.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap">
-            {(cargosPendientes.length > 0 || rendimientosPendientes.length > 0) && (
-              <button
-                type="button"
-                onClick={() => exportAsientoAjusteBancario(rows, bancoNombre, cuentaContable)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-teal/40 bg-teal-soft/60 px-3 py-2 text-xs font-bold text-teal hover:bg-teal hover:text-white transition shadow-2xs cursor-pointer whitespace-nowrap"
-                title="Descargar comprobante de diario listo para importar en Siigo / World Office / Helisa"
-              >
-                <FileText className="size-3.5" />
-                <span>Asiento ERP (.xlsx)</span>
-              </button>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {(cargosPendientes.length > 0 || rendimientosPendientes.length > 0 || otrosAbonosPendientes.length > 0) && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => exportBancosSiigoXlsx(rows, bancoNombre, cuentaContable, allMovLines)}
+                  className="inline-flex items-center gap-1 rounded-xl border border-sky-500/30 bg-sky-500/10 px-2.5 py-2 text-xs font-bold text-sky-700 dark:text-sky-300 hover:bg-sky-500/20 transition shadow-2xs cursor-pointer whitespace-nowrap"
+                  title="Descargar plantilla de causación bancaria en formato nativo Siigo Nube / Pyme (.xlsx)"
+                >
+                  <span>📘 Siigo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => exportBancosWorldOfficeXlsx(rows, bancoNombre, cuentaContable, allMovLines)}
+                  className="inline-flex items-center gap-1 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition shadow-2xs cursor-pointer whitespace-nowrap"
+                  title="Descargar plantilla de causación bancaria en formato nativo World Office (.xlsx)"
+                >
+                  <span>📗 World Office</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => exportBancosHelisaXlsx(rows, bancoNombre, cuentaContable, allMovLines)}
+                  className="inline-flex items-center gap-1 rounded-xl border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-xs font-bold text-amber-800 dark:text-amber-300 hover:bg-amber-500/20 transition shadow-2xs cursor-pointer whitespace-nowrap"
+                  title="Descargar plantilla de causación bancaria en formato nativo Helisa GW (.xlsx)"
+                >
+                  <span>📙 Helisa</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => exportAsientoAjusteBancario(rows, bancoNombre, cuentaContable, allMovLines)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-teal/40 bg-teal-soft/60 px-3 py-2 text-xs font-bold text-teal hover:bg-teal hover:text-white transition shadow-2xs cursor-pointer whitespace-nowrap"
+                  title="Descargar comprobante de diario estándar para importar en cualquier ERP"
+                >
+                  <FileText className="size-3.5" />
+                  <span>Asiento ERP (.xlsx)</span>
+                </button>
+              </>
             )}
             <button
               type="button"
@@ -801,78 +819,42 @@ export const BankPendingMovements = memo(function BankPendingMovements({
 
                     {/* 7. Asiento Contable Sugerido */}
                     <td className="py-2.5 px-3 text-[11px]">
-                      {isNotaCredito && r.esRendimiento && (
-                        <div className="space-y-0.5">
-                          <div className="font-bold text-teal flex items-center gap-1">
-                            <span>Débito: {cuentaContable || "125035 / 111005"} (Bancos/Fondos)</span>
-                          </div>
-                          <div className="text-ink-muted">
-                            Crédito: <strong className="font-mono text-ink">42100502</strong> (Intereses y Rendimientos Financieros)
-                          </div>
-                        </div>
-                      )}
-
-                      {isNotaCredito && !r.esRendimiento && (
-                        <div className="space-y-0.5">
-                          <div className="font-bold text-teal">
-                            Débito: {cuentaContable || "111005"} (Bancos)
-                          </div>
-                          <div className="text-ink-muted">
-                            Crédito: <strong className="font-mono text-ink">130505</strong> (Abono de Clientes / Deudores)
-                          </div>
-                        </div>
-                      )}
-
-                      {isNotaDebito && r.esGmf && (
-                        <div className="space-y-0.5">
-                          <div className="font-bold text-amber-700 dark:text-amber-400">
-                            Débito: 51159501 (GMF 4×1000 Deducible)
-                          </div>
-                          <div className="text-ink-muted">
-                            Crédito: {cuentaContable || "111005"} (Bancos)
-                          </div>
-                        </div>
-                      )}
-
-                      {isNotaDebito && r.esComision && (
-                        <div className="space-y-0.5">
-                          <div className="font-bold text-blue-700 dark:text-blue-400">
-                            Débito: 530515 (Comisiones) + 2408 (IVA)
-                          </div>
-                          <div className="text-ink-muted">
-                            Crédito: {cuentaContable || "111005"} (Bancos)
-                          </div>
-                        </div>
-                      )}
-
-                      {isNotaDebito && r.esRetencion && (
-                        <div className="space-y-0.5">
-                          <div className="font-bold text-rose-700 dark:text-rose-400">
-                            Débito: 135515 (Retención en la Fuente - Rendimientos)
-                          </div>
-                          <div className="text-ink-muted">
-                            Crédito: {cuentaContable || "111005"} (Bancos / Fondos)
-                          </div>
-                        </div>
-                      )}
-
-                      {isNotaDebito && !r.esGmf && !r.esComision && !r.esRetencion && (
-                        <div className="space-y-0.5">
-                          <div className="font-bold text-rose-700 dark:text-rose-400">
-                            Débito: 530595 (Gastos Bancarios) / 2205 (Proveedores)
-                          </div>
-                          <div className="text-ink-muted">
-                            Crédito: {cuentaContable || "111005"} (Bancos)
-                          </div>
-                        </div>
-                      )}
-
-                      {isTransito && (
+                      {isTransito ? (
                         <div className="text-ink-muted italic">
                           {r.tipo === "retiro"
                             ? "Ya causado en libros. Pendiente débito bancario al cobro del beneficiario."
                             : "Ya causado en libros. Pendiente canje y acreditación bancaria."}
                         </div>
+                      ) : (
+                        (() => {
+                          const puc = inferBankPucForRow(r, bancoNombre, cuentaContable, allMovLines);
+                          return (
+                            <div className="space-y-0.5">
+                              <div
+                                className={cn(
+                                  "font-bold flex items-center gap-1 flex-wrap",
+                                  isNotaCredito
+                                    ? "text-teal"
+                                    : r.esGmf
+                                    ? "text-amber-700 dark:text-amber-400"
+                                    : r.esComision
+                                    ? "text-blue-700 dark:text-blue-400"
+                                    : "text-rose-700 dark:text-rose-400"
+                                )}
+                              >
+                                <span>
+                                  Débito: <strong className="font-mono">{puc.cuentaDebito}</strong> ({puc.nombreDebito})
+                                </span>
+                              </div>
+                              <div className="text-ink-muted">
+                                Crédito: <strong className="font-mono text-ink">{puc.cuentaCredito}</strong> ({puc.nombreCredito})
+                              </div>
+                              <div className="text-[10px] text-ink-subtle font-mono">
+                                Tercero: {puc.nombreTercero} [NIT {puc.nitTercero}]
+                              </div>
+                            </div>
+                          );
+                        })()
                       )}
                     </td>
 
@@ -892,6 +874,23 @@ export const BankPendingMovements = memo(function BankPendingMovements({
                 );
               }))}
             </tbody>
+            {sortedDisplayedRows.length > 0 && (
+              <tfoot className="border-t-2 border-line bg-bg-subtle/90 text-xs font-bold">
+                <tr>
+                  <td colSpan={5} className="py-2.5 px-3 text-ink-muted uppercase tracking-wider text-[11px]">
+                    Totales Visibles ({sortedDisplayedRows.length} {sortedDisplayedRows.length === 1 ? "partida" : "partidas"})
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono font-black text-ink whitespace-nowrap">
+                    {formatMoneyExact(
+                      sortedDisplayedRows.reduce((acc, r) => acc + (r.montoBanco > 0 ? r.montoBanco : r.montoLibros), 0)
+                    )}
+                  </td>
+                  <td colSpan={2} className="py-2.5 px-3 text-[11px] text-ink-muted font-medium">
+                    Listo para causar en Siigo / World Office / Helisa
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>

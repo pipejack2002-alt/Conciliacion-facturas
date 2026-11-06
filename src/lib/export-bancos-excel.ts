@@ -1,6 +1,7 @@
 import XLSX from "xlsx-js-style";
 import type { BankConciliacionResult, BankConciliacionRow } from "./conciliar-bancos.ts";
 import type { MovLine } from "./types.ts";
+import { inferBankPucForRow } from "./puc-classifier.ts";
 
 // Estilos corporativos prémium para Excel de Bancos
 const HEADER_STYLE = {
@@ -37,7 +38,7 @@ export interface BankExportMeta {
 export function exportConciliacionBancariaXlsx(
   result: BankConciliacionResult,
   meta: BankExportMeta,
-  _allMovLines: MovLine[] = []
+  allMovLines: MovLine[] = []
 ) {
   const wb = XLSX.utils.book_new();
   const summary = result.summary;
@@ -61,7 +62,7 @@ export function exportConciliacionBancariaXlsx(
     ["EMPRESA / RAZÓN SOCIAL:", empresa],
     ["ENTIDAD FINANCIERA:", banco],
     ["NÚMERO DE CUENTA:", numCta],
-    ["CUENTA CONTABLE LIBROS:", meta.cuentaContable === "todas" || !meta.cuentaContable ? "Cuentas de Tesorería PUC 11 / 1250" : meta.cuentaContable],
+    ["CUENTA CONTABLE LIBROS:", meta.cuentaContable === "todas" || meta.cuentaContable === "credicorp_all" || !meta.cuentaContable ? "Cuentas de Tesorería PUC 11 / 1250" : meta.cuentaContable],
     ["PERIODO CONCILIADO:", periodo],
     ["FECHA DE EMISIÓN:", fechaGeneracion],
     [],
@@ -69,8 +70,8 @@ export function exportConciliacionBancariaXlsx(
     ["Saldo Final según Extracto Bancario", "(=)", summary.saldoExtracto],
     ["(+) Consignaciones o Abonos en Tránsito (Libros pero no en Banco)", "(+)", summary.consignacionesEnTransito],
     ["(-) Cheques y Giros pendientes de cobro (Libros pero no en Banco)", "(-)", -summary.chequesEnTransito],
-    ["(-) Notas Débito Bancarias no contabilizadas (GMF 4x1000 / Comisiones)", "(-)", -summary.notasDebitoNoRegistradas],
-    ["(+) Notas Crédito Bancarias no contabilizadas (Rendimientos)", "(+)", summary.notasCreditoNoRegistradas],
+    ["(-) Notas Débito Bancarias no contabilizadas (GMF 4x1000 / Comisiones / Retenciones)", "(-)", -summary.notasDebitoNoRegistradas],
+    ["(+) Notas Crédito Bancarias no contabilizadas (Rendimientos / Abonos)", "(+)", summary.notasCreditoNoRegistradas],
     ["(=) SALDO CONCILIADO DE BANCOS", "(=)", summary.saldoConciliado],
     [],
     ["Saldo Final según Libros Contables (Cuentas 11 / 1250)", "(=)", summary.saldoLibros],
@@ -148,7 +149,13 @@ export function exportConciliacionBancariaXlsx(
     if (r.estado === "partida_en_transito_libros") {
       estadoLabel = r.tipo === "retiro" ? "Cheque/Giro en Tránsito" : "Consignación en Tránsito";
     } else if (r.estado === "nota_debito_banco") {
-      estadoLabel = r.esGmf ? "GMF 4x1000 (Pendiente Libros)" : r.esComision ? "Comisión Bancaria (Pendiente Libros)" : "Nota Débito (Pendiente Libros)";
+      estadoLabel = r.esGmf
+        ? "GMF 4x1000 (Pendiente Libros)"
+        : r.esRetencion
+        ? "Retención Fuente 7% (Pendiente Libros)"
+        : r.esComision
+        ? "Comisión Bancaria (Pendiente Libros)"
+        : "Nota Débito (Pendiente Libros)";
     } else if (r.estado === "nota_credito_banco") {
       estadoLabel = r.esRendimiento ? "Rendimientos (Pendiente Libros)" : "Nota Crédito (Pendiente Libros)";
     } else if (r.estado === "diferencia_valor") {
@@ -159,9 +166,15 @@ export function exportConciliacionBancariaXlsx(
       ? r.itemsLibrosLote.map((c) => c.comprobante).filter(Boolean).join(" | ")
       : r.itemLibros?.comprobante || "—";
 
-    const ctaStr = r.itemsLibrosLote
-      ? r.itemsLibrosLote.map((c) => c.cuenta).filter(Boolean).slice(0, 3).join(", ")
-      : r.itemLibros?.cuenta ? `${r.itemLibros.cuenta} (${r.itemLibros.cuentaNombre})` : "—";
+    let ctaStr = "—";
+    if (r.itemsLibrosLote) {
+      ctaStr = r.itemsLibrosLote.map((c) => c.cuenta).filter(Boolean).slice(0, 3).join(", ");
+    } else if (r.itemLibros?.cuenta) {
+      ctaStr = `${r.itemLibros.cuenta} (${r.itemLibros.cuentaNombre})`;
+    } else if (r.estado === "nota_debito_banco" || r.estado === "nota_credito_banco") {
+      const puc = inferBankPucForRow(r, banco, meta.cuentaContable, allMovLines);
+      ctaStr = `${puc.cuentaContrapartida} (${puc.nombreContrapartida}) [Sugerida]`;
+    }
 
     const terceroStr = r.itemsLibrosLote
       ? `Lote ACH (${r.itemsLibrosLote.length} comprobantes)`
@@ -195,7 +208,7 @@ export function exportConciliacionBancariaXlsx(
     { wch: 18 },
     { wch: 38 },
     { wch: 22 },
-    { wch: 28 },
+    { wch: 36 },
     { wch: 32 },
   ];
 
@@ -236,6 +249,7 @@ export function exportConciliacionBancariaXlsx(
     "Valor Pendiente (COP)",
     "Cuenta Débito Sugerida",
     "Cuenta Crédito Sugerida",
+    "Tercero / NIT Sugerido",
     "Instrucción para el Contador",
   ];
 
@@ -246,6 +260,7 @@ export function exportConciliacionBancariaXlsx(
     let efecto = "Sin efecto";
     let ctaDebito = "—";
     let ctaCredito = "—";
+    let terceroSug = "—";
 
     if (r.estado === "partida_en_transito_libros") {
       if (r.tipo === "retiro") {
@@ -253,38 +268,21 @@ export function exportConciliacionBancariaXlsx(
         efecto = "Resta al extracto (-)";
         ctaDebito = "Ya causado en libros";
         ctaCredito = "Banco (Cobro diferido)";
+        terceroSug = r.itemLibros?.nombre ? `${r.itemLibros.nombre} [${r.itemLibros.nit || ""}]` : "Beneficiario giro";
       } else {
         categoria = "Consignación en Tránsito";
         efecto = "Suma al extracto (+)";
         ctaDebito = "Banco (Abono diferido)";
         ctaCredito = "Ya causado en libros";
+        terceroSug = r.itemLibros?.nombre ? `${r.itemLibros.nombre} [${r.itemLibros.nit || ""}]` : "Depositante";
       }
-    } else if (r.estado === "nota_debito_banco") {
-      efecto = "Resta al libro de bancos (-)";
-      if (r.esGmf) {
-        categoria = "GMF 4x1000";
-        ctaDebito = "51159501 (GMF Deducible)";
-        ctaCredito = meta.cuentaContable || "111005 (Bancos)";
-      } else if (r.esComision) {
-        categoria = "Comisión Bancaria";
-        ctaDebito = "530515 (Comisiones Financieras)";
-        ctaCredito = meta.cuentaContable || "111005 (Bancos)";
-      } else {
-        categoria = "Nota Débito Banco";
-        ctaDebito = "530595 (Gastos Bancarios)";
-        ctaCredito = meta.cuentaContable || "111005 (Bancos)";
-      }
-    } else if (r.estado === "nota_credito_banco") {
-      efecto = "Suma al libro de bancos (+)";
-      if (r.esRendimiento) {
-        categoria = "Rendimientos Financieros";
-        ctaDebito = meta.cuentaContable || "111005 (Bancos)";
-        ctaCredito = "42100502 (Rendimientos Financieros)";
-      } else {
-        categoria = "Nota Crédito Banco";
-        ctaDebito = meta.cuentaContable || "111005 (Bancos)";
-        ctaCredito = "130505 (Clientes / Anticipos)";
-      }
+    } else {
+      const puc = inferBankPucForRow(r, banco, meta.cuentaContable, allMovLines);
+      categoria = puc.naturalezaLabel;
+      efecto = r.estado === "nota_debito_banco" ? "Resta al libro de bancos (-)" : "Suma al libro de bancos (+)";
+      ctaDebito = `${puc.cuentaDebito} (${puc.nombreDebito})`;
+      ctaCredito = `${puc.cuentaCredito} (${puc.nombreCredito})`;
+      terceroSug = `${puc.nombreTercero} [${puc.nitTercero}]`;
     }
 
     const valor = r.montoBanco > 0 ? r.montoBanco : r.montoLibros;
@@ -299,24 +297,26 @@ export function exportConciliacionBancariaXlsx(
       valor,
       ctaDebito,
       ctaCredito,
+      terceroSug,
       r.nota,
     ]);
   }
 
   const wsPendientes = XLSX.utils.aoa_to_sheet(rowsPendientes);
   wsPendientes["!cols"] = [
-    { wch: 25 },
+    { wch: 28 },
     { wch: 24 },
     { wch: 13 },
     { wch: 38 },
     { wch: 20 },
     { wch: 22 },
-    { wch: 28 },
-    { wch: 28 },
+    { wch: 36 },
+    { wch: 36 },
+    { wch: 32 },
     { wch: 36 },
   ];
 
-  const rangePendientes = XLSX.utils.decode_range(wsPendientes["!ref"] || "A1:I1");
+  const rangePendientes = XLSX.utils.decode_range(wsPendientes["!ref"] || "A1:J1");
   for (let C = rangePendientes.s.c; C <= rangePendientes.e.c; ++C) {
     const addr = XLSX.utils.encode_cell({ r: 0, c: C });
     if (wsPendientes[addr]) wsPendientes[addr].s = HEADER_STYLE;
@@ -351,134 +351,57 @@ export function exportConciliacionBancariaXlsx(
   ];
 
   const rowsAsiento: (string | number)[][] = [headersAsiento];
-  const ctaBancoDefault = meta.cuentaContable && meta.cuentaContable !== "todas" ? meta.cuentaContable : "111005";
+  let totalAsientoDeb = 0;
+  let totalAsientoCred = 0;
 
-  for (const r of unrecordedBankNotes) {
+  unrecordedBankNotes.forEach((r, idx) => {
     const fecha = r.fecha || new Date().toISOString().slice(0, 10);
+    const compNum = `NC-AJ-${String(idx + 1).padStart(3, "0")}`;
     const monto = r.montoBanco;
+    const puc = inferBankPucForRow(r, banco, meta.cuentaContable, allMovLines);
 
-    if (r.estado === "nota_debito_banco") {
-      // Débito al gasto (GMF o Comisión) y Crédito al Banco
-      if (r.esGmf) {
-        rowsAsiento.push([
-          fecha,
-          "NC-AJUSTE",
-          "51159501",
-          "Gravamen a los Movimientos Financieros (GMF 4x1000)",
-          "800197268",
-          "DIAN - DIRECCION DE IMPUESTOS Y ADUANAS NACIONALES",
-          `Causación GMF 4x1000 Extracto ${banco}`,
-          monto,
-          0,
-        ]);
-        rowsAsiento.push([
-          fecha,
-          "NC-AJUSTE",
-          ctaBancoDefault,
-          `Bancos Moneda Nacional (${banco})`,
-          "890903938",
-          banco,
-          `Cargo por GMF Extracto ${banco}`,
-          0,
-          monto,
-        ]);
-      } else if (r.esComision) {
-        rowsAsiento.push([
-          fecha,
-          "NC-AJUSTE",
-          "53051501",
-          "Comisiones y Servicios Bancarios",
-          "890903938",
-          banco,
-          `Comisión bancaria / cuota manejo Extracto ${banco}`,
-          monto,
-          0,
-        ]);
-        rowsAsiento.push([
-          fecha,
-          "NC-AJUSTE",
-          ctaBancoDefault,
-          `Bancos Moneda Nacional (${banco})`,
-          "890903938",
-          banco,
-          `Cargo por comisión Extracto ${banco}`,
-          0,
-          monto,
-        ]);
-      } else {
-        rowsAsiento.push([
-          fecha,
-          "NC-AJUSTE",
-          "53059501",
-          "Otros Gastos Bancarios y Financieros",
-          "890903938",
-          banco,
-          r.descripcion || "Nota Débito no registrada",
-          monto,
-          0,
-        ]);
-        rowsAsiento.push([
-          fecha,
-          "NC-AJUSTE",
-          ctaBancoDefault,
-          `Bancos Moneda Nacional (${banco})`,
-          "890903938",
-          banco,
-          r.descripcion || "Nota Débito bancaria",
-          0,
-          monto,
-        ]);
-      }
-    } else if (r.estado === "nota_credito_banco") {
-      // Débito al Banco y Crédito a Rendimientos o Clientes
-      if (r.esRendimiento) {
-        rowsAsiento.push([
-          fecha,
-          "NC-AJUSTE",
-          ctaBancoDefault,
-          `Bancos Moneda Nacional (${banco})`,
-          "890903938",
-          banco,
-          `Abono de Rendimientos Financieros Extracto ${banco}`,
-          monto,
-          0,
-        ]);
-        rowsAsiento.push([
-          fecha,
-          "NC-AJUSTE",
-          "42100502",
-          "Intereses y Rendimientos Financieros Cuentas Corrientes/Ahorros",
-          "890903938",
-          banco,
-          `Rendimientos liquidados Extracto ${banco}`,
-          0,
-          monto,
-        ]);
-      } else {
-        rowsAsiento.push([
-          fecha,
-          "NC-AJUSTE",
-          ctaBancoDefault,
-          `Bancos Moneda Nacional (${banco})`,
-          "890903938",
-          banco,
-          r.descripcion || "Abono bancario no registrado",
-          monto,
-          0,
-        ]);
-        rowsAsiento.push([
-          fecha,
-          "NC-AJUSTE",
-          "13050501",
-          "Clientes Nacionales / Anticipos Pendientes",
-          "222222222",
-          "Clientes Varios / Por Identificar",
-          r.descripcion || "Abono bancario no identificado",
-          0,
-          monto,
-        ]);
-      }
-    }
+    // Línea 1: Débito
+    rowsAsiento.push([
+      fecha,
+      compNum,
+      puc.cuentaDebito,
+      puc.nombreDebito,
+      puc.nitDebito,
+      puc.terceroDebito,
+      `${puc.naturalezaLabel}: ${r.descripcion || "Ajuste bancario"}`,
+      monto,
+      0,
+    ]);
+
+    // Línea 2: Crédito
+    rowsAsiento.push([
+      fecha,
+      compNum,
+      puc.cuentaCredito,
+      puc.nombreCredito,
+      puc.nitCredito,
+      puc.terceroCredito,
+      `Contrapartida ${puc.naturalezaLabel} (${banco})`,
+      0,
+      monto,
+    ]);
+
+    totalAsientoDeb += monto;
+    totalAsientoCred += monto;
+  });
+
+  if (unrecordedBankNotes.length > 0) {
+    rowsAsiento.push([
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "TOTAL SUMAS IGUALES (PARTIDA DOBLE):",
+      totalAsientoDeb,
+      totalAsientoCred,
+    ]);
   }
 
   const wsAsiento = XLSX.utils.aoa_to_sheet(rowsAsiento);
@@ -486,10 +409,10 @@ export function exportConciliacionBancariaXlsx(
     { wch: 13 },
     { wch: 15 },
     { wch: 18 },
-    { wch: 38 },
-    { wch: 16 },
-    { wch: 35 },
     { wch: 42 },
+    { wch: 16 },
+    { wch: 36 },
+    { wch: 44 },
     { wch: 20 },
     { wch: 20 },
   ];
@@ -504,7 +427,11 @@ export function exportConciliacionBancariaXlsx(
       const addr = XLSX.utils.encode_cell({ r: R, c: cIdx });
       if (wsAsiento[addr]) {
         wsAsiento[addr].z = "$#,##0.00;($#,##0.00);\"-\"";
-        wsAsiento[addr].s = { alignment: { horizontal: "right" }, border: BORDER_THIN };
+        wsAsiento[addr].s = {
+          font: { name: "Calibri", sz: 11, bold: R === rangeAsiento.e.r && unrecordedBankNotes.length > 0 },
+          alignment: { horizontal: "right" },
+          border: BORDER_THIN,
+        };
       }
     }
   }
@@ -522,7 +449,8 @@ export function exportConciliacionBancariaXlsx(
 export function exportAsientoAjusteBancario(
   rows: BankConciliacionRow[],
   bancoNombre = "Banco",
-  cuentaBanco = "111005"
+  cuentaBanco = "111005",
+  allMovLines: MovLine[] = []
 ) {
   const wb = XLSX.utils.book_new();
   const unrecorded = rows.filter(
@@ -534,6 +462,7 @@ export function exportAsientoAjusteBancario(
     "Tipo Comprobante",
     "Numero",
     "Cuenta Contable",
+    "Nombre Cuenta",
     "Identificacion Tercero",
     "Nombre Tercero",
     "Descripcion / Concepto",
@@ -547,18 +476,33 @@ export function exportAsientoAjusteBancario(
     const fecha = r.fecha || new Date().toISOString().slice(0, 10);
     const num = `AJ-${String(idx + 1).padStart(3, "0")}`;
     const monto = r.montoBanco;
+    const puc = inferBankPucForRow(r, bancoNombre, cuentaBanco, allMovLines);
+    const desc = `${puc.naturalezaLabel}: ${r.descripcion || "Ajuste bancario"}`;
 
-    if (r.estado === "nota_debito_banco") {
-      const ctaGasto = r.esGmf ? "51159501" : r.esComision ? "53051501" : "53059501";
-      const desc = r.esGmf ? "GMF 4x1000 Extracto Bancario" : r.esComision ? "Comisión Bancaria Extracto" : r.descripcion;
-      data.push([fecha, "NC", num, ctaGasto, "890903938", bancoNombre, desc, monto, 0]);
-      data.push([fecha, "NC", num, cuentaBanco, "890903938", bancoNombre, `Contrapartida ${desc}`, 0, monto]);
-    } else {
-      const ctaIngreso = r.esRendimiento ? "42100502" : "13050501";
-      const desc = r.esRendimiento ? "Rendimientos Financieros Extracto" : r.descripcion;
-      data.push([fecha, "NC", num, cuentaBanco, "890903938", bancoNombre, desc, monto, 0]);
-      data.push([fecha, "NC", num, ctaIngreso, "890903938", bancoNombre, `Contrapartida ${desc}`, 0, monto]);
-    }
+    data.push([
+      fecha,
+      "NC",
+      num,
+      puc.cuentaDebito,
+      puc.nombreDebito,
+      puc.nitDebito,
+      puc.terceroDebito,
+      desc,
+      monto,
+      0,
+    ]);
+    data.push([
+      fecha,
+      "NC",
+      num,
+      puc.cuentaCredito,
+      puc.nombreCredito,
+      puc.nitCredito,
+      puc.terceroCredito,
+      `Contrapartida ${desc}`,
+      0,
+      monto,
+    ]);
   });
 
   const ws = XLSX.utils.aoa_to_sheet(data);
@@ -567,9 +511,10 @@ export function exportAsientoAjusteBancario(
     { wch: 16 },
     { wch: 14 },
     { wch: 18 },
+    { wch: 36 },
     { wch: 22 },
-    { wch: 30 },
-    { wch: 38 },
+    { wch: 34 },
+    { wch: 40 },
     { wch: 18 },
     { wch: 18 },
   ];
@@ -577,3 +522,237 @@ export function exportAsientoAjusteBancario(
   XLSX.utils.book_append_sheet(wb, ws, "Asiento_Ajuste");
   XLSX.writeFile(wb, `Asiento_Ajuste_Bancario_${bancoNombre.replace(/\s+/g, "_")}.xlsx`);
 }
+
+/**
+ * Plantilla de causación bancaria en formato nativo Siigo Nube / Pyme (Comprobante Contable / Notas Bancarias)
+ */
+export function exportBancosSiigoXlsx(
+  rows: BankConciliacionRow[],
+  bancoNombre = "Banco",
+  cuentaBanco = "11100501",
+  allMovLines: MovLine[] = []
+) {
+  const unrecorded = rows.filter(
+    (r) => r.estado === "nota_debito_banco" || r.estado === "nota_credito_banco"
+  );
+  const targetRows = unrecorded.length > 0 ? unrecorded : rows;
+  const data: Array<Record<string, string | number>> = [];
+
+  targetRows.forEach((r, idx) => {
+    const seq = String(idx + 1).padStart(3, "0");
+    const docDate = r.fecha ? r.fecha.slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const monto = r.montoBanco > 0 ? r.montoBanco : r.montoLibros;
+    const puc = inferBankPucForRow(r, bancoNombre, cuentaBanco, allMovLines);
+    const ref = r.referencia || `AJ-${seq}`;
+
+    // 1. Línea Débito
+    data.push({
+      "Tipo Comprobante": "CC",
+      "Consecutivo": seq,
+      "Fecha": docDate,
+      "Cuenta Contable": puc.cuentaDebito,
+      "Nombre Cuenta": puc.nombreDebito,
+      "NIT / Cédula Tercero": puc.nitDebito,
+      "Razón Social Tercero": puc.terceroDebito,
+      "Documento Cruce": ref,
+      "Débito": monto,
+      "Crédito": 0,
+      "Descripción / Detalle": `${puc.naturalezaLabel} - ${r.descripcion}`,
+    });
+
+    // 2. Línea Crédito
+    data.push({
+      "Tipo Comprobante": "CC",
+      "Consecutivo": seq,
+      "Fecha": docDate,
+      "Cuenta Contable": puc.cuentaCredito,
+      "Nombre Cuenta": puc.nombreCredito,
+      "NIT / Cédula Tercero": puc.nitCredito,
+      "Razón Social Tercero": puc.terceroCredito,
+      "Documento Cruce": ref,
+      "Débito": 0,
+      "Crédito": monto,
+      "Descripción / Detalle": `Contrapartida ${puc.naturalezaLabel} (${bancoNombre})`,
+    });
+  });
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws["!cols"] = [
+    { wch: 18 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 18 },
+    { wch: 38 },
+    { wch: 20 },
+    { wch: 38 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 42 },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Plantilla_Siigo_Bancos");
+  const cleanBanco = (bancoNombre || "Bancos").replace(/[^a-zA-Z0-9_-]/g, "_");
+  XLSX.writeFile(wb, `Plantilla_Siigo_Bancos_${cleanBanco}.xlsx`);
+}
+
+/**
+ * Plantilla de causación bancaria en formato nativo World Office (Nota de Contabilidad / Ajustes Bancarios)
+ */
+export function exportBancosWorldOfficeXlsx(
+  rows: BankConciliacionRow[],
+  bancoNombre = "Banco",
+  cuentaBanco = "11100501",
+  allMovLines: MovLine[] = []
+) {
+  const unrecorded = rows.filter(
+    (r) => r.estado === "nota_debito_banco" || r.estado === "nota_credito_banco"
+  );
+  const targetRows = unrecorded.length > 0 ? unrecorded : rows;
+  const data: Array<Record<string, string | number>> = [];
+
+  targetRows.forEach((r, idx) => {
+    const folio = String(idx + 1);
+    const docDate = r.fecha ? r.fecha.slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const monto = r.montoBanco > 0 ? r.montoBanco : r.montoLibros;
+    const puc = inferBankPucForRow(r, bancoNombre, cuentaBanco, allMovLines);
+    const docRef = r.referencia || `NB-${folio}`;
+
+    // 1. Línea Débito
+    data.push({
+      "Tipo Documento": "NC",
+      "Prefijo": "BAN",
+      "Número Documento": folio,
+      "Fecha (AAAA-MM-DD)": docDate,
+      "Identificación Tercero": puc.nitDebito,
+      "Razón Social": puc.terceroDebito,
+      "Código Cuenta Contable": puc.cuentaDebito,
+      "Nombre Cuenta": puc.nombreDebito,
+      "Centro Costo": "01",
+      "Documento Referencia": docRef,
+      "Valor Débito": monto,
+      "Valor Crédito": 0,
+      "Detalle / Observación": `${puc.naturalezaLabel} - ${r.descripcion}`,
+    });
+
+    // 2. Línea Crédito
+    data.push({
+      "Tipo Documento": "NC",
+      "Prefijo": "BAN",
+      "Número Documento": folio,
+      "Fecha (AAAA-MM-DD)": docDate,
+      "Identificación Tercero": puc.nitCredito,
+      "Razón Social": puc.terceroCredito,
+      "Código Cuenta Contable": puc.cuentaCredito,
+      "Nombre Cuenta": puc.nombreCredito,
+      "Centro Costo": "01",
+      "Documento Referencia": docRef,
+      "Valor Débito": 0,
+      "Valor Crédito": monto,
+      "Detalle / Observación": `Contrapartida ${puc.naturalezaLabel} (${bancoNombre})`,
+    });
+  });
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws["!cols"] = [
+    { wch: 16 },
+    { wch: 12 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 22 },
+    { wch: 38 },
+    { wch: 22 },
+    { wch: 38 },
+    { wch: 14 },
+    { wch: 20 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 42 },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "WorldOffice_Bancos");
+  const cleanBanco = (bancoNombre || "Bancos").replace(/[^a-zA-Z0-9_-]/g, "_");
+  XLSX.writeFile(wb, `Plantilla_WorldOffice_Bancos_${cleanBanco}.xlsx`);
+}
+
+/**
+ * Plantilla de causación bancaria en formato nativo Helisa GW / NIIF (Comprobante deAjuste Bancario)
+ */
+export function exportBancosHelisaXlsx(
+  rows: BankConciliacionRow[],
+  bancoNombre = "Banco",
+  cuentaBanco = "11100501",
+  allMovLines: MovLine[] = []
+) {
+  const unrecorded = rows.filter(
+    (r) => r.estado === "nota_debito_banco" || r.estado === "nota_credito_banco"
+  );
+  const targetRows = unrecorded.length > 0 ? unrecorded : rows;
+  const data: Array<Record<string, string | number>> = [];
+
+  targetRows.forEach((r, idx) => {
+    const compNum = String(idx + 1).padStart(6, "0");
+    const docDate = r.fecha
+      ? r.fecha.slice(0, 10).replace(/-/g, "/")
+      : new Date().toISOString().slice(0, 10).replace(/-/g, "/");
+    const monto = r.montoBanco > 0 ? r.montoBanco : r.montoLibros;
+    const puc = inferBankPucForRow(r, bancoNombre, cuentaBanco, allMovLines);
+    const docRef = r.referencia || `BAN-${idx + 1}`;
+
+    // 1. Línea Débito
+    data.push({
+      "Tipo Comprobante": "05",
+      "Número Comprobante": compNum,
+      "Fecha (AAAA/MM/DD)": docDate,
+      "Cuenta Contable": puc.cuentaDebito,
+      "Nombre de Cuenta": puc.nombreDebito,
+      "NIT / Tercero": puc.nitDebito,
+      "Razón Social Tercero": puc.terceroDebito,
+      "Cheque / Documento Ref": docRef,
+      "Concepto Movimiento": `${puc.naturalezaLabel} - ${r.descripcion}`,
+      "Débito": monto,
+      "Crédito": 0,
+      "Centro Costos": "001",
+    });
+
+    // 2. Línea Crédito
+    data.push({
+      "Tipo Comprobante": "05",
+      "Número Comprobante": compNum,
+      "Fecha (AAAA/MM/DD)": docDate,
+      "Cuenta Contable": puc.cuentaCredito,
+      "Nombre de Cuenta": puc.nombreCredito,
+      "NIT / Tercero": puc.nitCredito,
+      "Razón Social Tercero": puc.terceroCredito,
+      "Cheque / Documento Ref": docRef,
+      "Concepto Movimiento": `Contrapartida ${puc.naturalezaLabel} (${bancoNombre})`,
+      "Débito": 0,
+      "Crédito": monto,
+      "Centro Costos": "001",
+    });
+  });
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws["!cols"] = [
+    { wch: 18 },
+    { wch: 20 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 38 },
+    { wch: 18 },
+    { wch: 38 },
+    { wch: 22 },
+    { wch: 42 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 14 },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Helisa_Bancos");
+  const cleanBanco = (bancoNombre || "Bancos").replace(/[^a-zA-Z0-9_-]/g, "_");
+  XLSX.writeFile(wb, `Plantilla_Helisa_Bancos_${cleanBanco}.xlsx`);
+}
+

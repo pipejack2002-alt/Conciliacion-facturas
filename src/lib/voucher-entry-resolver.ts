@@ -19,7 +19,7 @@ export interface ContrapartidaResumen {
   cuenta: string;
   nombre: string;
   esDeducida: boolean;
-  tipo: "proveedor" | "gmf" | "comision" | "rendimiento" | "cliente" | "otro";
+  tipo: "proveedor" | "gmf" | "comision" | "retencion" | "rendimiento" | "cliente" | "otro";
   descripcionCruce: string;
 }
 
@@ -194,8 +194,12 @@ export function resolveVoucherFullEntry(
 
     const descUpper = `${bankLineToUse.descripcion || ""} ${row?.descripcion || ""}`.toUpperCase();
     const isGmf = Boolean(row?.esGmf || descUpper.includes("GMF") || descUpper.includes("4X1000") || descUpper.includes("GRAVAMEN") || compLabel.toUpperCase().startsWith("L"));
-    const isComision = Boolean(row?.esComision || descUpper.includes("COMIS") || descUpper.includes("MANEJO") || descUpper.includes("CUOTA"));
-    const isRendimiento = Boolean(row?.esRendimiento || descUpper.includes("RENDIMIENTO") || descUpper.includes("INTERES"));
+    const isRetencion = Boolean(
+      !isGmf &&
+      (row?.esRetencion || /RETENCI[OÓ]N|RETEFUENTE|RET\.?\s*FTE|RTE\.?\s*FTE/i.test(descUpper))
+    );
+    const isComision = Boolean(!isGmf && !isRetencion && (row?.esComision || descUpper.includes("COMIS") || descUpper.includes("MANEJO") || descUpper.includes("CUOTA")));
+    const isRendimiento = Boolean(!isGmf && !isRetencion && (row?.esRendimiento || descUpper.includes("RENDIMIENTO") || descUpper.includes("INTERES")));
 
     const bankResolved: ResolvedVoucherLine = {
       cuenta: bankLineToUse.cuenta || "111005",
@@ -232,6 +236,26 @@ export function resolveVoucherFullEntry(
           esDeducida: true,
           tipo: "gmf",
           descripcionCruce: "Cruzó con Gastos Financieros (GMF 4x1000 · Cuenta 511570)",
+        };
+      } else if (isRetencion) {
+        counterLine = {
+          cuenta: "13551501",
+          cuentaNombre: "ANTICIPO IMPUESTOS · RETENCIÓN EN LA FUENTE RENDIMIENTOS (7%)",
+          nit: "800197268",
+          nombre: "DIAN - DIRECCIÓN DE IMPUESTOS Y ADUANAS NACIONALES",
+          descripcion: bankLineToUse.descripcion || "Retención en la fuente 7% sobre rendimientos financieros",
+          cruce: bankLineToUse.cruce || bankLineToUse.referencia || "RETE-REND",
+          debito: monto,
+          credito: 0,
+          esBanco: false,
+          esContrapartidaDeducida: true,
+        };
+        contrapartida = {
+          cuenta: "13551501",
+          nombre: "ANTICIPO RETENCIÓN EN LA FUENTE · RENDIMIENTOS (7%)",
+          esDeducida: true,
+          tipo: "retencion",
+          descripcionCruce: "Cruzó con Anticipo Retención en la Fuente (Cuenta 13551501)",
         };
       } else if (isComision) {
         counterLine = {

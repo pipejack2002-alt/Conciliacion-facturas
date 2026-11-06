@@ -8,6 +8,8 @@ import {
   classifyMovementConcept,
   type BankExtractItem,
 } from "./conciliar-bancos.ts";
+import { inferBankPucForRow, resolveBankEntityInfo } from "./puc-classifier.ts";
+import { buildDemoConciliacionBancariaData } from "./demo-data.ts";
 import type { MovLine } from "./types.ts";
 
 describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuenta 11)", () => {
@@ -1269,6 +1271,91 @@ describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuen
     assert.strictEqual(exec.retenciones.items.length, 2);
     assert.strictEqual(exec.retenciones.items[0].esRetencion, true);
     assert.strictEqual(exec.retenciones.items[1].esRetencion, true);
+  });
+
+  it("debe clasificar inteligentemente cuentas PUC y NITs bancarios/DIAN con inferBankPucForRow", () => {
+    // 1. Verificar resolución de NITs reales por entidad financiera
+    assert.strictEqual(resolveBankEntityInfo("Banco Caja Social").nit, "860007335");
+    assert.strictEqual(resolveBankEntityInfo("Credicorp Capital").nit, "900520484");
+    assert.strictEqual(resolveBankEntityInfo("Davivienda").nit, "860034313");
+    assert.strictEqual(resolveBankEntityInfo("Bancolombia").nit, "890903938");
+
+    // 2. Verificar clasificación de Retención en la Fuente (7% sobre rendimientos) -> 13551501 y NIT DIAN
+    const pucRet = inferBankPucForRow(
+      {
+        estado: "nota_debito_banco",
+        tipo: "retiro",
+        descripcion: "RETENCION EN LA FUENTE SOBRE RENDIMIENTOS",
+        nota: "Retención 7%",
+        esGmf: false,
+        esComision: false,
+        esRendimiento: false,
+        esRetencion: true,
+      },
+      "Credicorp Capital",
+      "credicorp_all"
+    );
+    assert.strictEqual(pucRet.cuentaDebito, "13551501");
+    assert.strictEqual(pucRet.nitDebito, "800197268");
+    assert.strictEqual(pucRet.cuentaCredito, "12503511");
+    assert.strictEqual(pucRet.nitCredito, "900520484");
+
+    // 3. Verificar clasificación de GMF 4x1000 en Banco Caja Social con cuenta "todas"
+    const pucGmf = inferBankPucForRow(
+      {
+        estado: "nota_debito_banco",
+        tipo: "retiro",
+        descripcion: "COBRO GMF 4X1000",
+        nota: "GMF",
+        esGmf: true,
+        esComision: false,
+        esRendimiento: false,
+      },
+      "Banco Caja Social",
+      "todas"
+    );
+    assert.strictEqual(pucGmf.cuentaDebito, "51159501");
+    assert.strictEqual(pucGmf.nitDebito, "800197268");
+    assert.strictEqual(pucGmf.cuentaCredito, "11100501");
+    assert.strictEqual(pucGmf.nitCredito, "860007335");
+
+    // 4. Verificar clasificación operativa de PILA / Seguridad Social
+    const pucPila = inferBankPucForRow(
+      {
+        estado: "nota_debito_banco",
+        tipo: "retiro",
+        descripcion: "DEBITO AUTOMATICO PLANILLA PILA SOI SEGURIDAD SOCIAL",
+        nota: "Cargo bancario",
+        esGmf: false,
+        esComision: false,
+        esRendimiento: false,
+      },
+      "Bancolombia",
+      "11100501"
+    );
+    assert.strictEqual(pucPila.cuentaDebito, "23700501");
+    assert.strictEqual(pucPila.origen, "regla_operativa");
+  });
+
+  it("debe generar y cuadrar al 100% el caso de demostración bancario (buildDemoConciliacionBancariaData)", () => {
+    const demo = buildDemoConciliacionBancariaData();
+    const res = conciliarBancos(
+      demo.extracto,
+      demo.libros,
+      demo.saldoInicialExtracto,
+      demo.saldoInicialLibros
+    );
+
+    assert.strictEqual(res.summary.cuadrado, true);
+    assert.strictEqual(res.summary.diferenciaCuadre, 0);
+    assert.strictEqual(res.summary.saldoExtracto, 50800580);
+    assert.strictEqual(res.summary.saldoLibros, 51750000);
+    assert.strictEqual(res.summary.consignacionesEnTransito, 3200000);
+    assert.strictEqual(res.summary.chequesEnTransito, 1950000);
+    assert.strictEqual(res.summary.notasCreditoRendimientos, 420000);
+    assert.strictEqual(res.summary.notasDebitoRetenciones, 29400);
+    assert.strictEqual(res.summary.notasDebitoComisiones, 54900);
+    assert.strictEqual(res.summary.notasDebitoGmf, 35120);
   });
 });
 

@@ -24,6 +24,7 @@ import type { BankConciliacionRow } from "@/lib/conciliar-bancos";
 import type { MovLine } from "@/lib/types";
 import { AsientoContableModal } from "./asiento-contable-modal";
 import { resolveVoucherFullEntry } from "@/lib/voucher-entry-resolver";
+import { inferBankPucForRow } from "@/lib/puc-classifier";
 import { cn } from "@/lib/cn";
 
 export type BankSortField =
@@ -912,102 +913,78 @@ export const BankTable = memo(function BankTable({
                                 </div>
                               );
                             })() : r.estado === "nota_debito_banco" || r.estado === "nota_credito_banco" ? (
-                              <div className="rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/30 dark:border-amber-800 p-4 text-xs space-y-3 shadow-2xs">
-                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-amber-200 dark:border-amber-800 pb-2">
-                                  <div className="font-bold text-amber-950 dark:text-amber-200 flex items-center gap-1.5">
-                                    <AlertCircle className="size-4 text-amber-600" />
-                                    <span>Partida Pendiente en Libros · Asiento Contable Sugerido para Causación</span>
+                              (() => {
+                                const puc = inferBankPucForRow(r, bancoNombre, cuentaContable, allMovLines);
+                                return (
+                                  <div className="rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/30 dark:border-amber-800 p-4 text-xs space-y-3 shadow-2xs">
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-amber-200 dark:border-amber-800 pb-2">
+                                      <div className="font-bold text-amber-950 dark:text-amber-200 flex items-center gap-1.5 flex-wrap">
+                                        <AlertCircle className="size-4 text-amber-600" />
+                                        <span>Partida Pendiente en Libros · Asiento Contable Sugerido ({puc.naturalezaLabel})</span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => setModalRow(r)}
+                                        className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 text-xs font-bold transition cursor-pointer shadow-xs"
+                                      >
+                                        <FileText className="size-3.5" />
+                                        <span>Ver / Descargar Asiento ERP</span>
+                                      </button>
+                                    </div>
+
+                                    <p className="text-amber-900 dark:text-amber-300">
+                                      {r.nota}
+                                    </p>
+
+                                    {/* Tabla de Asiento Sugerido */}
+                                    <div className="overflow-x-auto rounded-lg border border-amber-200 dark:border-amber-800 bg-bg-surface">
+                                      <table className="w-full text-left text-xs">
+                                        <thead className="bg-amber-100/60 dark:bg-amber-950/60 text-amber-950 dark:text-amber-200 font-semibold border-b border-amber-200 dark:border-amber-800">
+                                          <tr>
+                                            <th className="px-3 py-1.5">Cuenta PUC</th>
+                                            <th className="px-3 py-1.5">Concepto Contable</th>
+                                            <th className="px-3 py-1.5">Tercero / NIT Sugerido</th>
+                                            <th className="px-3 py-1.5 text-right">Débito (COP)</th>
+                                            <th className="px-3 py-1.5 text-right">Crédito (COP)</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-amber-100 dark:divide-amber-900/40">
+                                          <tr>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-teal">
+                                              {puc.cuentaDebito}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-ink">
+                                              {puc.nombreDebito}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-ink-muted">
+                                              {puc.terceroDebito} <span className="font-mono text-[10px]">[{puc.nitDebito}]</span>
+                                            </td>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-right text-ink">
+                                              {formatMoneyExact(r.montoBanco)}
+                                            </td>
+                                            <td className="px-3 py-1.5 font-mono text-right text-ink-subtle">—</td>
+                                          </tr>
+                                          <tr>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-teal">
+                                              {puc.cuentaCredito}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-ink">
+                                              {puc.nombreCredito}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-ink-muted">
+                                              {puc.terceroCredito} <span className="font-mono text-[10px]">[{puc.nitCredito}]</span>
+                                            </td>
+                                            <td className="px-3 py-1.5 font-mono text-right text-ink-subtle">—</td>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-right text-ink">
+                                              {formatMoneyExact(r.montoBanco)}
+                                            </td>
+                                          </tr>
+                                        </tbody>
+                                      </table>
+                                    </div>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => setModalRow(r)}
-                                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 text-xs font-bold transition cursor-pointer shadow-xs"
-                                  >
-                                    <FileText className="size-3.5" />
-                                    <span>Ver / Descargar Asiento</span>
-                                  </button>
-                                </div>
-
-                                <p className="text-amber-900 dark:text-amber-300">
-                                  {r.nota}
-                                </p>
-
-                                {/* Tabla de Asiento Sugerido */}
-                                <div className="overflow-x-auto rounded-lg border border-amber-200 dark:border-amber-800 bg-bg-surface">
-                                  <table className="w-full text-left text-xs">
-                                    <thead className="bg-amber-100/60 dark:bg-amber-950/60 text-amber-950 dark:text-amber-200 font-semibold border-b border-amber-200">
-                                      <tr>
-                                        <th className="px-3 py-1.5">Cuenta PUC</th>
-                                        <th className="px-3 py-1.5">Concepto Contable</th>
-                                        <th className="px-3 py-1.5">Tercero Sugerido</th>
-                                        <th className="px-3 py-1.5 text-right">Débito (COP)</th>
-                                        <th className="px-3 py-1.5 text-right">Crédito (COP)</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-amber-100">
-                                      {r.estado === "nota_debito_banco" ? (
-                                        <>
-                                          <tr>
-                                            <td className="px-3 py-1.5 font-mono font-bold text-amber-900">
-                                              {r.esGmf ? "51159501" : r.esComision ? "53051501" : "53059501"}
-                                            </td>
-                                            <td className="px-3 py-1.5 text-ink">
-                                              {r.esGmf ? "GMF 4x1000" : r.esComision ? "Comisión Bancaria" : "Gasto Bancario"}
-                                            </td>
-                                            <td className="px-3 py-1.5 text-ink-muted">
-                                              {r.esGmf ? "DIAN" : bancoNombre || "Banco"}
-                                            </td>
-                                            <td className="px-3 py-1.5 font-mono font-bold text-right text-ink">
-                                              {formatMoneyExact(r.montoBanco)}
-                                            </td>
-                                            <td className="px-3 py-1.5 font-mono text-right text-ink-subtle">—</td>
-                                          </tr>
-                                          <tr>
-                                            <td className="px-3 py-1.5 font-mono font-bold text-teal">
-                                              {cuentaContable || "111005"}
-                                            </td>
-                                            <td className="px-3 py-1.5 text-ink">Bancos Moneda Nacional</td>
-                                            <td className="px-3 py-1.5 text-ink-muted">{bancoNombre || "Banco"}</td>
-                                            <td className="px-3 py-1.5 font-mono text-right text-ink-subtle">—</td>
-                                            <td className="px-3 py-1.5 font-mono font-bold text-right text-ink">
-                                              {formatMoneyExact(r.montoBanco)}
-                                            </td>
-                                          </tr>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <tr>
-                                            <td className="px-3 py-1.5 font-mono font-bold text-teal">
-                                              {cuentaContable || "111005"}
-                                            </td>
-                                            <td className="px-3 py-1.5 text-ink">Bancos Moneda Nacional</td>
-                                            <td className="px-3 py-1.5 text-ink-muted">{bancoNombre || "Banco"}</td>
-                                            <td className="px-3 py-1.5 font-mono font-bold text-right text-ink">
-                                              {formatMoneyExact(r.montoBanco)}
-                                            </td>
-                                            <td className="px-3 py-1.5 font-mono text-right text-ink-subtle">—</td>
-                                          </tr>
-                                          <tr>
-                                            <td className="px-3 py-1.5 font-mono font-bold text-amber-900">
-                                              {r.esRendimiento ? "42100502" : "13050501"}
-                                            </td>
-                                            <td className="px-3 py-1.5 text-ink">
-                                              {r.esRendimiento ? "Rendimientos Financieros" : "Clientes / Anticipos"}
-                                            </td>
-                                            <td className="px-3 py-1.5 text-ink-muted">
-                                              {r.esRendimiento ? bancoNombre || "Banco" : "Clientes Varios"}
-                                            </td>
-                                            <td className="px-3 py-1.5 font-mono text-right text-ink-subtle">—</td>
-                                            <td className="px-3 py-1.5 font-mono font-bold text-right text-ink">
-                                              {formatMoneyExact(r.montoBanco)}
-                                            </td>
-                                          </tr>
-                                        </>
-                                      )}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
+                                );
+                              })()
                             ) : null}
                           </td>
                         </tr>
@@ -1017,6 +994,41 @@ export const BankTable = memo(function BankTable({
                 })
               )}
             </tbody>
+            {sortedRows.length > 0 && (
+              <tfoot className="border-t-2 border-line bg-bg-subtle/90 text-xs font-bold">
+                <tr>
+                  <td colSpan={4} className="py-3 px-4 text-ink-muted uppercase tracking-wider text-[11px]">
+                    Totales Visibles ({sortedRows.length} {sortedRows.length === 1 ? "movimiento" : "movimientos"} en filtro actual)
+                  </td>
+                  <td className="py-3 px-4 text-right font-mono font-extrabold text-ink whitespace-nowrap">
+                    {formatMoneyExact(sortedRows.reduce((s, r) => s + (r.montoBanco || 0), 0))}
+                  </td>
+                  <td className="py-3 px-4 text-right font-mono font-extrabold text-teal whitespace-nowrap">
+                    {formatMoneyExact(sortedRows.reduce((s, r) => s + (r.montoLibros || 0), 0))}
+                  </td>
+                  <td className="py-3 px-4 text-right font-mono font-extrabold whitespace-nowrap">
+                    {(() => {
+                      const totalDiff = sortedRows.reduce((s, r) => s + (r.diferencia || 0), 0);
+                      return (
+                        <span
+                          className={cn(
+                            Math.abs(totalDiff) <= 0.05
+                              ? "text-emerald-700 dark:text-emerald-400"
+                              : "text-amber-700 dark:text-amber-400"
+                          )}
+                        >
+                          {totalDiff > 0 ? "+" : ""}
+                          {formatMoneyExact(totalDiff)}
+                        </span>
+                      );
+                    })()}
+                  </td>
+                  <td className="py-3 px-4 text-center text-[11px] text-ink-muted font-medium">
+                    Suma del filtro
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>

@@ -680,6 +680,18 @@ export const BankSummaryCards = memo(function BankSummaryCards({
                   </span>
                 </div>
 
+                {(summary.notasDebitoRetenciones || 0) > 0 && (
+                  <div className="flex items-center justify-between text-ink py-0.5 border-b border-emerald-500/10">
+                    <div>
+                      <span className="font-medium">• Retención en la Fuente (7% Rendimientos):</span>
+                      <span className="block text-[10px] text-ink-muted">Retenida en extracto, pendiente de causar (Cuenta 135515)</span>
+                    </div>
+                    <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                      +{formatMoneyExact(summary.notasDebitoRetenciones || 0)}
+                    </span>
+                  </div>
+                )}
+
                 {(summary.notasDebitoOperativas || 0) > 0 && (
                   <div className="flex items-center justify-between text-ink py-0.5 border-b border-emerald-500/10">
                     <div>

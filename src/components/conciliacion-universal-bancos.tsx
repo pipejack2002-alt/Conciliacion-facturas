@@ -42,9 +42,13 @@ import {
 } from "@/lib/conciliar-bancos-universal";
 import { readWorkbook, parseMovSheet } from "@/lib/parse-excel";
 import type { MovLine } from "@/lib/types";
+import { exportConciliacionBancariaXlsx } from "@/lib/export-bancos-excel";
+import { buildDemoConciliacionBancariaData } from "@/lib/demo-data";
+import { inferBankPucForRow } from "@/lib/puc-classifier";
 import { BankExecutiveCards } from "./bancos/bank-executive-cards";
+import { BankPendingMovements } from "./bancos/bank-pending-movements";
+import { ActaBancariaModal } from "./bancos/acta-bancaria-modal";
 import { cn } from "@/lib/cn";
-import * as XLSX from "xlsx";
 
 const SOFTWARE_NAMES: Record<string, string> = {
   siigo_pyme: "Siigo Pyme (Desktop)",
@@ -89,6 +93,7 @@ export function ConciliacionUniversalBancosView({
   const [extractFileName, setExtractFileName] = useState<string>("");
   const [isExtractLoading, setIsExtractLoading] = useState<boolean>(false);
   const [showColumnMapper, setShowColumnMapper] = useState<boolean>(false);
+  const [actaModalOpen, setActaModalOpen] = useState<boolean>(false);
 
   // Mapeo actual de columnas (para Excel/CSV)
   const [columnConfig, setColumnConfig] = useState<UniversalColumnMapping | null>(null);
@@ -530,50 +535,58 @@ export function ConciliacionUniversalBancosView({
     return list;
   }, [rowsFiltradas, sortField, sortDirection]);
 
-  // Exportar Estado Oficial de Conciliación Universal a Excel
+  const handleCargarDemoUniversal = useCallback(() => {
+    const demo = buildDemoConciliacionBancariaData();
+    const totalDebitos = demo.extracto.reduce((s, r) => s + r.debito, 0);
+    const totalCreditos = demo.extracto.reduce((s, r) => s + r.credito, 0);
+    setIsMovimientosVaciados(false);
+    setExtractPreview({
+      fileName: demo.extractFileName,
+      fileType: "excel",
+      bancoDetectado: demo.bancoNombre,
+      bancoId: "bancolombia",
+      numeroCuenta: demo.numeroCuenta,
+      totalFilas: demo.extracto.length,
+      headers: ["Fecha", "Descripción", "Referencia", "Débito", "Crédito"],
+      rawRowsSample: [],
+      config: {
+        headerRow: 0,
+        fechaCol: 0,
+        descripcionCol: 1,
+        referenciaCol: 2,
+        valorMode: "separate",
+        debitoCol: 3,
+        creditoCol: 4,
+      },
+      items: demo.extracto,
+      saldoInicial: demo.saldoInicialExtracto,
+      saldoFinal: demo.saldoFinalExtracto,
+      totalDebitos,
+      totalCreditos,
+    });
+    setCustomExtractItems(demo.extracto);
+    setExtractFileName(demo.extractFileName);
+    setCustomMovLines(demo.libros);
+    setCustomMovFileName("Auxiliar_Bancos_Marzo2026_Demo.xlsx");
+    setCuentaSeleccionada(demo.cuentaContable);
+    setSaldoInicialExtracto(demo.saldoInicialExtracto);
+    setSaldoInicialLibros(demo.saldoInicialLibros);
+    setSaldoInputStr(formatMoneyExact(demo.saldoInicialExtracto).replace("$", "").trim());
+  }, []);
+
+  // Exportar Estado Oficial de Conciliación Universal a Excel Corporativo (4 hojas con estilos)
   function exportarConciliacionUniversal() {
-    const entidadNombre = extractPreview?.bancoDetectado || "Cualquier Entidad Financiera";
-
-    const wsData = [
-      ["ESTADO OFICIAL DE CONCILIACIÓN BANCARIA UNIVERSAL"],
-      ["Entidad Financiera:", entidadNombre],
-      ["Archivo Extracto:", extractFileName || "Extracto Bancario"],
-      ["Cuenta Contable Conciliada:", cuentaSeleccionada === "todas" ? "Todas las cuentas de tesorería" : cuentaSeleccionada],
-      ["Fecha de Emisión:", new Date().toLocaleDateString("es-CO")],
-      [],
-      ["ESTRUCTURA DE CONCILIACIÓN ARITMÉTICA (NORMA TÉCNICA NIIF / DIAN)"],
-      ["Saldo Final según Extracto Bancario:", concilResult.summary.saldoExtracto],
-      ["(+) Consignaciones en Tránsito:", concilResult.summary.consignacionesEnTransito],
-      ["(-) Cheques y Giros pendientes de cobro:", -concilResult.summary.chequesEnTransito],
-      ["(-) Notas Débito del Banco no registradas (4x1000 / Comisiones):", -concilResult.summary.notasDebitoNoRegistradas],
-      ["(+) Notas Crédito del Banco no registradas (Rendimientos):", concilResult.summary.notasCreditoNoRegistradas],
-      ["(=) Saldo Conciliado:", concilResult.summary.saldoConciliado],
-      ["Saldo Final según Libros Contables:", concilResult.summary.saldoLibros],
-      ["Diferencia de Cuadre:", concilResult.summary.diferenciaCuadre],
-      [],
-      ["DETALLE DE PARTIDAS Y AUDITORÍA DE COMPROBANTES"],
-      ["Estado", "Fecha", "Descripción", "Referencia", "Tipo", "Monto Extracto", "Monto Libros", "Diagnóstico Contable", "Comprobantes / Lote Asociado"],
-      ...concilResult.rows.map((r) => [
-        r.estado,
-        r.fecha,
-        r.descripcion,
-        r.referencia,
-        r.tipo,
-        r.montoBanco,
-        r.montoLibros,
-        r.nota,
-        r.itemsLibrosLote
-          ? r.itemsLibrosLote.map((c) => `${c.comprobante} ($${c.credito || c.debito})`).join("; ")
-          : r.itemLibros
-          ? `${r.itemLibros.comprobante || ""} - ${r.itemLibros.nombre || ""}`
-          : "—",
-      ]),
-    ];
-
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    XLSX.utils.book_append_sheet(wb, ws, "Conciliación Universal");
-    XLSX.writeFile(wb, "conciliacion-bancaria-universal.xlsx");
+    const entidadNombre = extractPreview?.bancoDetectado || "Entidad Financiera Universal";
+    exportConciliacionBancariaXlsx(
+      concilResult,
+      {
+        bancoNombre: entidadNombre,
+        numeroCuenta: extractPreview?.numeroCuenta || "",
+        periodo: new Date().toISOString().slice(0, 7),
+        cuentaContable: cuentaSeleccionada,
+      },
+      effectiveMovLines
+    );
   }
 
   return (
@@ -599,6 +612,18 @@ export function ConciliacionUniversalBancosView({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {!hasUniversalData && (
+              <button
+                type="button"
+                onClick={handleCargarDemoUniversal}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-teal/40 bg-teal-soft/60 px-3.5 py-2 text-xs font-bold text-teal hover:bg-teal hover:text-white transition cursor-pointer shadow-2xs"
+                title="Cargar extracto y auxiliar contable de demostración para explorar el conciliador universal"
+              >
+                <Sparkles className="size-3.5" />
+                <span>Probar con Caso Demo</span>
+              </button>
+            )}
+
             {hasUniversalData && (
               <button
                 type="button"
@@ -608,6 +633,18 @@ export function ConciliacionUniversalBancosView({
               >
                 <Trash2 className="size-3.5" />
                 <span>Vaciar Datos</span>
+              </button>
+            )}
+
+            {effectiveExtractItems.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setActaModalOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-bg-surface px-3.5 py-2 text-xs font-semibold text-ink hover:border-teal hover:text-teal transition cursor-pointer shadow-2xs"
+                title="Generar Acta Oficial Imprimible NIIF / NIC 7"
+              >
+                <FileText className="size-3.5 text-teal" />
+                <span>Acta NIIF (PDF)</span>
               </button>
             )}
 
@@ -1328,6 +1365,17 @@ export function ConciliacionUniversalBancosView({
         </div>
       )}
 
+      {/* Movimientos Pendientes de Registro Contable + Plantillas ERP (Siigo / World Office / Helisa) */}
+      {effectiveExtractItems.length > 0 && (
+        <BankPendingMovements
+          rows={concilResult.rows}
+          summary={concilResult.summary}
+          cuentaContable={cuentaSeleccionada}
+          bancoNombre={extractPreview?.bancoDetectado || "Entidad Bancaria"}
+          allMovLines={effectiveMovLines}
+        />
+      )}
+
       {/* Tabla Detallada de Partidas */}
       {concilResult.rows.length > 0 && (
         <div className="rounded-2xl border border-line bg-bg-surface overflow-hidden shadow-xs">
@@ -1725,31 +1773,45 @@ export function ConciliacionUniversalBancosView({
                                   </div>
                                 </div>
                               ) : r.estado === "nota_debito_banco" || r.estado === "nota_credito_banco" ? (
-                                <div className="rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/30 dark:border-amber-800 p-4 text-xs space-y-2 shadow-2xs">
-                                  <div className="font-bold text-amber-950 dark:text-amber-200 flex items-center gap-1.5">
-                                    <AlertCircle className="size-4 text-amber-600" />
-                                    <span>Instrucción Contable para Causación de Partida Pendiente</span>
-                                  </div>
-                                  <p className="text-amber-900 dark:text-amber-300">
-                                    {r.nota}
-                                  </p>
-                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 font-mono text-[11px]">
-                                    <div className="bg-bg-surface p-2 rounded border border-amber-200">
-                                      <span className="text-ink-muted block">Cuenta Sugerida:</span>
-                                      <span className="font-bold text-ink">
-                                        {r.esGmf ? "511595 (GMF 4x1000)" : r.esComision ? "530515 (Comisiones Bancarias)" : r.esRendimiento ? "421005 (Rendimientos Financieros)" : "111005 (Bancos)"}
-                                      </span>
+                                (() => {
+                                  const puc = inferBankPucForRow(
+                                    r,
+                                    extractPreview?.bancoDetectado || "Banco",
+                                    cuentaSeleccionada,
+                                    effectiveMovLines
+                                  );
+                                  return (
+                                    <div className="rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/30 dark:border-amber-800 p-4 text-xs space-y-2 shadow-2xs">
+                                      <div className="font-bold text-amber-950 dark:text-amber-200 flex items-center gap-1.5">
+                                        <AlertCircle className="size-4 text-amber-600" />
+                                        <span>Instrucción Contable para Causación ({puc.naturalezaLabel})</span>
+                                      </div>
+                                      <p className="text-amber-900 dark:text-amber-300">
+                                        {r.nota}
+                                      </p>
+                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 font-mono text-[11px]">
+                                        <div className="bg-bg-surface p-2 rounded border border-amber-200 dark:border-amber-800">
+                                          <span className="text-ink-muted block">Cuenta Débito Sugerida:</span>
+                                          <span className="font-bold text-teal">
+                                            {puc.cuentaDebito} ({puc.nombreDebito})
+                                          </span>
+                                        </div>
+                                        <div className="bg-bg-surface p-2 rounded border border-amber-200 dark:border-amber-800">
+                                          <span className="text-ink-muted block">Cuenta Crédito Sugerida:</span>
+                                          <span className="font-bold text-ink">
+                                            {puc.cuentaCredito} ({puc.nombreCredito})
+                                          </span>
+                                        </div>
+                                        <div className="bg-bg-surface p-2 rounded border border-amber-200 dark:border-amber-800">
+                                          <span className="text-ink-muted block">Tercero / Monto:</span>
+                                          <span className="font-bold text-amber-900 dark:text-amber-300">
+                                            {puc.nombreTercero} [{puc.nitTercero}] · {formatMoneyExact(r.montoBanco)}
+                                          </span>
+                                        </div>
+                                      </div>
                                     </div>
-                                    <div className="bg-bg-surface p-2 rounded border border-amber-200">
-                                      <span className="text-ink-muted block">Monto en Extracto:</span>
-                                      <span className="font-bold text-amber-900">{formatMoneyExact(r.montoBanco)}</span>
-                                    </div>
-                                    <div className="bg-bg-surface p-2 rounded border border-amber-200">
-                                      <span className="text-ink-muted block">Contrapartida:</span>
-                                      <span className="font-bold text-ink">Cuenta Bancaria de Tesorería</span>
-                                    </div>
-                                  </div>
-                                </div>
+                                  );
+                                })()
                               ) : null}
                             </td>
                           </tr>
@@ -1759,10 +1821,41 @@ export function ConciliacionUniversalBancosView({
                   })
                 )}
               </tbody>
+              {rowsOrdenadas.length > 0 && (
+                <tfoot className="border-t-2 border-line bg-bg-subtle/90 text-xs font-bold">
+                  <tr>
+                    <td colSpan={4} className="px-3.5 py-3 text-ink-muted uppercase tracking-wider text-[11px]">
+                      Totales Visibles ({rowsOrdenadas.length} {rowsOrdenadas.length === 1 ? "movimiento" : "movimientos"})
+                    </td>
+                    <td className="px-3.5 py-3 text-right font-mono font-extrabold text-ink whitespace-nowrap">
+                      {formatMoneyExact(rowsOrdenadas.reduce((s, r) => s + (r.montoBanco || 0), 0))}
+                    </td>
+                    <td className="px-3.5 py-3 text-right font-mono font-extrabold text-teal whitespace-nowrap">
+                      {formatMoneyExact(rowsOrdenadas.reduce((s, r) => s + (r.montoLibros || 0), 0))}
+                    </td>
+                    <td colSpan={2} className="px-3.5 py-3 text-right font-mono font-extrabold whitespace-nowrap">
+                      Diferencia Filtro:{" "}
+                      {formatMoneyExact(rowsOrdenadas.reduce((s, r) => s + (r.diferencia || 0), 0))}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>
       )}
+
+      {/* Modal de Acta Oficial Imprimible NIIF */}
+      <ActaBancariaModal
+        open={actaModalOpen}
+        onClose={() => setActaModalOpen(false)}
+        result={concilResult}
+        bancoNombre={extractPreview?.bancoDetectado || "Entidad Financiera"}
+        numeroCuenta={extractPreview?.numeroCuenta || ""}
+        periodo={new Date().toISOString().slice(0, 7)}
+        cuentaContable={cuentaSeleccionada === "todas" ? "Todas las cuentas de tesorería" : cuentaSeleccionada}
+        onExportExcel={exportarConciliacionUniversal}
+      />
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { readWorkbook, parseMovSheet } from "@/lib/parse-excel";
 import type { MovLine } from "@/lib/types";
 import confetti from "canvas-confetti";
 import { exportConciliacionBancariaXlsx, exportAsientoAjusteBancario } from "@/lib/export-bancos-excel";
+import { buildDemoConciliacionBancariaData } from "@/lib/demo-data";
 import { ConciliacionUniversalBancosView } from "./conciliacion-universal-bancos";
 import { BankHeaderBanner } from "./bancos/bank-header-banner";
 import { BankUploadCards } from "./bancos/bank-upload-cards";
@@ -32,16 +33,6 @@ import {
   saveStoredBankSession,
   clearStoredBankSession,
 } from "@/lib/bank-cache";
-
-// Extracto de demostración inicial preconfigurado (solo bajo demanda al hacer clic en Cargar Ejemplo)
-const DEMO_EXTRACTO: BankExtractItem[] = [
-  { id: "b1", fecha: "2026-07-02", descripcion: "ABONO TRANSFERENCIA CLIENTE FACT 4012", referencia: "TRANS-4012", debito: 0, credito: 12500000 },
-  { id: "b2", fecha: "2026-07-05", descripcion: "PAGO PROVEEDOR SUMINISTROS TRANS-8842", referencia: "TRANS-8842", debito: 4500000, credito: 0 },
-  { id: "b3", fecha: "2026-07-15", descripcion: "GRAVAMEN MOVIMIENTO FINANCIERO GMF 4X1000", referencia: "GMF-0715", debito: 18000, credito: 0 },
-  { id: "b4", fecha: "2026-07-20", descripcion: "PAGO ARRENDAMIENTO OFICINA CH-5510", referencia: "5510", debito: 3200000, credito: 0 },
-  { id: "b5", fecha: "2026-07-31", descripcion: "CUOTA DE MANEJO Y COMISION TRANSACCIONAL", referencia: "COM-0731", debito: 68500, credito: 0 },
-  { id: "b6", fecha: "2026-07-31", descripcion: "RENDIMIENTO FINANCIERO CUENTA DE AHORROS", referencia: "REND-0731", debito: 0, credito: 24350 },
-];
 
 export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) {
   // Selector de Modo: Homologados (Caja Social, Credicorp, Banistmo) vs Universal (Cualquier Banco)
@@ -146,16 +137,30 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
   }, []);
 
   const handleCargarDemo = useCallback(() => {
+    const demo = buildDemoConciliacionBancariaData();
+    const totalDebitos = demo.extracto.reduce((s, r) => s + r.debito, 0);
+    const totalCreditos = demo.extracto.reduce((s, r) => s + r.credito, 0);
     setIsMovimientosVaciados(false);
     setIsDemoMode(true);
-    setExtractoItems(DEMO_EXTRACTO);
-    setExtractoMeta(null);
-    setExtractoFileName("Extracto de Demostración");
-    setCustomMovLines(null);
-    setCustomMovFileName("");
-    setSaldoInicialExtracto(15000000);
-    setSaldoInicialLibros(15000000);
-    setSaldoInputStr(formatMoneyExact(15000000).replace("$", "").trim());
+    setExtractoItems(demo.extracto);
+    setExtractoMeta({
+      bancoId: "bancolombia",
+      bancoNombre: demo.bancoNombre,
+      numeroCuenta: demo.numeroCuenta,
+      periodo: demo.periodo,
+      saldoInicial: demo.saldoInicialExtracto,
+      saldoFinal: demo.saldoFinalExtracto,
+      totalDebitos,
+      totalCreditos,
+      items: demo.extracto,
+    });
+    setExtractoFileName(demo.extractFileName);
+    setCustomMovLines(demo.libros);
+    setCustomMovFileName("Auxiliar_Bancos_Marzo2026_Demo.xlsx");
+    setCuentaSeleccionada(demo.cuentaContable);
+    setSaldoInicialExtracto(demo.saldoInicialExtracto);
+    setSaldoInicialLibros(demo.saldoInicialLibros);
+    setSaldoInputStr(formatMoneyExact(demo.saldoInicialExtracto).replace("$", "").trim());
   }, []);
 
   // Hidratar datos de banco desde IndexedDB si la sesión en IndexedDB contiene datos más completos
@@ -650,8 +655,9 @@ export function ConciliacionBancariaView({ movLines }: { movLines: MovLine[] }) 
         onExportarAsientoAjuste={() =>
           exportAsientoAjusteBancario(
             concilResult.rows,
-            extractoMeta?.bancoNombre || (isDemoMode ? "Banco de Demostración" : "Banco"),
-            cuentaSeleccionada
+            extractoMeta?.bancoNombre || (isDemoMode ? "Bancolombia" : "Banco"),
+            cuentaSeleccionada,
+            effectiveMovLines
           )
         }
         hasUnrecordedNotes={Boolean(
