@@ -7,10 +7,36 @@ export const DIAN_SEARCH_DOCUMENT_URL =
  * Construye el enlace de consulta directa por QR/CUFE en el catálogo VPFE de la DIAN.
  * Este enlace lleva el CUFE embebido en el parámetro documentkey para no tener que digitarlo.
  */
-export function buildDianQrDirectUrl(cufe: string): string {
+export function buildDianQrDirectUrl(cufe: string, nitSinDv?: string): string {
   const clean = (cufe || "").trim();
   if (!clean) return DIAN_SEARCH_DOCUMENT_URL;
-  return `https://catalogo-vpfe.dian.gov.co/document/searchqr?documentkey=${encodeURIComponent(clean)}`;
+  const nitParam = nitSinDv ? `&nit=${encodeURIComponent(nitSinDv.trim())}` : "";
+  return `https://catalogo-vpfe.dian.gov.co/document/searchqr?documentkey=${encodeURIComponent(clean)}${nitParam}`;
+}
+
+/**
+ * Construye la URL de SearchDocument pasando CUFE y NIT sin DV como parámetros de consulta
+ */
+export function buildDianSearchDocumentUrl(cufe?: string, nitSinDv?: string): string {
+  const cleanCufe = (cufe || "").trim();
+  const cleanNit = (nitSinDv || "").trim();
+  if (!cleanCufe && !cleanNit) return DIAN_SEARCH_DOCUMENT_URL;
+  const params = new URLSearchParams();
+  if (cleanCufe) params.set("documentkey", cleanCufe);
+  if (cleanNit) params.set("nit", cleanNit);
+  return `${DIAN_SEARCH_DOCUMENT_URL}?${params.toString()}`;
+}
+
+/**
+ * Construye un marcador inteligente (Bookmarklet) para la barra de favoritos del navegador
+ * que rellena simultáneamente la casilla de CUFE y la casilla de NIT sin DV en la página de la DIAN
+ * para que el usuario solo tenga que hacer clic en el botón verde "Buscar".
+ */
+export function buildDianAutofillBookmarklet(cufe: string, nitSinDv: string): string {
+  const safeCufe = (cufe || "").trim().replace(/[^a-zA-Z0-9-]/g, "");
+  const safeNit = (nitSinDv || "").trim().replace(/\D+/g, "");
+  const code = `(function(){var c="${safeCufe}",n="${safeNit}";function fill(cufeVal,nitVal){var inputs=Array.from(document.querySelectorAll('input[type="text"],input:not([type])')).filter(function(el){return el.offsetParent!==null;});var cInput=document.querySelector('input[name*="DocumentKey" i],input[id*="DocumentKey" i],input[placeholder*="CUFE" i],input[placeholder*="UUID" i]')||inputs[0];var nInput=document.querySelector('input[name*="Nit" i],input[id*="Nit" i],input[placeholder*="NIT" i],input[placeholder*="emisor" i]')||inputs[1];if(cInput&&cufeVal){cInput.focus();cInput.value=cufeVal;cInput.dispatchEvent(new Event("input",{bubbles:true}));cInput.dispatchEvent(new Event("change",{bubbles:true}));}if(nInput&&nitVal){nInput.focus();nInput.value=nitVal;nInput.dispatchEvent(new Event("input",{bubbles:true}));nInput.dispatchEvent(new Event("change",{bubbles:true}));}}if(navigator.clipboard&&navigator.clipboard.readText){navigator.clipboard.readText().then(function(txt){if(txt&&txt.indexOf("|")>10){var parts=txt.trim().split("|");fill(parts[0].trim(),parts[1].trim());}else{fill(txt&&txt.trim().length>=30?txt.trim():c,n);}}).catch(function(){fill(c,n);});}else{fill(c,n);}})();`;
+  return `javascript:${encodeURIComponent(code)}`;
 }
 
 /**
@@ -683,4 +709,42 @@ export function downloadUnlockedPdf(item: UnlockedDianPdfResult, customName?: st
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+/**
+ * Permite al usuario elegir en qué carpeta y con qué nombre guardar el PDF desbloqueado
+ * usando el selector nativo de archivos del sistema operativo (showSaveFilePicker).
+ */
+export async function saveUnlockedPdfWithPicker(
+  item: UnlockedDianPdfResult,
+  customName?: string,
+): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  const suggestedName = (customName || item.unlockedFileName).endsWith(".pdf")
+    ? customName || item.unlockedFileName
+    : `${customName || item.unlockedFileName}.pdf`;
+
+  const win = window as any;
+  if (typeof win.showSaveFilePicker === "function") {
+    try {
+      const handle = await win.showSaveFilePicker({
+        suggestedName,
+        types: [
+          {
+            description: "Documento PDF desbloqueado",
+            accept: { "application/pdf": [".pdf"] },
+          },
+        ],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(item.unlockedPdfBytes);
+      await writable.close();
+      return handle.name || suggestedName;
+    } catch (err: any) {
+      if (err?.name === "AbortError") return null;
+    }
+  }
+
+  downloadUnlockedPdf(item, suggestedName);
+  return suggestedName;
 }

@@ -19,17 +19,25 @@ import {
   ChevronLeft,
   ChevronRight,
   Type,
+  Pencil,
+  Trash2,
+  RefreshCw,
+  FolderSync,
+  PictureInPicture2,
+  Save,
 } from "lucide-react";
 import type { ConciliacionResult, ConciliacionRow } from "@/lib/types";
 import { formatMoneyExact, formatDate } from "@/lib/format";
 import {
-  DIAN_SEARCH_DOCUMENT_URL,
   buildDianQrDirectUrl,
+  buildDianSearchDocumentUrl,
+  buildDianAutofillBookmarklet,
   getNitSinDv,
   buildCandidatePasswordsForDianPdf,
   unlockDianPdfBuffer,
   extractPdfsFromZipBuffer,
   downloadUnlockedPdf,
+  saveUnlockedPdfWithPicker,
   type UnlockedDianPdfResult,
 } from "@/lib/dian-pdf-unlocker";
 import { useConciliacion } from "@/lib/store";
@@ -55,13 +63,17 @@ export function DianCufeUnlockerModal({
   const [isProcessing, setIsProcessing] = useState(false);
   const [unlockedItems, setUnlockedItems] = useState<UnlockedDianPdfResult[]>([]);
   const [previewItemIndex, setPreviewItemIndex] = useState<number | null>(null);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingName, setEditingName] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [watchDirHandle, setWatchDirHandle] = useState<any | null>(null);
   const [watchDirName, setWatchDirName] = useState<string>("");
   const [watchedCount, setWatchedCount] = useState<number>(0);
   const processedWatchFilesRef = useRef<Set<string>>(new Set());
-  const processSingleWatchedFileRef = useRef<(file: File, dirHandle: any) => Promise<void>>(() => Promise.resolve());
+  const processSingleWatchedFileRef = useRef<
+    (file: File, dirHandle: any) => Promise<void>
+  >(() => Promise.resolve());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -106,6 +118,8 @@ export function DianCufeUnlockerModal({
     [activeRow?.nitContraparte],
   );
 
+  const primaryNitSinDv = receptorNitSinDv || emisorNitSinDv;
+
   const candidatePasswords = useMemo(
     () =>
       buildCandidatePasswordsForDianPdf({
@@ -124,6 +138,11 @@ export function DianCufeUnlockerModal({
       result.rows,
       customNitPassword,
     ],
+  );
+
+  const bookmarkletHref = useMemo(
+    () => buildDianAutofillBookmarklet(activeRow?.cufe || "", primaryNitSinDv),
+    [activeRow?.cufe, primaryNitSinDv],
   );
 
   const processSingleWatchedFile = async (file: File, dirHandle: any) => {
@@ -149,7 +168,6 @@ export function DianCufeUnlockerModal({
       }
 
       for (const item of itemsToSave) {
-        // Guardar el PDF sin contraseña (y con texto seleccionable) directamente en la carpeta vigilada
         try {
           const outHandle = await dirHandle.getFileHandle(item.unlockedFileName, {
             create: true,
@@ -201,9 +219,9 @@ export function DianCufeUnlockerModal({
           if (processedWatchFilesRef.current.has(fileKey)) continue;
           processedWatchFilesRef.current.add(fileKey);
 
-          // Procesar automáticamente archivos descargados en los últimos 10 minutos
+          // En el barrido automático en segundo plano procesamos archivos de los últimos 15 minutos
           const ageMs = Date.now() - file.lastModified;
-          if (ageMs > 10 * 60 * 1000) continue;
+          if (ageMs > 15 * 60 * 1000) continue;
 
           await processSingleWatchedFileRef.current(file, watchDirHandle);
         }
@@ -220,6 +238,36 @@ export function DianCufeUnlockerModal({
     };
   }, [watchDirHandle, open]);
 
+  // Escaneo completo bajo demanda de todos los PDF/ZIP en la carpeta seleccionada
+  const handleForceScanAllInFolder = async () => {
+    if (!watchDirHandle) return;
+    setIsProcessing(true);
+    let count = 0;
+    try {
+      for await (const [entryName, entryHandle] of (watchDirHandle as any).entries()) {
+        if (entryHandle.kind !== "file") continue;
+        const lower = String(entryName).toLowerCase();
+        if (lower.endsWith("_sin_clave.pdf")) continue;
+        if (!lower.endsWith(".pdf") && !lower.endsWith(".zip")) continue;
+
+        const file: File = await entryHandle.getFile();
+        const fileKey = `${file.name}__${file.size}__${file.lastModified}`;
+        processedWatchFilesRef.current.add(fileKey);
+        await processSingleWatchedFileRef.current(file, watchDirHandle);
+        count++;
+      }
+      flash(
+        count > 0
+          ? `✅ Se escanearon ${count} archivos en la carpeta "${watchDirName}"`
+          : `No se encontraron archivos .PDF o .ZIP pendientes en "${watchDirName}"`,
+      );
+    } catch {
+      setErrorMsg("No se pudo escanear la carpeta seleccionada.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleConnectDownloadsFolder = async () => {
     const win = window as any;
     if (typeof win.showDirectoryPicker !== "function") {
@@ -232,14 +280,164 @@ export function DianCufeUnlockerModal({
       const handle = await win.showDirectoryPicker({
         mode: "readwrite",
       });
+      processedWatchFilesRef.current.clear();
       setWatchDirHandle(handle);
       setWatchDirName(handle.name || "Descargas");
+      setWatchedCount(0);
       setErrorMsg(null);
       flash(
-        `📂 Carpeta "${handle.name}" conectada. Cada PDF que descargues de la DIAN se desbloqueará solo en esa misma carpeta.`,
+        `📂 Carpeta "${handle.name}" activa. Cada PDF descargado de la DIAN se desbloqueará automáticamente allí.`,
       );
     } catch {
       // Usuario canceló el selector
+    }
+  };
+
+  const handleDisconnectFolder = () => {
+    setWatchDirHandle(null);
+    setWatchDirName("");
+    processedWatchFilesRef.current.clear();
+    flash("Vigilancia de carpeta desconectada.");
+  };
+
+  // Renombrar / editar una factura desbloqueada (y actualizarla en la carpeta si está conectada)
+  const handleSaveEditedName = async (idx: number) => {
+    const item = unlockedItems[idx];
+    if (!item) return;
+    const rawTrimmed = editingName.trim();
+    if (!rawTrimmed) {
+      setEditingIndex(null);
+      return;
+    }
+    const finalName = rawTrimmed.toLowerCase().endsWith(".pdf")
+      ? rawTrimmed
+      : `${rawTrimmed}.pdf`;
+    const oldName = item.unlockedFileName;
+
+    const updated = unlockedItems.map((it, i) =>
+      i === idx ? { ...it, unlockedFileName: finalName } : it,
+    );
+    setUnlockedItems(updated);
+    setEditingIndex(null);
+
+    if (watchDirHandle && oldName !== finalName) {
+      try {
+        const outHandle = await watchDirHandle.getFileHandle(finalName, {
+          create: true,
+        });
+        const writable = await outHandle.createWritable();
+        await writable.write(item.unlockedPdfBytes);
+        await writable.close();
+        if (typeof watchDirHandle.removeEntry === "function") {
+          await watchDirHandle.removeEntry(oldName).catch(() => {});
+        }
+      } catch {
+        // continuar
+      }
+    }
+    flash(`✏️ Nombre actualizado a "${finalName}"`);
+  };
+
+  // Eliminar una factura desbloqueada de la lista (y de la carpeta vigilada si existe)
+  const handleDeleteUnlockedItem = async (idx: number) => {
+    const target = unlockedItems[idx];
+    if (!target) return;
+
+    if (watchDirHandle && typeof watchDirHandle.removeEntry === "function") {
+      try {
+        await watchDirHandle.removeEntry(target.unlockedFileName);
+      } catch {
+        // ignorar si no existía en disco
+      }
+    }
+
+    setUnlockedItems((prev) => {
+      const next = prev.filter((_, i) => i !== idx);
+      if (previewItemIndex === idx) {
+        setPreviewItemIndex(next.length > 0 ? 0 : null);
+      } else if (previewItemIndex != null && previewItemIndex > idx) {
+        setPreviewItemIndex(previewItemIndex - 1);
+      }
+      return next;
+    });
+    if (editingIndex === idx) setEditingIndex(null);
+    flash(`🗑️ Factura "${target.unlockedFileName}" eliminada`);
+  };
+
+  const handleClearAllUnlocked = () => {
+    setUnlockedItems([]);
+    setPreviewItemIndex(null);
+    setEditingIndex(null);
+    flash("🗑️ Lista de facturas desbloqueadas vaciada");
+  };
+
+  // Abrir Mini-Asistente Flotante (Always-on-Top) sobre la pestaña de la DIAN
+  const handleOpenFloatingMiniHelper = async () => {
+    if (!activeRow) return;
+    const cufe = activeRow.cufe || "";
+    const nitReceptor = receptorNitSinDv || "";
+    const nitEmisor = emisorNitSinDv || "";
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Asistente DIAN — ${activeRow.numero}</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 12px; background: #0f172a; color: #f8fafc; font-size: 12px; }
+  .card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+  .title { font-weight: 800; color: #2dd4bf; font-size: 13px; margin-bottom: 4px; }
+  .mono { font-family: ui-monospace, monospace; word-break: break-all; background: #0f172a; padding: 6px; border-radius: 6px; color: #e2e8f0; font-size: 11px; margin: 4px 0 6px; }
+  button { width: 100%; border: none; border-radius: 7px; padding: 8px 10px; font-weight: 700; cursor: pointer; font-size: 12px; margin-top: 4px; transition: 0.15s; }
+  .btn-primary { background: #0d9488; color: white; }
+  .btn-primary:hover { background: #0f766e; }
+  .btn-sec { background: #334155; color: #f8fafc; }
+  .btn-sec:hover { background: #475569; }
+  .ok { color: #4ade80; font-weight: 700; font-size: 11px; text-align: center; min-height: 16px; margin-top: 4px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="title">📄 ${activeRow.numero} · ${activeRow.nombreContraparte.slice(0, 26)}</div>
+    <div><strong>1. CUFE:</strong></div>
+    <div class="mono" id="cufe">${cufe}</div>
+    <button class="btn-primary" onclick="navigator.clipboard.writeText('${cufe}');document.getElementById('msg').innerText='✅ CUFE copiado — Pégalo con Ctrl+V';">📋 1. Copiar CUFE</button>
+  </div>
+  <div class="card">
+    <div><strong>2. NIT Receptor sin DV:</strong> <span style="font-family:monospace;font-size:14px;font-weight:800;color:#2dd4bf;">${nitReceptor}</span></div>
+    <button class="btn-primary" onclick="navigator.clipboard.writeText('${nitReceptor}');document.getElementById('msg').innerText='✅ NIT Receptor (${nitReceptor}) copiado — Pégalo con Ctrl+V';">📋 2. Copiar NIT Receptor (${nitReceptor})</button>
+    <div style="margin-top:8px;"><strong>NIT Emisor sin DV:</strong> <span style="font-family:monospace;font-weight:700;">${nitEmisor}</span></div>
+    <button class="btn-sec" onclick="navigator.clipboard.writeText('${nitEmisor}');document.getElementById('msg').innerText='✅ NIT Emisor (${nitEmisor}) copiado';">📋 Copiar NIT Emisor (${nitEmisor})</button>
+  </div>
+  <div class="ok" id="msg">Listo para pegar en la pestaña de la DIAN</div>
+</body>
+</html>`;
+
+    const win = window as any;
+    try {
+      if (win.documentPictureInPicture?.requestWindow) {
+        const pipWin = await win.documentPictureInPicture.requestWindow({
+          width: 340,
+          height: 350,
+        });
+        pipWin.document.open();
+        pipWin.document.write(htmlContent);
+        pipWin.document.close();
+        return;
+      }
+    } catch {
+      // fallback a popup compacto
+    }
+
+    const popup = window.open(
+      "",
+      "dian_cufe_helper",
+      "width=350,height=370,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes",
+    );
+    if (popup) {
+      popup.document.open();
+      popup.document.write(htmlContent);
+      popup.document.close();
     }
   };
 
@@ -261,19 +459,23 @@ export function DianCufeUnlockerModal({
 
   const handleOpenDianPortal = async (mode: "search" | "qr") => {
     const cufe = activeRow?.cufe || "";
+    const nit = primaryNitSinDv;
     if (cufe) {
       try {
+        // Copiamos el CUFE para pegar inmediato (y si usa el botón favorito ⚡ Rellenar CUFE+NIT lee ambos)
         await navigator.clipboard.writeText(cufe);
         setCopiedField("cufe-launch");
         flash(
-          `CUFE copiado · NIT Receptor sin DV: ${receptorNitSinDv || emisorNitSinDv}`,
+          `CUFE copiado (${cufe.slice(0, 10)}...) · NIT sin DV: ${nit}. Si pegaste el botón ⚡ en Favoritos, hazle 1 clic en la DIAN.`,
         );
       } catch {
         // continuar abriendo pestaña
       }
     }
     const targetUrl =
-      mode === "qr" && cufe ? buildDianQrDirectUrl(cufe) : DIAN_SEARCH_DOCUMENT_URL;
+      mode === "qr" && cufe
+        ? buildDianQrDirectUrl(cufe, nit)
+        : buildDianSearchDocumentUrl(cufe, nit);
     window.open(targetUrl, "_blank", "noopener,noreferrer");
   };
 
@@ -382,7 +584,7 @@ export function DianCufeUnlockerModal({
       onClick={onClose}
     >
       <div
-        className="relative flex max-h-[93vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-line bg-bg-elevated shadow-2xl"
+        className="relative flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-line bg-bg-elevated shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Cabecera */}
@@ -401,7 +603,7 @@ export function DianCufeUnlockerModal({
                 </span>
               </div>
               <p className="text-xs text-ink-muted mt-0.5">
-                Quita la contraseña NIT sin DV conservando la capa de texto digital para que puedas seleccionar y copiar descripciones, ítems y valores.
+                Cambia o vigila tu carpeta de descargas, edita o elimina facturas desbloqueadas y rellena CUFE + NIT sin DV al instante.
               </p>
             </div>
           </div>
@@ -416,27 +618,56 @@ export function DianCufeUnlockerModal({
 
         {/* Contenido scrollable */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          {/* Banner de Carpeta Vigilada (Auto-Desbloqueo en Vivo de Descargas) */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-teal/40 bg-teal-soft/30 px-4 py-3">
+          {/* Banner de Carpeta de Descarga Vigilada (Conectar / Cambiar Carpeta / Escanear / Desconectar) */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 rounded-xl border border-teal/40 bg-teal-soft/30 px-4 py-3">
             <div className="flex items-start gap-3">
               <FolderOpen className="mt-0.5 size-5 shrink-0 text-teal" />
               <div className="text-xs text-ink leading-relaxed">
-                <div className="font-bold text-teal-deep">
-                  ⚡ Auto-Desbloqueo en Vivo de tu Carpeta "Descargas" (Sin arrastrar archivos)
+                <div className="font-bold text-teal-deep flex items-center gap-2 flex-wrap">
+                  <span>⚡ Carpeta de Descarga y Auto-Desbloqueo en Vivo</span>
+                  {watchDirHandle && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950 px-2.5 py-0.5 text-[11px] font-bold text-emerald-900 dark:text-emerald-200 border border-emerald-300">
+                      <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                      Activa: "{watchDirName}" ({watchedCount} desbloqueados)
+                    </span>
+                  )}
                 </div>
                 <p className="text-ink-muted mt-0.5">
-                  Conecta tu carpeta <code className="font-mono">Descargas</code> una sola vez: cada vez que descargues una factura desde la pestaña de la DIAN, la app detectará el PDF automáticamente y guardará allí mismo la versión <strong>_SIN_CLAVE.pdf</strong> con texto 100% seleccionable.
+                  Elige cualquier carpeta de tu equipo (ej. <code className="font-mono">Descargas</code> o una carpeta del mes): cada PDF o ZIP que caiga allí se desbloqueará solo y se guardará con texto 100% copiable.
                 </p>
               </div>
             </div>
-            <div className="shrink-0 flex items-center gap-2">
+            <div className="shrink-0 flex flex-wrap items-center gap-2">
               {watchDirHandle ? (
-                <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-400 bg-emerald-50 dark:bg-emerald-950/70 px-3.5 py-2 text-xs font-bold text-emerald-900 dark:text-emerald-200">
-                  <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>
-                    Vigilando "{watchDirName}" ({watchedCount} auto-desbloqueados)
-                  </span>
-                </div>
+                <>
+                  <button
+                    type="button"
+                    onClick={handleForceScanAllInFolder}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-teal bg-bg-elevated px-3 py-1.5 text-xs font-bold text-teal hover:bg-teal hover:text-white transition cursor-pointer"
+                    title="Desbloquear todos los PDF y ZIP que ya estén dentro de esta carpeta"
+                  >
+                    <RefreshCw className="size-3.5" />
+                    <span>Escanear carpeta ahora</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConnectDownloadsFolder}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-teal px-3 py-1.5 text-xs font-bold text-white hover:bg-teal-deep transition cursor-pointer"
+                    title="Cambiar a otra carpeta de descarga o destino"
+                  >
+                    <FolderSync className="size-3.5" />
+                    <span>Cambiar Carpeta</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDisconnectFolder}
+                    className="inline-flex items-center gap-1 rounded-lg border border-danger/40 bg-danger-bg px-2.5 py-1.5 text-xs font-semibold text-danger hover:bg-danger hover:text-white transition cursor-pointer"
+                    title="Dejar de vigilar esta carpeta"
+                  >
+                    <X className="size-3.5" />
+                    <span>Desconectar</span>
+                  </button>
+                </>
               ) : (
                 <button
                   type="button"
@@ -444,14 +675,14 @@ export function DianCufeUnlockerModal({
                   className="inline-flex items-center gap-2 rounded-xl bg-teal px-3.5 py-2 text-xs font-bold text-white hover:bg-teal-deep transition shadow-xs cursor-pointer"
                 >
                   <FolderOpen className="size-4" />
-                  <span>Conectar Carpeta "Descargas"</span>
+                  <span>Elegir / Conectar Carpeta de Descargas</span>
                 </button>
               )}
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-            {/* COLUMNA IZQUIERDA: PASO 1 — CONSULTA DIAN EN MODO RÁFAGA */}
+            {/* COLUMNA IZQUIERDA: PASO 1 — CONSULTA DIAN CON CUFE + NIT ENSEGUIDA */}
             <div className="lg:col-span-6 flex flex-col gap-4 rounded-xl border border-line bg-bg p-4">
               <div className="flex items-center justify-between gap-2 border-b border-line pb-2.5">
                 <div className="flex items-center gap-2">
@@ -459,7 +690,7 @@ export function DianCufeUnlockerModal({
                     1
                   </span>
                   <h3 className="text-sm font-bold text-ink">
-                    Cola Rápida de Consulta DIAN por CUFE
+                    Consulta Directa DIAN (CUFE + NIT sin DV)
                   </h3>
                 </div>
                 <div className="flex items-center gap-1">
@@ -574,7 +805,7 @@ export function DianCufeUnlockerModal({
                     <div className="rounded-lg border border-teal/30 bg-teal-soft/20 p-2.5">
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-teal-deep">
-                          NIT Receptor (sin DV)
+                          2. NIT Receptor (sin DV)
                         </span>
                         <button
                           type="button"
@@ -593,7 +824,7 @@ export function DianCufeUnlockerModal({
                             </>
                           ) : (
                             <>
-                              <Copy className="size-2.5" /> Copiar
+                              <Copy className="size-2.5" /> Copiar NIT
                             </>
                           )}
                         </button>
@@ -602,7 +833,7 @@ export function DianCufeUnlockerModal({
                         {receptorNitSinDv || "—"}
                       </div>
                       <div className="truncate text-[10px] text-ink-muted" title={result.company.nombre}>
-                        {result.company.nombre || "Tu Empresa (Igual para todas tus facturas)"}
+                        {result.company.nombre || "Tu Empresa"}
                       </div>
                     </div>
 
@@ -628,7 +859,7 @@ export function DianCufeUnlockerModal({
                             </>
                           ) : (
                             <>
-                              <Copy className="size-2.5" /> Copiar
+                              <Copy className="size-2.5" /> Copiar NIT
                             </>
                           )}
                         </button>
@@ -642,31 +873,61 @@ export function DianCufeUnlockerModal({
                     </div>
                   </div>
 
-                  {/* Botones de apertura del portal DIAN */}
-                  <div className="pt-2 flex flex-col sm:flex-row gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenDianPortal("qr")}
-                      className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-teal px-3.5 py-2.5 text-xs font-bold text-white hover:bg-teal-deep transition shadow-sm cursor-pointer"
-                      title="Abre directamente el documento en la DIAN llevando el CUFE en la URL (sin digitar NIT)"
-                    >
-                      <Sparkles className="size-4 shrink-0" />
-                      <span>Abrir Factura Directa en DIAN (Con CUFE en URL)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenDianPortal("search")}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-teal/40 bg-teal-soft/40 px-3 py-2.5 text-xs font-semibold text-teal hover:bg-teal hover:text-white transition cursor-pointer"
-                    >
-                      <ExternalLink className="size-3.5 shrink-0" />
-                      <span>Buscador CUFE + NIT</span>
-                    </button>
+                  {/* Botones de apertura directa + Mini-Ventana Flotante + Auto-Fill Bookmarklet */}
+                  <div className="pt-2 space-y-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDianPortal("qr")}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-teal px-3 py-2.5 text-xs font-bold text-white hover:bg-teal-deep transition shadow-sm cursor-pointer"
+                        title="Abre el enlace directo QR de la DIAN con el CUFE y el NIT en la URL"
+                      >
+                        <Sparkles className="size-4 shrink-0" />
+                        <span>URL Directa DIAN (CUFE + NIT en URL)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDianPortal("search")}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-teal/40 bg-teal-soft/40 px-3 py-2.5 text-xs font-semibold text-teal hover:bg-teal hover:text-white transition cursor-pointer"
+                        title="Abre SearchDocument con parámetros y copia el CUFE"
+                      >
+                        <ExternalLink className="size-3.5 shrink-0" />
+                        <span>Abrir Buscador DIAN</span>
+                      </button>
+                    </div>
+
+                    {/* Herramientas para no cambiar de pestaña: Mini-Ventana Flotante + Botón Favoritos */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={handleOpenFloatingMiniHelper}
+                        className="inline-flex items-center gap-1.5 font-bold text-teal hover:underline cursor-pointer"
+                        title="Abre una mini-ventana flotante que se mantiene encima de la página de la DIAN para copiar CUFE y NIT sin cambiar de pestaña"
+                      >
+                        <PictureInPicture2 className="size-3.5" />
+                        <span>📌 Abrir Mini-Ventana Flotante sobre DIAN</span>
+                      </button>
+
+                      <a
+                        href={bookmarkletHref}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          flash(
+                            "Arrastra este botón '⚡ Autollenar DIAN' hacia la barra superior de Favoritos de tu navegador. Al darle clic dentro de la página de la DIAN, llenará CUFE y NIT juntos.",
+                          );
+                        }}
+                        className="inline-flex items-center gap-1 rounded-md bg-amber-100 dark:bg-amber-950/70 border border-amber-300 px-2 py-0.5 font-bold text-amber-950 dark:text-amber-200 cursor-grab"
+                        title="Arrastra este botón a tu barra de Favoritos del navegador: cuando estés en la página de la DIAN, hazle clic y llenará el CUFE y el NIT sin DV automáticamente para que solo des clic en Buscar"
+                      >
+                        ⚡ Autollenar CUFE+NIT (Arrastrar a Favoritos)
+                      </a>
+                    </div>
                   </div>
                 </div>
               ) : null}
             </div>
 
-            {/* COLUMNA DERECHA: PASO 2 — DESBLOQUEADOR CON TEXTO SELECCIONABLE */}
+            {/* COLUMNA DERECHA: PASO 2 — GESTIÓN, EDICIÓN Y BORRADO DE FACTURAS DESBLOQUEADAS */}
             <div className="lg:col-span-6 flex flex-col gap-4 rounded-xl border border-line bg-bg p-4">
               <div className="flex items-center justify-between gap-2 border-b border-line pb-2.5">
                 <div className="flex items-center gap-2">
@@ -674,7 +935,7 @@ export function DianCufeUnlockerModal({
                     2
                   </span>
                   <h3 className="text-sm font-bold text-ink">
-                    Desbloquear PDF Conservando Texto Seleccionable
+                    Desbloquear, Editar o Borrar Facturas PDF
                   </h3>
                 </div>
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ok">
@@ -699,7 +960,7 @@ export function DianCufeUnlockerModal({
                 }}
                 onClick={() => fileInputRef.current?.click()}
                 className={cn(
-                  "flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-5 text-center transition cursor-pointer",
+                  "flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-4 text-center transition cursor-pointer",
                   isDragging
                     ? "border-teal bg-teal-soft/40 scale-[0.99]"
                     : "border-teal/40 bg-bg-elevated hover:border-teal hover:bg-teal-soft/20",
@@ -719,21 +980,21 @@ export function DianCufeUnlockerModal({
                 />
                 {isProcessing ? (
                   <div className="flex flex-col items-center gap-2 py-2">
-                    <Loader2 className="size-8 animate-spin text-teal" />
+                    <Loader2 className="size-7 animate-spin text-teal" />
                     <p className="text-sm font-bold text-ink">
                       Quitando clave NIT e incrustando capa de texto seleccionable...
                     </p>
                   </div>
                 ) : (
                   <>
-                    <div className="flex size-11 items-center justify-center rounded-full bg-teal-soft text-teal mb-2 shadow-2xs">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-teal-soft text-teal mb-1.5 shadow-2xs">
                       <Upload className="size-5" />
                     </div>
                     <p className="text-sm font-bold text-ink">
                       Suelta aquí uno o varios PDFs / ZIPs descargados de la DIAN
                     </p>
-                    <p className="mt-1 text-xs text-ink-muted max-w-md">
-                      El PDF resultante <strong>conserva la capa de texto digital</strong> para que puedas seleccionar y copiar (<kbd className="font-mono">Ctrl+C</kbd>) cualquier descripción, ítem o valor.
+                    <p className="mt-0.5 text-xs text-ink-muted max-w-md">
+                      El PDF resultante <strong>conserva la capa de texto digital</strong> (<kbd className="font-mono">Ctrl+C</kbd>) y puedes renombrarlo, elegir carpeta destino o borrarlo abajo.
                     </p>
                   </>
                 )}
@@ -747,7 +1008,7 @@ export function DianCufeUnlockerModal({
                     onChange={(e) => setAutoDownload(e.target.checked)}
                     className="size-3.5 rounded border-line text-teal accent-teal cursor-pointer"
                   />
-                  <span>Auto-descargar PDF sin contraseña (con texto seleccionable)</span>
+                  <span>Auto-descargar apenas se desbloquee</span>
                 </label>
 
                 <input
@@ -766,57 +1027,138 @@ export function DianCufeUnlockerModal({
                 </div>
               )}
 
+              {/* Lista de Facturas Desbloqueadas con Edición de Nombre, Guardar en Carpeta y Borrado */}
               {unlockedItems.length > 0 && (
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-bold uppercase tracking-wider text-ink-subtle">
                       Facturas Desbloqueadas ({unlockedItems.length})
                     </span>
-                    {unlockedItems.length > 1 && (
+                    <div className="flex items-center gap-3">
+                      {unlockedItems.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            unlockedItems.forEach((item) => downloadUnlockedPdf(item));
+                            flash(`Descargando ${unlockedItems.length} PDFs sin contraseña...`);
+                          }}
+                          className="text-xs font-bold text-teal hover:underline cursor-pointer"
+                        >
+                          Descargar todas
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => {
-                          unlockedItems.forEach((item) => downloadUnlockedPdf(item));
-                          flash(`Descargando ${unlockedItems.length} PDFs sin contraseña...`);
-                        }}
-                        className="text-xs font-bold text-teal hover:underline cursor-pointer"
+                        onClick={handleClearAllUnlocked}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-danger hover:underline cursor-pointer"
+                        title="Vaciar toda la lista de facturas descargadas"
                       >
-                        Descargar todas ({unlockedItems.length})
+                        <Trash2 className="size-3" />
+                        <span>Borrar todas</span>
                       </button>
-                    )}
+                    </div>
                   </div>
-                  <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
+
+                  <div className="max-h-52 overflow-y-auto space-y-2 pr-1">
                     {unlockedItems.map((item, idx) => (
                       <div
                         key={`${item.fileName}-${idx}`}
                         className={cn(
-                          "flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2.5 text-xs transition",
+                          "flex flex-col gap-2 rounded-xl border p-2.5 text-xs transition",
                           previewItemIndex === idx
                             ? "border-teal bg-teal-soft/30"
                             : "border-line bg-bg-elevated",
                         )}
                       >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <FileText className="size-4 shrink-0 text-teal" />
-                            <span className="font-bold text-ink truncate" title={item.unlockedFileName}>
-                              {item.unlockedFileName}
-                            </span>
-                          </div>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]">
-                            <span className="inline-flex items-center gap-1 rounded bg-emerald-100 dark:bg-emerald-950/70 px-1.5 py-0.5 font-bold text-emerald-900 dark:text-emerald-200">
-                              🔓 {item.wasEncrypted ? `Clave quitada: ${item.matchedPassword}` : "Libre"} · Texto seleccionable
-                            </span>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            {editingIndex === idx ? (
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  value={editingName}
+                                  onChange={(e) => setEditingName(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") void handleSaveEditedName(idx);
+                                    if (e.key === "Escape") setEditingIndex(null);
+                                  }}
+                                  autoFocus
+                                  className="h-7 flex-1 rounded border border-teal bg-bg px-2 font-mono text-xs text-ink outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => void handleSaveEditedName(idx)}
+                                  className="inline-flex items-center gap-1 rounded bg-teal px-2 py-1 text-[11px] font-bold text-white hover:bg-teal-deep cursor-pointer"
+                                >
+                                  <Save className="size-3" /> Guardar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingIndex(null)}
+                                  className="rounded border border-line bg-bg px-2 py-1 text-[11px] text-ink-muted hover:text-ink cursor-pointer"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <FileText className="size-4 shrink-0 text-teal" />
+                                <span
+                                  className="font-bold text-ink truncate cursor-pointer hover:text-teal"
+                                  title="Haz clic en Editar para cambiar el nombre del archivo"
+                                  onClick={() => {
+                                    setEditingIndex(idx);
+                                    setEditingName(item.unlockedFileName.replace(/\.pdf$/i, ""));
+                                  }}
+                                >
+                                  {item.unlockedFileName}
+                                </span>
+                              </div>
+                            )}
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+                              <span className="inline-flex items-center gap-1 rounded bg-emerald-100 dark:bg-emerald-950/70 px-1.5 py-0.5 font-bold text-emerald-900 dark:text-emerald-200">
+                                🔓 {item.wasEncrypted ? `Clave quitada: ${item.matchedPassword}` : "Libre"} · Texto copiable
+                              </span>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
+
+                        {/* Acciones por factura: Ver, Editar nombre, Guardar en carpeta..., Descargar, Borrar */}
+                        <div className="flex flex-wrap items-center justify-end gap-1.5 pt-1 border-t border-line/60">
                           <button
                             type="button"
                             onClick={() => setPreviewItemIndex(idx)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-semibold text-ink hover:border-teal hover:text-teal transition cursor-pointer"
+                            className="inline-flex items-center gap-1 rounded-lg border border-line bg-bg px-2 py-1 text-[11px] font-semibold text-ink hover:border-teal hover:text-teal transition cursor-pointer"
+                            title="Ver factura y renglones copiables"
                           >
-                            <Eye className="size-3.5" />
-                            Texto / Vista
+                            <Eye className="size-3" />
+                            <span>Ver / Copiar</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingIndex(idx);
+                              setEditingName(item.unlockedFileName.replace(/\.pdf$/i, ""));
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-line bg-bg px-2 py-1 text-[11px] font-semibold text-ink hover:border-teal hover:text-teal transition cursor-pointer"
+                            title="Editar el nombre del archivo PDF"
+                          >
+                            <Pencil className="size-3" />
+                            <span>Editar nombre</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const saved = await saveUnlockedPdfWithPicker(item);
+                              if (saved) {
+                                flash(`💾 Guardado como "${saved}"`);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-teal/40 bg-teal-soft/30 px-2 py-1 text-[11px] font-bold text-teal hover:bg-teal hover:text-white transition cursor-pointer"
+                            title="Elegir en qué carpeta de tu computador guardar este PDF"
+                          >
+                            <FolderOpen className="size-3" />
+                            <span>Guardar en...</span>
                           </button>
                           <button
                             type="button"
@@ -824,10 +1166,19 @@ export function DianCufeUnlockerModal({
                               downloadUnlockedPdf(item);
                               flash(`Descargado ${item.unlockedFileName}`);
                             }}
-                            className="inline-flex items-center gap-1 rounded-lg bg-teal px-2.5 py-1.5 text-xs font-bold text-white hover:bg-teal-deep transition cursor-pointer"
+                            className="inline-flex items-center gap-1 rounded-lg bg-teal px-2.5 py-1 text-[11px] font-bold text-white hover:bg-teal-deep transition cursor-pointer"
                           >
-                            <Download className="size-3.5" />
-                            Descargar PDF
+                            <Download className="size-3" />
+                            <span>Descargar</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteUnlockedItem(idx)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-danger/30 bg-danger-bg px-2 py-1 text-[11px] font-semibold text-danger hover:bg-danger hover:text-white transition cursor-pointer"
+                            title="Eliminar esta factura de la lista (y de la carpeta vigilada si existe)"
+                          >
+                            <Trash2 className="size-3" />
+                            <span>Borrar</span>
                           </button>
                         </div>
                       </div>
@@ -838,7 +1189,7 @@ export function DianCufeUnlockerModal({
             </div>
           </div>
 
-          {/* PANEL DE TEXTO DIGITAL COPIABLE EN 1 CLIC + VISTA DE LA FACTURA */}
+          {/* PANEL DE TEXTO DIGITAL COPIABLE Y EDITABLE + VISTA DE LA FACTURA */}
           {activePreviewItem && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 rounded-xl border border-teal/40 bg-bg p-4">
               {/* Lado Izquierdo: Renglones y Conceptos Copiables en 1 Clic */}
@@ -930,14 +1281,27 @@ export function DianCufeUnlockerModal({
                       Vista de la Factura ({activePreviewItem.pageCount} pág.)
                     </h4>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => downloadUnlockedPdf(activePreviewItem)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-teal bg-teal-soft/30 px-2.5 py-1 text-xs font-bold text-teal hover:bg-teal hover:text-white transition cursor-pointer"
-                  >
-                    <Download className="size-3.5" />
-                    Descargar PDF (Texto Seleccionable)
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const saved = await saveUnlockedPdfWithPicker(activePreviewItem);
+                        if (saved) flash(`💾 Guardado como "${saved}"`);
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg border border-line bg-bg-elevated px-2.5 py-1 text-xs font-semibold text-ink hover:border-teal hover:text-teal transition cursor-pointer"
+                    >
+                      <FolderOpen className="size-3.5" />
+                      Elegir carpeta...
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadUnlockedPdf(activePreviewItem)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-teal bg-teal-soft/30 px-2.5 py-1 text-xs font-bold text-teal hover:bg-teal hover:text-white transition cursor-pointer"
+                    >
+                      <Download className="size-3.5" />
+                      Descargar PDF
+                    </button>
+                  </div>
                 </div>
                 <div className="max-h-[410px] overflow-y-auto space-y-3 rounded-lg bg-bg-subtle p-2.5">
                   {activePreviewItem.previewDataUrls.map((dataUrl, i) => (
@@ -959,7 +1323,7 @@ export function DianCufeUnlockerModal({
           <span className="flex items-center gap-1.5">
             <ShieldCheck className="size-4 text-teal" />
             <span>
-              El PDF descargado incluye fuente estándar <code className="font-mono">/Helvetica</code> sobre las coordenadas exactas de la factura para copiar texto con <kbd className="font-mono">Ctrl+C</kbd>.
+              Puedes cambiar la carpeta vigilada en cualquier momento, renombrar o eliminar facturas desbloqueadas, y usar el botón flotante o marcador rápido sobre la DIAN.
             </span>
           </span>
           <button

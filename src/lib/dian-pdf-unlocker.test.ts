@@ -7,6 +7,8 @@ import {
   buildCandidatePasswordsForDianPdf,
   buildUnencryptedPdfFromJpegs,
   buildDianQrDirectUrl,
+  buildDianSearchDocumentUrl,
+  buildDianAutofillBookmarklet,
   groupTextItemsIntoLines,
   DIAN_SEARCH_DOCUMENT_URL,
 } from "./dian-pdf-unlocker.ts";
@@ -43,14 +45,18 @@ describe("DIAN CUFE & PDF Unlocker Utilities", () => {
     assert.ok(passwords.includes("890103075"));
   });
 
-  it("construye URLs válidas hacia el catálogo VPFE de la DIAN", () => {
+  it("construye URLs válidas hacia el catálogo VPFE de la DIAN con CUFE y NIT sin DV", () => {
     const cufe =
       "3df1a8d8c0baf1d8c76d2324c3094986166d3a8d5620faa89b4e050c7fc52be707de1c4ba3d083f9080960a2f31ece93";
     assert.strictEqual(
       DIAN_SEARCH_DOCUMENT_URL,
       "https://catalogo-vpfe.dian.gov.co/User/SearchDocument",
     );
-    assert.ok(buildDianQrDirectUrl(cufe).includes(cufe));
+    assert.ok(buildDianQrDirectUrl(cufe, "901260460").includes(cufe));
+    assert.ok(buildDianQrDirectUrl(cufe, "901260460").includes("901260460"));
+    assert.ok(buildDianSearchDocumentUrl(cufe, "901260460").includes("documentkey="));
+    assert.ok(buildDianSearchDocumentUrl(cufe, "901260460").includes("nit=901260460"));
+    assert.ok(buildDianAutofillBookmarklet(cufe, "901260460").startsWith("javascript:"));
   });
 
   it("genera un PDF 1.4 sin contraseña y con capa de texto digital 100% seleccionable y copiable", async () => {
