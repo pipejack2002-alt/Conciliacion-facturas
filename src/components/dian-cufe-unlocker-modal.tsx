@@ -38,6 +38,7 @@ import {
   extractPdfsFromZipBuffer,
   downloadUnlockedPdf,
   saveUnlockedPdfWithPicker,
+  downloadDianAutofillExtensionZip,
   type UnlockedDianPdfResult,
 } from "@/lib/dian-pdf-unlocker";
 import { useConciliacion } from "@/lib/store";
@@ -460,13 +461,14 @@ export function DianCufeUnlockerModal({
   const handleOpenDianPortal = async (mode: "search" | "qr") => {
     const cufe = activeRow?.cufe || "";
     const nit = primaryNitSinDv;
-    if (cufe) {
+    if (nit || cufe) {
       try {
-        // Copiamos el CUFE para pegar inmediato (y si usa el botón favorito ⚡ Rellenar CUFE+NIT lee ambos)
-        await navigator.clipboard.writeText(cufe);
-        setCopiedField("cufe-launch");
+        // Como ?DocumentKey=... ya rellena automáticamente la casilla del CUFE en la DIAN,
+        // copiamos el NIT sin DV al portapapeles (y la extensión rellena ambos sola)
+        await navigator.clipboard.writeText(nit || cufe);
+        setCopiedField("nit-receptor");
         flash(
-          `CUFE copiado (${cufe.slice(0, 10)}...) · NIT sin DV: ${nit}. Si pegaste el botón ⚡ en Favoritos, hazle 1 clic en la DIAN.`,
+          `Abriendo DIAN con CUFE pre-cargado y NIT sin DV (${nit}) listo en portapapeles / extensión.`,
         );
       } catch {
         // continuar abriendo pestaña
@@ -474,8 +476,8 @@ export function DianCufeUnlockerModal({
     }
     const targetUrl =
       mode === "qr" && cufe
-        ? buildDianQrDirectUrl(cufe, nit)
-        : buildDianSearchDocumentUrl(cufe, nit);
+        ? buildDianQrDirectUrl(cufe, receptorNitSinDv, emisorNitSinDv)
+        : buildDianSearchDocumentUrl(cufe, receptorNitSinDv, emisorNitSinDv);
     window.open(targetUrl, "_blank", "noopener,noreferrer");
   };
 
@@ -896,31 +898,52 @@ export function DianCufeUnlockerModal({
                       </button>
                     </div>
 
-                    {/* Herramientas para no cambiar de pestaña: Mini-Ventana Flotante + Botón Favoritos */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2 text-[11px]">
-                      <button
-                        type="button"
-                        onClick={handleOpenFloatingMiniHelper}
-                        className="inline-flex items-center gap-1.5 font-bold text-teal hover:underline cursor-pointer"
-                        title="Abre una mini-ventana flotante que se mantiene encima de la página de la DIAN para copiar CUFE y NIT sin cambiar de pestaña"
-                      >
-                        <PictureInPicture2 className="size-3.5" />
-                        <span>📌 Abrir Mini-Ventana Flotante sobre DIAN</span>
-                      </button>
+                    {/* Extensión Chrome/Edge + Mini-Ventana Flotante + Botón Favoritos */}
+                    <div className="rounded-xl border border-teal/40 bg-teal-soft/20 p-3 space-y-2 text-[11px]">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-bold text-teal-deep">
+                          🧩 ¿Quieres que al abrir la DIAN se ponga el NIT sin DV solo automáticamente?
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            downloadDianAutofillExtensionZip();
+                            flash(
+                              "Extensión descargada (extension-dian-autofill.zip). También está lista en la carpeta extension-dian-autofill de tu proyecto.",
+                            );
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-teal px-2.5 py-1 text-[11px] font-bold text-white hover:bg-teal-deep transition shadow-2xs cursor-pointer"
+                        >
+                          <Download className="size-3.5" />
+                          <span>Descargar Extensión Chrome / Edge (.ZIP)</span>
+                        </button>
+                      </div>
+                      <p className="text-ink-muted leading-snug">
+                        Instálala en 15 seg en <code className="font-mono">chrome://extensions</code> o <code className="font-mono">edge://extensions</code> → <strong>Cargar descomprimida</strong> → selecciona la carpeta <code className="font-mono font-semibold text-ink">extension-dian-autofill</code> de tu proyecto. Pondrá el <strong>CUFE y el NIT sin DV automáticamente</strong> al abrir la pestaña.
+                      </p>
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-teal/20">
+                        <button
+                          type="button"
+                          onClick={handleOpenFloatingMiniHelper}
+                          className="inline-flex items-center gap-1.5 font-bold text-teal hover:underline cursor-pointer"
+                        >
+                          <PictureInPicture2 className="size-3.5" />
+                          <span>📌 Mini-Ventana Flotante sobre DIAN</span>
+                        </button>
 
-                      <a
-                        href={bookmarkletHref}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          flash(
-                            "Arrastra este botón '⚡ Autollenar DIAN' hacia la barra superior de Favoritos de tu navegador. Al darle clic dentro de la página de la DIAN, llenará CUFE y NIT juntos.",
-                          );
-                        }}
-                        className="inline-flex items-center gap-1 rounded-md bg-amber-100 dark:bg-amber-950/70 border border-amber-300 px-2 py-0.5 font-bold text-amber-950 dark:text-amber-200 cursor-grab"
-                        title="Arrastra este botón a tu barra de Favoritos del navegador: cuando estés en la página de la DIAN, hazle clic y llenará el CUFE y el NIT sin DV automáticamente para que solo des clic en Buscar"
-                      >
-                        ⚡ Autollenar CUFE+NIT (Arrastrar a Favoritos)
-                      </a>
+                        <a
+                          href={bookmarkletHref}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            flash(
+                              "Arrastra este botón '⚡ Autollenar DIAN' hacia la barra superior de Favoritos de tu navegador.",
+                            );
+                          }}
+                          className="inline-flex items-center gap-1 rounded-md bg-amber-100 dark:bg-amber-950/70 border border-amber-300 px-2 py-0.5 font-bold text-amber-950 dark:text-amber-200 cursor-grab"
+                        >
+                          ⚡ Autollenar CUFE+NIT (Arrastrar a Favoritos)
+                        </a>
+                      </div>
                     </div>
                   </div>
                 </div>

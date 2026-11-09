@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Autollenado DIAN CUFE + NIT (Conciliador Fiscal)",
+  "version": "1.0.0",
+  "description": "Rellena automáticamente el CUFE y el NIT sin DV en catalogo-vpfe.dian.gov.co/User/SearchDocument cuando abres una factura desde tu Conciliador DIAN.",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://catalogo-vpfe.dian.gov.co/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

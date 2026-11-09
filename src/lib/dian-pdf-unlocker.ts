@@ -4,26 +4,34 @@ export const DIAN_SEARCH_DOCUMENT_URL =
   "https://catalogo-vpfe.dian.gov.co/User/SearchDocument";
 
 /**
- * Construye el enlace de consulta directa por QR/CUFE en el catálogo VPFE de la DIAN.
- * Este enlace lleva el CUFE embebido en el parámetro documentkey para no tener que digitarlo.
+ * Construye el enlace directo al buscador de documentos de la DIAN con DocumentKey (PascalCase)
+ * para que la página de la DIAN rellene automáticamente el campo CUFE sin redirección 302
+ * y conserve los parámetros nit y emisor para la extensión de autollenado.
  */
-export function buildDianQrDirectUrl(cufe: string, nitSinDv?: string): string {
-  const clean = (cufe || "").trim();
-  if (!clean) return DIAN_SEARCH_DOCUMENT_URL;
-  const nitParam = nitSinDv ? `&nit=${encodeURIComponent(nitSinDv.trim())}` : "";
-  return `https://catalogo-vpfe.dian.gov.co/document/searchqr?documentkey=${encodeURIComponent(clean)}${nitParam}`;
+export function buildDianQrDirectUrl(
+  cufe: string,
+  nitSinDv?: string,
+  emisorNitSinDv?: string,
+): string {
+  return buildDianSearchDocumentUrl(cufe, nitSinDv, emisorNitSinDv);
 }
 
 /**
- * Construye la URL de SearchDocument pasando CUFE y NIT sin DV como parámetros de consulta
+ * Construye la URL de SearchDocument pasando DocumentKey (CUFE), nit (Receptor sin DV) y emisor (Emisor sin DV)
  */
-export function buildDianSearchDocumentUrl(cufe?: string, nitSinDv?: string): string {
+export function buildDianSearchDocumentUrl(
+  cufe?: string,
+  nitSinDv?: string,
+  emisorNitSinDv?: string,
+): string {
   const cleanCufe = (cufe || "").trim();
   const cleanNit = (nitSinDv || "").trim();
+  const cleanEmisor = (emisorNitSinDv || "").trim();
   if (!cleanCufe && !cleanNit) return DIAN_SEARCH_DOCUMENT_URL;
   const params = new URLSearchParams();
-  if (cleanCufe) params.set("documentkey", cleanCufe);
+  if (cleanCufe) params.set("DocumentKey", cleanCufe);
   if (cleanNit) params.set("nit", cleanNit);
+  if (cleanEmisor) params.set("emisor", cleanEmisor);
   return `${DIAN_SEARCH_DOCUMENT_URL}?${params.toString()}`;
 }
 
@@ -747,4 +755,255 @@ export async function saveUnlockedPdfWithPicker(
 
   downloadUnlockedPdf(item, suggestedName);
   return suggestedName;
+}
+
+/**
+ * Calcula el CRC32 estándar para construir un archivo .ZIP válido en memoria
+ */
+function crc32(data: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (let i = 0; i < data.length; i++) {
+    crc ^= data[i];
+    for (let j = 0; j < 8; j++) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+/**
+ * Construye un archivo .ZIP con la extensión de Chrome / Edge (manifest.json + content.js + instrucciones)
+ * para autollenar el CUFE y el NIT sin DV en la pestaña de la DIAN.
+ */
+export function buildDianExtensionZipBytes(): Uint8Array {
+  const encoder = new TextEncoder();
+
+  const manifestJson = JSON.stringify(
+    {
+      manifest_version: 3,
+      name: "Autollenado DIAN CUFE + NIT (Conciliador Fiscal)",
+      version: "1.0.0",
+      description:
+        "Rellena automáticamente el CUFE y el NIT sin DV en catalogo-vpfe.dian.gov.co/User/SearchDocument cuando abres una factura desde tu Conciliador DIAN.",
+      content_scripts: [
+        {
+          matches: ["https://catalogo-vpfe.dian.gov.co/*"],
+          js: ["content.js"],
+          run_at: "document_idle",
+        },
+      ],
+    },
+    null,
+    2,
+  );
+
+  const contentJs = `(function () {
+  var STORAGE_KEY_NIT = "tributoapp_dian_last_nit_sin_dv";
+  var STORAGE_KEY_EMISOR = "tributoapp_dian_last_emisor_sin_dv";
+
+  function parseParams() {
+    var search = new URLSearchParams(window.location.search);
+    var hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    var cufe = search.get("DocumentKey") || search.get("documentkey") || search.get("cufe") || hash.get("DocumentKey") || "";
+    var nit = search.get("nit") || search.get("Nit") || search.get("SenderCode") || hash.get("nit") || "";
+    var emisor = search.get("emisor") || search.get("nitEmisor") || hash.get("emisor") || "";
+
+    if (nit) { try { localStorage.setItem(STORAGE_KEY_NIT, nit.replace(/\\D+/g, "")); } catch (e) {} }
+    if (emisor) { try { localStorage.setItem(STORAGE_KEY_EMISOR, emisor.replace(/\\D+/g, "")); } catch (e) {} }
+
+    var savedNit = "";
+    var savedEmisor = "";
+    try {
+      savedNit = localStorage.getItem(STORAGE_KEY_NIT) || "";
+      savedEmisor = localStorage.getItem(STORAGE_KEY_EMISOR) || "";
+    } catch (e) {}
+
+    return {
+      cufe: cufe.trim(),
+      nit: (nit || savedNit).replace(/\\D+/g, ""),
+      emisor: (emisor || savedEmisor).replace(/\\D+/g, "")
+    };
+  }
+
+  function getVisibleTextInputs() {
+    return Array.from(document.querySelectorAll('input[type="text"], input[type="search"], input[type="number"], input:not([type])')).filter(function (el) {
+      var style = window.getComputedStyle(el);
+      return style.display !== "none" && style.visibility !== "hidden" && el.offsetParent !== null;
+    });
+  }
+
+  function findCufeInput() {
+    return document.querySelector('input#DocumentKey, input[name="DocumentKey"], input[name*="DocumentKey" i], input[placeholder*="CUFE" i]') || getVisibleTextInputs()[0] || null;
+  }
+
+  function findNitInput() {
+    return document.querySelector('input#SenderCode, input[name="SenderCode"], input#Nit, input[name*="Nit" i], input[placeholder*="NIT" i], input[placeholder*="emisor" i]') || getVisibleTextInputs()[1] || null;
+  }
+
+  function setInputValue(input, value) {
+    if (!input || !value) return;
+    var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    if (setter) setter.call(input, value);
+    else input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
+  }
+
+  function injectHelperBar(nitInput, data) {
+    if (!nitInput || document.getElementById("tributoapp-dian-helper")) return;
+    var bar = document.createElement("div");
+    bar.id = "tributoapp-dian-helper";
+    bar.style.cssText = "margin-top:8px;padding:8px 10px;border-radius:8px;background:#f0fdfa;border:1px solid #14b8a6;font-family:system-ui,sans-serif;font-size:12px;color:#0f172a;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;";
+    var status = document.createElement("span");
+    status.style.cssText = "font-weight:700;color:#0f766e;";
+    status.textContent = data.nit ? ("⚡ Autollenado listo (NIT: " + data.nit + ") — Solo dale clic a Buscar") : "⚡ Asistente Conciliador DIAN activo";
+    bar.appendChild(status);
+
+    var btnGroup = document.createElement("div");
+    btnGroup.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;";
+    if (data.nit) {
+      var btnReceptor = document.createElement("button");
+      btnReceptor.type = "button";
+      btnReceptor.textContent = "NIT Receptor: " + data.nit;
+      btnReceptor.style.cssText = "background:#0d9488;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;";
+      btnReceptor.onclick = function () { setInputValue(nitInput, data.nit); };
+      btnGroup.appendChild(btnReceptor);
+    }
+    if (data.emisor && data.emisor !== data.nit) {
+      var btnEmisor = document.createElement("button");
+      btnEmisor.type = "button";
+      btnEmisor.textContent = "NIT Emisor: " + data.emisor;
+      btnEmisor.style.cssText = "background:#e2e8f0;color:#0f172a;border:1px solid #cbd5e1;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;";
+      btnEmisor.onclick = function () { setInputValue(nitInput, data.emisor); };
+      btnGroup.appendChild(btnEmisor);
+    }
+    bar.appendChild(btnGroup);
+    if (nitInput.parentElement) nitInput.parentElement.appendChild(bar);
+  }
+
+  function runAutofill() {
+    var data = parseParams();
+    var cufeInput = findCufeInput();
+    var nitInput = findNitInput();
+    if (cufeInput && data.cufe && !cufeInput.value) setInputValue(cufeInput, data.cufe);
+    if (nitInput && data.nit && !nitInput.value) setInputValue(nitInput, data.nit);
+    if (nitInput && (data.nit || data.emisor)) injectHelperBar(nitInput, data);
+  }
+
+  runAutofill();
+  setTimeout(runAutofill, 300);
+  setTimeout(runAutofill, 900);
+})();\n`;
+
+  const readmeTxt = `COMO INSTALAR LA EXTENSION DE AUTOLLENADO DIAN EN CHROME O EDGE (EN 15 SEGUNDOS):
+1. Descomprime este archivo ZIP en una carpeta (o usa la carpeta "extension-dian-autofill" que ya está creada dentro de tu proyecto C:\\Apps\\CONCILIACION DIAN\\extension-dian-autofill).
+2. En Google Chrome abre: chrome://extensions  (o en Microsoft Edge abre: edge://extensions).
+3. Activa el interruptor "Modo de desarrollador" (arriba a la derecha en Chrome o a la izquierda en Edge).
+4. Haz clic en el botón "Cargar descomprimida" (Load unpacked) y selecciona la carpeta "extension-dian-autofill".
+5. ¡Listo! Ahora cada vez que hagas clic en el botón "DIAN" de tu aplicación, la pestaña de la DIAN se abrirá con el CUFE y el NIT sin DV ya escritos automáticamente en sus dos casillas, para que solo tengas que darle clic en "Buscar".\n`;
+
+  const files = [
+    { name: "manifest.json", data: encoder.encode(manifestJson) },
+    { name: "content.js", data: encoder.encode(contentJs) },
+    { name: "INSTRUCCIONES_INSTALACION.txt", data: encoder.encode(readmeTxt) },
+  ];
+
+  const localParts: Uint8Array[] = [];
+  const centralParts: Uint8Array[] = [];
+  let offset = 0;
+
+  for (const f of files) {
+    const nameBytes = encoder.encode(f.name);
+    const crc = crc32(f.data);
+    const size = f.data.byteLength;
+
+    const localHeader = new Uint8Array(30 + nameBytes.byteLength);
+    const lv = new DataView(localHeader.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0, true);
+    lv.setUint16(8, 0, true);
+    lv.setUint16(10, 0, true);
+    lv.setUint16(12, 0, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, size, true);
+    lv.setUint32(22, size, true);
+    lv.setUint16(26, nameBytes.byteLength, true);
+    lv.setUint16(28, 0, true);
+    localHeader.set(nameBytes, 30);
+
+    const centralHeader = new Uint8Array(46 + nameBytes.byteLength);
+    const cv = new DataView(centralHeader.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, 0, true);
+    cv.setUint16(14, 0, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, size, true);
+    cv.setUint32(24, size, true);
+    cv.setUint16(28, nameBytes.byteLength, true);
+    cv.setUint16(30, 0, true);
+    cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true);
+    cv.setUint16(36, 0, true);
+    cv.setUint32(38, 0, true);
+    cv.setUint32(42, offset, true);
+    centralHeader.set(nameBytes, 46);
+
+    localParts.push(localHeader, f.data);
+    centralParts.push(centralHeader);
+    offset += localHeader.byteLength + size;
+  }
+
+  const cdStart = offset;
+  let cdSize = 0;
+  for (const c of centralParts) cdSize += c.byteLength;
+
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true);
+  ev.setUint16(6, 0, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, cdSize, true);
+  ev.setUint32(16, cdStart, true);
+  ev.setUint16(20, 0, true);
+
+  const totalLen = offset + cdSize + 22;
+  const out = new Uint8Array(totalLen);
+  let pos = 0;
+  for (const p of localParts) {
+    out.set(p, pos);
+    pos += p.byteLength;
+  }
+  for (const p of centralParts) {
+    out.set(p, pos);
+    pos += p.byteLength;
+  }
+  out.set(eocd, pos);
+  return out;
+}
+
+/**
+ * Descarga en el navegador el archivo .ZIP con la extensión de Chrome / Edge
+ */
+export function downloadDianAutofillExtensionZip(): void {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  const zipBytes = buildDianExtensionZipBytes();
+  const blob = new Blob([zipBytes.buffer as ArrayBuffer], {
+    type: "application/zip",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "extension-dian-autofill.zip";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }

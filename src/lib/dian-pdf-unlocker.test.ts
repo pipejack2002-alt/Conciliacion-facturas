@@ -9,6 +9,7 @@ import {
   buildDianQrDirectUrl,
   buildDianSearchDocumentUrl,
   buildDianAutofillBookmarklet,
+  buildDianExtensionZipBytes,
   groupTextItemsIntoLines,
   DIAN_SEARCH_DOCUMENT_URL,
 } from "./dian-pdf-unlocker.ts";
@@ -54,9 +55,12 @@ describe("DIAN CUFE & PDF Unlocker Utilities", () => {
     );
     assert.ok(buildDianQrDirectUrl(cufe, "901260460").includes(cufe));
     assert.ok(buildDianQrDirectUrl(cufe, "901260460").includes("901260460"));
-    assert.ok(buildDianSearchDocumentUrl(cufe, "901260460").includes("documentkey="));
-    assert.ok(buildDianSearchDocumentUrl(cufe, "901260460").includes("nit=901260460"));
+    assert.ok(buildDianSearchDocumentUrl(cufe, "901260460", "802009158").includes("DocumentKey="));
+    assert.ok(buildDianSearchDocumentUrl(cufe, "901260460", "802009158").includes("nit=901260460"));
+    assert.ok(buildDianSearchDocumentUrl(cufe, "901260460", "802009158").includes("emisor=802009158"));
     assert.ok(buildDianAutofillBookmarklet(cufe, "901260460").startsWith("javascript:"));
+    const extZip = buildDianExtensionZipBytes();
+    assert.ok(extZip.byteLength > 200);
   });
 
   it("genera un PDF 1.4 sin contraseña y con capa de texto digital 100% seleccionable y copiable", async () => {

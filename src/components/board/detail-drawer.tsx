@@ -8,7 +8,7 @@ import { inferPucAccountForRow } from "@/lib/puc-classifier";
 import { exportSiigoTemplateXlsx } from "@/lib/export-siigo";
 import { exportWorldOfficeTemplateXlsx } from "@/lib/export-worldoffice";
 import { exportHelisaTemplateXlsx } from "@/lib/export-helisa";
-import { buildDianQrDirectUrl, buildDianSearchDocumentUrl, getNitSinDv } from "@/lib/dian-pdf-unlocker";
+import { buildDianQrDirectUrl, getNitSinDv } from "@/lib/dian-pdf-unlocker";
 import type { ConciliacionRow } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { CopyButton, Field } from "./board-utils";
@@ -344,28 +344,22 @@ export function DetailDrawer({
               <button
                 type="button"
                 onClick={() => {
-                  const nitSinDv = getNitSinDv(result?.company.nit) || getNitSinDv(row.nitContraparte);
-                  void navigator.clipboard.writeText(row.cufe);
-                  flash(`CUFE copiado · NIT sin DV: ${nitSinDv}`);
-                  window.open(buildDianQrDirectUrl(row.cufe, nitSinDv), "_blank", "noopener,noreferrer");
+                  const nitReceptor = getNitSinDv(result?.company.nit);
+                  const nitEmisor = getNitSinDv(row.nitContraparte);
+                  const nitSinDv = nitReceptor || nitEmisor;
+                  void navigator.clipboard.writeText(nitSinDv || row.cufe);
+                  flash(`NIT sin DV (${nitSinDv}) copiado y CUFE pre-cargado en la URL de la DIAN`);
+                  window.open(
+                    buildDianQrDirectUrl(row.cufe, nitSinDv, nitEmisor),
+                    "_blank",
+                    "noopener,noreferrer",
+                  );
                 }}
                 className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-teal/40 bg-bg-elevated px-2.5 py-1.5 text-xs font-semibold text-teal hover:bg-teal hover:text-white transition cursor-pointer"
-                title="Abre la URL directa en la DIAN con el CUFE y el NIT en los parámetros"
+                title="Abre la página de la DIAN con el CUFE pre-cargado y el NIT sin DV listo"
               >
                 <ExternalLink className="size-3.5 shrink-0" />
                 <span>URL Directa DIAN (CUFE+NIT)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const nitSinDv = getNitSinDv(result?.company.nit) || getNitSinDv(row.nitContraparte);
-                  void navigator.clipboard.writeText(row.cufe);
-                  flash(`CUFE copiado · NIT sin DV: ${nitSinDv}`);
-                  window.open(buildDianSearchDocumentUrl(row.cufe, nitSinDv), "_blank", "noopener,noreferrer");
-                }}
-                className="inline-flex items-center justify-center gap-1 rounded-lg border border-line bg-bg px-2 py-1.5 text-xs font-medium text-ink hover:border-teal hover:text-teal transition cursor-pointer"
-              >
-                <span>Buscador</span>
               </button>
               {onOpenDianUnlocker && (
                 <button
