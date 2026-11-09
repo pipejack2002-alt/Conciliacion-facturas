@@ -221,6 +221,57 @@
     return out;
   }
 
+  function aesEncryptBlock(block, roundKeys, nr) {
+    const state = new Uint8Array(block);
+    for (let i = 0; i < 16; i++) state[i] ^= roundKeys[i];
+    const tmp = new Uint8Array(16);
+    for (let round = 1; round < nr; round++) {
+      for (let i = 0; i < 16; i++) state[i] = AES_SBOX[state[i]];
+      tmp[0] = state[0]; tmp[4] = state[4]; tmp[8] = state[8]; tmp[12] = state[12];
+      tmp[1] = state[5]; tmp[5] = state[9]; tmp[9] = state[13]; tmp[13] = state[1];
+      tmp[2] = state[10]; tmp[6] = state[14]; tmp[10] = state[2]; tmp[14] = state[6];
+      tmp[3] = state[15]; tmp[7] = state[3]; tmp[11] = state[7]; tmp[15] = state[11];
+      const rkOffset = round * 16;
+      for (let c = 0; c < 4; c++) {
+        const idx = c * 4;
+        const s0 = tmp[idx], s1 = tmp[idx + 1], s2 = tmp[idx + 2], s3 = tmp[idx + 3];
+        state[idx] = gmul(s0, 2) ^ gmul(s1, 3) ^ s2 ^ s3 ^ roundKeys[rkOffset + idx];
+        state[idx + 1] = s0 ^ gmul(s1, 2) ^ gmul(s2, 3) ^ s3 ^ roundKeys[rkOffset + idx + 1];
+        state[idx + 2] = s0 ^ s1 ^ gmul(s2, 2) ^ gmul(s3, 3) ^ roundKeys[rkOffset + idx + 2];
+        state[idx + 3] = gmul(s0, 3) ^ s1 ^ s2 ^ gmul(s3, 2) ^ roundKeys[rkOffset + idx + 3];
+      }
+    }
+    for (let i = 0; i < 16; i++) state[i] = AES_SBOX[state[i]];
+    tmp[0] = state[0]; tmp[4] = state[4]; tmp[8] = state[8]; tmp[12] = state[12];
+    tmp[1] = state[5]; tmp[5] = state[9]; tmp[9] = state[13]; tmp[13] = state[1];
+    tmp[2] = state[10]; tmp[6] = state[14]; tmp[10] = state[2]; tmp[14] = state[6];
+    tmp[3] = state[15]; tmp[7] = state[3]; tmp[11] = state[7]; tmp[15] = state[11];
+    const rkOffset = nr * 16;
+    for (let i = 0; i < 16; i++) state[i] = tmp[i] ^ roundKeys[rkOffset + i];
+    return state;
+  }
+
+  function aesEncryptCBC(plain, key, iv, addPadding) {
+    let input = plain;
+    if (addPadding) {
+      const padLen = 16 - (plain.length % 16);
+      input = new Uint8Array(plain.length + padLen);
+      input.set(plain);
+      input.fill(padLen, plain.length);
+    }
+    const { roundKeys, rounds } = aesExpandKey(key);
+    const out = new Uint8Array(input.length);
+    let prev = iv;
+    for (let offset = 0; offset < input.length; offset += 16) {
+      const block = new Uint8Array(16);
+      for (let i = 0; i < 16; i++) block[i] = input[offset + i] ^ prev[i];
+      const enc = aesEncryptBlock(block, roundKeys, rounds);
+      out.set(enc, offset);
+      prev = enc;
+    }
+    return out;
+  }
+
   function concatBytes() {
     let total = 0;
     for (let i = 0; i < arguments.length; i++) total += arguments[i].length;
@@ -649,6 +700,8 @@
     const p = pMatch ? Number(pMatch[1]) : -4;
     const oBytes = extractDictBinaryString(encryptDictText, "O") || new Uint8Array(32);
     const uBytes = extractDictBinaryString(encryptDictText, "U") || new Uint8Array(32);
+    const oeBytes = extractDictBinaryString(encryptDictText, "OE");
+    const ueBytes = extractDictBinaryString(encryptDictText, "UE");
     const encryptMetadata = !/\/EncryptMetadata\s+false\b/.test(encryptDictText);
 
     let cipherMethod = "RC4";
@@ -658,7 +711,7 @@
     return {
       encryptInfo: {
         encryptObjNum: encryptRefNum !== null ? encryptRefNum : -1,
-        v, r, lengthBits, p, oBytes, uBytes, id0Bytes,
+        v, r, lengthBits, p, oBytes, uBytes, oeBytes, ueBytes, id0Bytes,
         idRaw: idRaw || "",
         encryptMetadata,
         cipherMethod,
@@ -685,6 +738,64 @@
       }
     });
     return ok;
+  }
+
+  async function shaDigest(algo, data) {
+    const buf = await crypto.subtle.digest(algo, new Uint8Array(data));
+    return new Uint8Array(buf);
+  }
+
+  async function computeHashR6(pwdBytes, salt8, userKey48) {
+    const uBytes = userKey48 ? userKey48.subarray(0, 48) : new Uint8Array(0);
+    let k = await shaDigest("SHA-256", concatBytes(pwdBytes, salt8, uBytes));
+    let i = 0;
+    while (true) {
+      const k1Single = concatBytes(pwdBytes, k, uBytes);
+      const k1Parts = [];
+      for (let r = 0; r < 64; r++) k1Parts.push(k1Single);
+      const k1 = concatBytes.apply(null, k1Parts);
+      const aesKey = k.subarray(0, 16);
+      const aesIv = k.subarray(16, 32);
+      const e = aesEncryptCBC(k1, aesKey, aesIv, false);
+      let mod3 = 0;
+      for (let b = 0; b < 16; b++) mod3 = (mod3 * 256 + e[b]) % 3;
+      const algo = mod3 === 0 ? "SHA-256" : mod3 === 1 ? "SHA-384" : "SHA-512";
+      k = await shaDigest(algo, e);
+      i++;
+      if (i >= 64 && e[e.length - 1] <= i - 32) break;
+    }
+    return k.subarray(0, 32);
+  }
+
+  async function tryPasswordR56(pwdStr, info) {
+    if (!info.ueBytes || info.uBytes.length < 48) return null;
+    const pwdUtf8 = new TextEncoder().encode(pwdStr).subarray(0, 127);
+    const valSalt = info.uBytes.subarray(32, 40);
+    const keySalt = info.uBytes.subarray(40, 48);
+    const zeroIv = new Uint8Array(16);
+
+    if (info.r === 5) {
+      const valHash = await shaDigest("SHA-256", concatBytes(pwdUtf8, valSalt));
+      let match = true;
+      for (let i = 0; i < 32; i++) {
+        if (valHash[i] !== info.uBytes[i]) { match = false; break; }
+      }
+      if (match) {
+        const intKey = await shaDigest("SHA-256", concatBytes(pwdUtf8, keySalt));
+        return aesDecryptCBC(info.ueBytes.subarray(0, 32), intKey, false, zeroIv);
+      }
+    } else if (info.r >= 6) {
+      const valHash = await computeHashR6(pwdUtf8, valSalt);
+      let match = true;
+      for (let i = 0; i < 32; i++) {
+        if (valHash[i] !== info.uBytes[i]) { match = false; break; }
+      }
+      if (match) {
+        const intKey = await computeHashR6(pwdUtf8, keySalt);
+        return aesDecryptCBC(info.ueBytes.subarray(0, 32), intKey, false, zeroIv);
+      }
+    }
+    return null;
   }
 
   async function decryptPdfNativeBytes(rawPdfBytes, candidatePasswords) {
@@ -717,6 +828,13 @@
         const ownerKey = tryOwnerPasswordR234(pwd, encryptInfo);
         if (ownerKey) {
           fileKey = ownerKey;
+          matchedPassword = pwd;
+          break;
+        }
+      } else {
+        const r56Key = await tryPasswordR56(pwd, encryptInfo);
+        if (r56Key) {
+          fileKey = r56Key;
           matchedPassword = pwd;
           break;
         }
@@ -1137,6 +1255,20 @@
     return cleanFallback || "Factura_DIAN";
   }
 
+  function syncBackgroundInvoiceMetadata(meta) {
+    if (!meta) return;
+    if (chromeApi && chromeApi.runtime && chromeApi.runtime.sendMessage) {
+      try {
+        chromeApi.runtime.sendMessage({
+          type: "SET_CURRENT_INVOICE_METADATA",
+          filename: meta.unlockedFileName,
+          passwords: meta.passwords,
+          cufe: meta.cufe,
+        });
+      } catch {}
+    }
+  }
+
   function syncBackgroundInvoiceFilename(fileName) {
     if (!fileName) return;
     if (chromeApi && chromeApi.runtime && chromeApi.runtime.sendMessage) {
@@ -1192,14 +1324,16 @@
     const docPrefix = formatInvoicePrefixAndNumber(serie, folio, params.doc);
     const fileName = docPrefix + ".pdf";
 
-    syncBackgroundInvoiceFilename(fileName);
-
-    return {
+    const meta = {
       cufe: pageCufe,
       passwords: Array.from(candidates),
       docLabel: docPrefix,
       unlockedFileName: fileName,
     };
+
+    syncBackgroundInvoiceMetadata(meta);
+
+    return meta;
   }
 
   function findDownloadPdfLink() {
@@ -1624,6 +1758,18 @@
           triggerBrowserDownload(cachedUnlockedBytes, cachedUnlockedFileName);
         } else {
           processDownloadAndUnlock(msg.url, [], true);
+        }
+      } else if (msg.type === "DIAN_PDF_UNLOCKED_BROADCAST") {
+        cachedUnlockedFileName = msg.filename || cachedUnlockedFileName;
+        const msgText = msg.wasEncrypted
+          ? "✅ ¡Listo! " + cachedUnlockedFileName + " descargada YA DESBLOQUEADA (Contraseña eliminada: " + (msg.password || "NIT") + " · Texto 100% original seleccionable)"
+          : "✅ ¡Listo! " + cachedUnlockedFileName + " descargada (El PDF ya venía libre de contraseña)";
+        updateBannerState("success", msgText, {});
+        const linkEl = findDownloadPdfLink();
+        if (linkEl) {
+          linkEl.innerHTML = "🔓 " + cachedUnlockedFileName + " (DESBLOQUEADA)";
+          linkEl.style.cssText +=
+            ";background:#0d9488 !important;color:#ffffff !important;padding:6px 12px !important;border-radius:6px !important;text-decoration:none !important;font-weight:700 !important;";
         }
       }
     });
