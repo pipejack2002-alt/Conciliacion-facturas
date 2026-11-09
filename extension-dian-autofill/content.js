@@ -11,6 +11,7 @@
 (function () {
   const STORAGE_KEY_NIT = "tributoapp_dian_last_nit_sin_dv";
   const STORAGE_KEY_EMISOR = "tributoapp_dian_last_emisor_sin_dv";
+  const STORAGE_KEY_DOC = "tributoapp_dian_last_doc_numero";
   const chromeApi = globalThis.chrome;
 
   // ============================================================================
@@ -940,24 +941,36 @@
       hash.get("emisor") ||
       "";
 
+    const doc =
+      search.get("doc") ||
+      search.get("numero") ||
+      hash.get("doc") ||
+      "";
+
     if (nit) {
       try { localStorage.setItem(STORAGE_KEY_NIT, getNitSinDv(nit)); } catch {}
     }
     if (emisor) {
       try { localStorage.setItem(STORAGE_KEY_EMISOR, getNitSinDv(emisor)); } catch {}
     }
+    if (doc) {
+      try { localStorage.setItem(STORAGE_KEY_DOC, doc.trim()); } catch {}
+    }
 
     let savedNit = "";
     let savedEmisor = "";
+    let savedDoc = "";
     try {
       savedNit = localStorage.getItem(STORAGE_KEY_NIT) || "";
       savedEmisor = localStorage.getItem(STORAGE_KEY_EMISOR) || "";
+      savedDoc = localStorage.getItem(STORAGE_KEY_DOC) || "";
     } catch {}
 
     return {
       cufe: cufe.trim(),
       nit: getNitSinDv(nit || savedNit),
       emisor: getNitSinDv(emisor || savedEmisor),
+      doc: (doc || savedDoc).trim(),
     };
   }
 
@@ -1053,13 +1066,58 @@
 
   let cachedUnlockedBytes = null;
   let cachedLockedBytes = null;
-  let cachedUnlockedFileName = "Factura_DIAN_SIN_CLAVE.pdf";
+  let cachedUnlockedFileName = "Factura_DIAN.pdf";
   let autoUnlockStarted = false;
+
+  function formatInvoicePrefixAndNumber(rawSerie, rawFolio, fallbackDoc) {
+    const cleanSerie = String(rawSerie || "")
+      .trim()
+      .replace(/[^A-Za-z0-9_-]/g, "");
+    const cleanFolio = String(rawFolio || "")
+      .trim()
+      .replace(/[^A-Za-z0-9_-]/g, "");
+    const serie = /^(folio|fecha|emisi|total|nit|cufe)$/i.test(cleanSerie) ? "" : cleanSerie;
+    const folio = /^(serie|fecha|emisi|total|nit|cufe)$/i.test(cleanFolio) ? "" : cleanFolio;
+
+    if (serie && folio) {
+      const upperS = serie.toUpperCase();
+      const upperF = folio.toUpperCase();
+      if (upperF === upperS || upperF.startsWith(upperS + "-")) {
+        return folio;
+      }
+      if (upperF.startsWith(upperS)) {
+        const rest = folio.slice(serie.length).replace(/^[-_]+/, "");
+        return rest ? serie + "-" + rest : folio;
+      }
+      return serie.replace(/-+$/, "") + "-" + folio.replace(/^-+/, "");
+    }
+    if (folio) return folio;
+    if (serie) return serie;
+
+    const cleanFallback = String(fallbackDoc || "")
+      .trim()
+      .replace(/\.pdf$/i, "")
+      .replace(/[^A-Za-z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return cleanFallback || "Factura_DIAN";
+  }
+
+  function syncBackgroundInvoiceFilename(fileName) {
+    if (!fileName) return;
+    if (chromeApi && chromeApi.runtime && chromeApi.runtime.sendMessage) {
+      try {
+        chromeApi.runtime.sendMessage({
+          type: "SET_CURRENT_INVOICE_FILENAME",
+          filename: fileName,
+        });
+      } catch {}
+    }
+  }
 
   /**
    * Extrae todos los NIT visibles en la página de detalle de la DIAN
    * (DATOS DEL EMISOR -> NIT: 802009158, DATOS DEL RECEPTOR -> NIT: 901260460),
-   * además de Serie, Folio y Nombre del Emisor para nombrar el PDF limpio.
+   * además de Serie y Folio para guardar el PDF con el Prefijo y Número de Factura (ej. FE-29159.pdf).
    */
   function extractPageInvoiceMetadata() {
     const bodyText = document.body ? document.body.innerText || "" : "";
@@ -1085,21 +1143,17 @@
       addNitCandidate(m[1]);
     }
 
-    // Extraer Serie y Folio (ej. Serie: FE, Folio: 29159)
-    const serieMatch = bodyText.match(/Serie\s*:\s*([A-Za-z0-9-]+)/i);
-    const folioMatch = bodyText.match(/Folio\s*:\s*([A-Za-z0-9-]+)/i);
-    const nombreMatch = bodyText.match(/DATOS DEL EMISOR[\s\S]{0,160}?Nombre\s*:\s*([^\r\n]+)/i);
+    // Extraer Serie y Folio (ej. Serie: FE, Folio: 29159) sin saltar de línea si Serie viene vacía
+    const serieMatch = bodyText.match(/Serie[ \t]*:[ \t]*([^\r\n]+)/i);
+    const folioMatch = bodyText.match(/Folio[ \t]*:[ \t]*([^\r\n]+)/i);
 
     const serie = serieMatch ? serieMatch[1].trim() : "";
     const folio = folioMatch ? folioMatch[1].trim() : "";
-    const emisorNombre = nombreMatch
-      ? nombreMatch[1].trim().replace(/[^A-Za-z0-9ÁÉÍÓÚÑáéíóúñ]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 32)
-      : "";
 
-    const docPrefix = serie && folio ? serie + "-" + folio : folio || serie || "Factura_DIAN";
-    const fileName = emisorNombre
-      ? docPrefix + "_" + emisorNombre + "_SIN_CLAVE.pdf"
-      : docPrefix + "_SIN_CLAVE.pdf";
+    const docPrefix = formatInvoicePrefixAndNumber(serie, folio, params.doc);
+    const fileName = docPrefix + ".pdf";
+
+    syncBackgroundInvoiceFilename(fileName);
 
     return {
       passwords: Array.from(candidates),
@@ -1178,6 +1232,7 @@
   }
 
   function triggerBrowserDownload(pdfBytes, fileName) {
+    syncBackgroundInvoiceFilename(fileName);
     const blob = new Blob([pdfBytes], { type: "application/pdf" });
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1273,7 +1328,7 @@
       btnLocked.onclick = function () {
         triggerBrowserDownload(
           cachedLockedBytes,
-          cachedUnlockedFileName.replace("_SIN_CLAVE.pdf", "_ORIGINAL.pdf")
+          cachedUnlockedFileName.replace(/(?:_SIN_CLAVE)?\.pdf$/i, "_ORIGINAL.pdf")
         );
       };
       actionsEl.appendChild(btnLocked);

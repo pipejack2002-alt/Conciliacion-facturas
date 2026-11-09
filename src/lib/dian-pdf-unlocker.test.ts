@@ -1,8 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { getDocumentProxy, extractText } from "unpdf";
 import { decryptPdfNativeBytes, md5, rc4 } from "./pdf-native-decrypt.ts";
 import {
+  EXTENSION_VERSION,
   getNitSinDv,
   extractNitPasswordVariants,
   buildCandidatePasswordsForDianPdf,
@@ -11,9 +14,16 @@ import {
   buildDianSearchDocumentUrl,
   buildDianAutofillBookmarklet,
   buildDianExtensionZipBytes,
+  formatInvoicePrefixAndNumber,
+  inferInvoiceDocFileName,
   groupTextItemsIntoLines,
   DIAN_SEARCH_DOCUMENT_URL,
 } from "./dian-pdf-unlocker.ts";
+import {
+  EXTENSION_MANIFEST_JSON,
+  EXTENSION_BACKGROUND_JS,
+  EXTENSION_CONTENT_JS,
+} from "./dian-extension-source.ts";
 
 describe("DIAN CUFE & PDF Unlocker Utilities", () => {
   it("limpia el NIT eliminando puntos, comas y el dígito de verificación (DV)", () => {
@@ -47,21 +57,77 @@ describe("DIAN CUFE & PDF Unlocker Utilities", () => {
     assert.ok(passwords.includes("890103075"));
   });
 
-  it("construye URLs válidas hacia el catálogo VPFE de la DIAN con CUFE y NIT sin DV", () => {
+  it("construye URLs válidas hacia el catálogo VPFE de la DIAN con CUFE, NIT sin DV y Prefijo+Número (doc)", () => {
     const cufe =
       "3df1a8d8c0baf1d8c76d2324c3094986166d3a8d5620faa89b4e050c7fc52be707de1c4ba3d083f9080960a2f31ece93";
     assert.strictEqual(
       DIAN_SEARCH_DOCUMENT_URL,
       "https://catalogo-vpfe.dian.gov.co/User/SearchDocument",
     );
-    assert.ok(buildDianQrDirectUrl(cufe, "901260460").includes(cufe));
-    assert.ok(buildDianQrDirectUrl(cufe, "901260460").includes("901260460"));
-    assert.ok(buildDianSearchDocumentUrl(cufe, "901260460", "802009158").includes("DocumentKey="));
-    assert.ok(buildDianSearchDocumentUrl(cufe, "901260460", "802009158").includes("nit=901260460"));
-    assert.ok(buildDianSearchDocumentUrl(cufe, "901260460", "802009158").includes("emisor=802009158"));
+    assert.ok(buildDianQrDirectUrl(cufe, "901260460", "802009158", "FE-29159").includes(cufe));
+    assert.ok(buildDianQrDirectUrl(cufe, "901260460", "802009158", "FE-29159").includes("doc=FE-29159"));
+    assert.ok(buildDianSearchDocumentUrl(cufe, "901260460", "802009158", "FE-29159").includes("DocumentKey="));
+    assert.ok(buildDianSearchDocumentUrl(cufe, "901260460", "802009158", "FE-29159").includes("nit=901260460"));
+    assert.ok(buildDianSearchDocumentUrl(cufe, "901260460", "802009158", "FE-29159").includes("emisor=802009158"));
+    assert.ok(buildDianSearchDocumentUrl(cufe, "901260460", "802009158", "FE-29159").includes("doc=FE-29159"));
     assert.ok(buildDianAutofillBookmarklet(cufe, "901260460").startsWith("javascript:"));
     const extZip = buildDianExtensionZipBytes();
     assert.ok(extZip.byteLength > 200);
+  });
+
+  it("nombra las facturas desbloqueadas con su Prefijo y Número de Factura (ej. FE-29159.pdf)", () => {
+    assert.strictEqual(formatInvoicePrefixAndNumber("FE", "29159"), "FE-29159");
+    assert.strictEqual(formatInvoicePrefixAndNumber("FE", "FE-29159"), "FE-29159");
+    assert.strictEqual(formatInvoicePrefixAndNumber("FE", "FE29159"), "FE-29159");
+    assert.strictEqual(formatInvoicePrefixAndNumber("", "730065"), "730065");
+    assert.strictEqual(formatInvoicePrefixAndNumber("Folio", "730065"), "730065");
+
+    // 1. Por coincidencia de CUFE en las filas de conciliación
+    const cufe =
+      "3df1a8d8c0baf1d8c76d2324c3094986166d3a8d5620faa89b4e050c7fc52be707de1c4ba3d083f9080960a2f31ece93";
+    assert.strictEqual(
+      inferInvoiceDocFileName({
+        originalFileName: "RepresentacionGrafica.pdf",
+        extractedText: `Factura Electrónica CUFE: ${cufe}`,
+        allRows: [{ numero: "FE-29159", prefijo: "FE", folio: "29159", cufe, nitContraparte: "802009158" }],
+      }),
+      "FE-29159.pdf",
+    );
+
+    // 2. Por Serie y Folio en el texto del PDF
+    assert.strictEqual(
+      inferInvoiceDocFileName({
+        originalFileName: "documento_dian.pdf",
+        extractedText: "Factura electrónica\nSerie: SETT\nFolio: 10482\nFecha de emisión: 21-10-2026",
+      }),
+      "SETT-10482.pdf",
+    );
+
+    // 3. Por fila seleccionada en el modal (preferredDocNumero)
+    assert.strictEqual(
+      inferInvoiceDocFileName({
+        originalFileName: "RepresentacionGrafica.pdf",
+        preferredDocNumero: "FE-29159",
+      }),
+      "FE-29159.pdf",
+    );
+  });
+
+  it("mantiene el paquete ZIP descargable sincronizado con la versión más reciente de extension-dian-autofill/", () => {
+    const extDir = join(process.cwd(), "extension-dian-autofill");
+    const diskManifest = readFileSync(join(extDir, "manifest.json"), "utf8");
+    const diskBackground = readFileSync(join(extDir, "background.js"), "utf8");
+    const diskContent = readFileSync(join(extDir, "content.js"), "utf8");
+    const parsedManifest = JSON.parse(diskManifest);
+
+    assert.strictEqual(EXTENSION_VERSION, parsedManifest.version);
+    assert.strictEqual(EXTENSION_MANIFEST_JSON, diskManifest);
+    assert.strictEqual(EXTENSION_BACKGROUND_JS, diskBackground);
+    assert.strictEqual(EXTENSION_CONTENT_JS, diskContent);
+
+    const zipStr = new TextDecoder().decode(buildDianExtensionZipBytes());
+    assert.ok(zipStr.includes(`v${EXTENSION_VERSION}`));
+    assert.ok(zipStr.includes("SET_CURRENT_INVOICE_FILENAME"));
   });
 
   it("genera un PDF 1.4 sin contraseña y con capa de texto digital 100% seleccionable y copiable", async () => {

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Autollenado y Desbloqueador DIAN (Conciliador Fiscal)",
-  "version": "2.0.0",
-  "description": "Autollena CUFE y NIT sin DV en la DIAN y descarga el PDF de la factura YA DESBLOQUEADO (sin contraseña y con texto vectorial original seleccionable).",
+  "version": "2.1.0",
+  "description": "Autollena CUFE y NIT sin DV en la DIAN y descarga el PDF de la factura YA DESBLOQUEADO guardado con el Prefijo y Número de Factura (ej. FE-29159.pdf).",
   "permissions": [
     "downloads"
   ],

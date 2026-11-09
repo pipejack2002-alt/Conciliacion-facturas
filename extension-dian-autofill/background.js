@@ -1,14 +1,28 @@
 /**
- * Background Service Worker — Extensión Conciliador DIAN v2.0.0
+ * Background Service Worker — Extensión Conciliador DIAN v2.1.0
  * -------------------------------------------------------------
  * 1. Permite descargar el binario del PDF de la DIAN sin restricciones CORS
  *    (incluso cuando redirige a Azure Blob Storage *.blob.core.windows.net).
  * 2. Intercepta descargas nativas bloqueadas iniciadas desde catalogo-vpfe.dian.gov.co
- *    para que se descargue únicamente la versión YA DESBLOQUEADA (_SIN_CLAVE.pdf).
+ *    para que se descargue únicamente la versión YA DESBLOQUEADA.
+ * 3. Garantiza que el archivo descargado se guarde con el Prefijo y Número de Factura
+ *    (ej. FE-29159.pdf) mediante chrome.downloads.onDeterminingFilename.
  */
 
 let bypassNextDownloadUntil = 0;
+let currentInvoiceFilename = "";
 const chromeApi = globalThis.chrome;
+
+function sanitizePdfFilename(rawName) {
+  if (!rawName) return "";
+  const clean = String(rawName)
+    .trim()
+    .replace(/[<>:"/\\|?*]+/g, "-")
+    .replace(/\s+/g, "_")
+    .replace(/-+/g, "-");
+  if (!clean) return "";
+  return clean.toLowerCase().endsWith(".pdf") ? clean : clean + ".pdf";
+}
 
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
@@ -23,6 +37,12 @@ function arrayBufferToBase64(buffer) {
 chromeApi.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message !== "object") return false;
 
+  if (message.type === "SET_CURRENT_INVOICE_FILENAME" && message.filename) {
+    currentInvoiceFilename = sanitizePdfFilename(message.filename);
+    sendResponse({ ok: true, filename: currentInvoiceFilename });
+    return false;
+  }
+
   if (message.type === "ALLOW_LOCKED_DOWNLOAD_ONCE") {
     bypassNextDownloadUntil = Date.now() + 8000;
     sendResponse({ ok: true });
@@ -30,6 +50,9 @@ chromeApi.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.type === "FETCH_DIAN_PDF" && message.url) {
+    if (message.filename) {
+      currentInvoiceFilename = sanitizePdfFilename(message.filename);
+    }
     (async () => {
       try {
         const res = await fetch(message.url, {
@@ -58,11 +81,35 @@ chromeApi.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         });
       }
     })();
-    return true; // respuesta asíncrona
+    return true;
   }
 
   return false;
 });
+
+// Garantizar que el archivo descargado lleve el Prefijo y Número de Factura (ej. FE-29159.pdf)
+if (chromeApi.downloads && chromeApi.downloads.onDeterminingFilename) {
+  chromeApi.downloads.onDeterminingFilename.addListener((downloadItem, suggest) => {
+    try {
+      const url = downloadItem.finalUrl || downloadItem.url || "";
+      const referrer = downloadItem.referrer || "";
+      const isFromDian =
+        url.includes("dian.gov.co") ||
+        referrer.includes("dian.gov.co") ||
+        (url.startsWith("blob:https://catalogo-vpfe.dian.gov.co") && currentInvoiceFilename);
+
+      if (isFromDian && currentInvoiceFilename) {
+        suggest({
+          filename: currentInvoiceFilename,
+          conflictAction: "uniquify",
+        });
+        return;
+      }
+    } catch {
+      // continuar con nombre por defecto
+    }
+  });
+}
 
 if (chromeApi.downloads && chromeApi.downloads.onCreated) {
   chromeApi.downloads.onCreated.addListener((downloadItem) => {
@@ -99,7 +146,7 @@ if (chromeApi.downloads && chromeApi.downloads.onCreated) {
           chromeApi.tabs.sendMessage(targetTab.id, {
             type: "INTERCEPTED_DIAN_DOWNLOAD_URL",
             url,
-            filename: downloadItem.filename || "",
+            filename: currentInvoiceFilename || downloadItem.filename || "",
           });
         }
       });

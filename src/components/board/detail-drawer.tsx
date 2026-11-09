@@ -350,7 +350,7 @@ export function DetailDrawer({
                   void navigator.clipboard.writeText(nitSinDv || row.cufe);
                   flash(`NIT sin DV (${nitSinDv}) copiado y CUFE pre-cargado en la URL de la DIAN`);
                   window.open(
-                    buildDianQrDirectUrl(row.cufe, nitSinDv, nitEmisor),
+                    buildDianQrDirectUrl(row.cufe, nitSinDv, nitEmisor, row.numero),
                     "_blank",
                     "noopener,noreferrer",
                   );

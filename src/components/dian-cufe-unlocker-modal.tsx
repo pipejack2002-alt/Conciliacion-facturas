@@ -29,6 +29,7 @@ import {
 import type { ConciliacionResult, ConciliacionRow } from "@/lib/types";
 import { formatMoneyExact, formatDate } from "@/lib/format";
 import {
+  EXTENSION_VERSION,
   buildDianQrDirectUrl,
   buildDianSearchDocumentUrl,
   buildDianAutofillBookmarklet,
@@ -160,16 +161,24 @@ export function DianCufeUnlockerModal({
             entry.pdfBytes,
             entry.fileName,
             candidatePasswords,
+            {
+              preferredDocNumero: activeRow?.numero,
+              allRows: result.rows,
+            },
           );
           itemsToSave.push(unlocked);
         }
       } else {
-        const unlocked = await unlockDianPdfBuffer(buffer, file.name, candidatePasswords);
+        const unlocked = await unlockDianPdfBuffer(buffer, file.name, candidatePasswords, {
+          preferredDocNumero: activeRow?.numero,
+          allRows: result.rows,
+        });
         itemsToSave.push(unlocked);
       }
 
       for (const item of itemsToSave) {
         try {
+          processedWatchFilesRef.current.add(item.unlockedFileName.toLowerCase());
           const outHandle = await dirHandle.getFileHandle(item.unlockedFileName, {
             create: true,
           });
@@ -212,7 +221,7 @@ export function DianCufeUnlockerModal({
           if (cancelled) break;
           if (entryHandle.kind !== "file") continue;
           const lower = String(entryName).toLowerCase();
-          if (lower.endsWith("_sin_clave.pdf")) continue;
+          if (lower.endsWith("_sin_clave.pdf") || processedWatchFilesRef.current.has(lower)) continue;
           if (!lower.endsWith(".pdf") && !lower.endsWith(".zip")) continue;
 
           const file: File = await entryHandle.getFile();
@@ -248,7 +257,7 @@ export function DianCufeUnlockerModal({
       for await (const [entryName, entryHandle] of (watchDirHandle as any).entries()) {
         if (entryHandle.kind !== "file") continue;
         const lower = String(entryName).toLowerCase();
-        if (lower.endsWith("_sin_clave.pdf")) continue;
+        if (lower.endsWith("_sin_clave.pdf") || processedWatchFilesRef.current.has(lower)) continue;
         if (!lower.endsWith(".pdf") && !lower.endsWith(".zip")) continue;
 
         const file: File = await entryHandle.getFile();
@@ -461,6 +470,7 @@ export function DianCufeUnlockerModal({
   const handleOpenDianPortal = async (mode: "search" | "qr") => {
     const cufe = activeRow?.cufe || "";
     const nit = primaryNitSinDv;
+    const docNumero = activeRow?.numero || "";
     if (nit || cufe) {
       try {
         // Como ?DocumentKey=... ya rellena automáticamente la casilla del CUFE en la DIAN,
@@ -468,7 +478,7 @@ export function DianCufeUnlockerModal({
         await navigator.clipboard.writeText(nit || cufe);
         setCopiedField("nit-receptor");
         flash(
-          `Abriendo DIAN con CUFE pre-cargado y NIT sin DV (${nit}) listo en portapapeles / extensión.`,
+          `Abriendo DIAN con CUFE pre-cargado, NIT sin DV (${nit}) y N° ${docNumero || "factura"} listos.`,
         );
       } catch {
         // continuar abriendo pestaña
@@ -476,22 +486,9 @@ export function DianCufeUnlockerModal({
     }
     const targetUrl =
       mode === "qr" && cufe
-        ? buildDianQrDirectUrl(cufe, receptorNitSinDv, emisorNitSinDv)
-        : buildDianSearchDocumentUrl(cufe, receptorNitSinDv, emisorNitSinDv);
+        ? buildDianQrDirectUrl(cufe, receptorNitSinDv, emisorNitSinDv, docNumero)
+        : buildDianSearchDocumentUrl(cufe, receptorNitSinDv, emisorNitSinDv, docNumero);
     window.open(targetUrl, "_blank", "noopener,noreferrer");
-  };
-
-  const buildSmartOutputName = (originalName: string): string => {
-    const base = originalName.replace(/\.pdf$/i, "");
-    if (activeRow && unlockedItems.length === 0) {
-      const cleanProv = (activeRow.nombreContraparte || "FACTURA")
-        .replace(/[^a-zA-Z0-9]+/g, "_")
-        .replace(/^_+|_+$/g, "")
-        .slice(0, 28);
-      const cleanNum = (activeRow.numero || base).replace(/[^a-zA-Z0-9_-]+/g, "");
-      return `${cleanNum}_${cleanProv}_SIN_CLAVE.pdf`;
-    }
-    return base.endsWith("_SIN_CLAVE") ? `${base}.pdf` : `${base}_SIN_CLAVE.pdf`;
   };
 
   const processFiles = async (fileList: FileList | File[]) => {
@@ -521,12 +518,17 @@ export function DianCufeUnlockerModal({
                   entry.pdfBytes,
                   entry.fileName,
                   candidatePasswords,
+                  {
+                    preferredDocNumero:
+                      files.length === 1 && extractedPdfs.length === 1
+                        ? activeRow?.numero
+                        : undefined,
+                    allRows: result.rows,
+                  },
                 );
-                const smartName = buildSmartOutputName(entry.fileName);
-                const finalItem = { ...unlocked, unlockedFileName: smartName };
-                newUnlocked.push(finalItem);
+                newUnlocked.push(unlocked);
                 if (autoDownload) {
-                  downloadUnlockedPdf(finalItem, smartName);
+                  downloadUnlockedPdf(unlocked, unlocked.unlockedFileName);
                 }
               } catch (err: any) {
                 errors.push(err?.message || `Error al desbloquear ${entry.fileName}`);
@@ -541,12 +543,14 @@ export function DianCufeUnlockerModal({
               buffer,
               file.name,
               candidatePasswords,
+              {
+                preferredDocNumero: files.length === 1 ? activeRow?.numero : undefined,
+                allRows: result.rows,
+              },
             );
-            const smartName = buildSmartOutputName(file.name);
-            const finalItem = { ...unlocked, unlockedFileName: smartName };
-            newUnlocked.push(finalItem);
+            newUnlocked.push(unlocked);
             if (autoDownload) {
-              downloadUnlockedPdf(finalItem, smartName);
+              downloadUnlockedPdf(unlocked, unlocked.unlockedFileName);
             }
           } catch (err: any) {
             errors.push(err?.message || `Error al desbloquear ${file.name}`);
@@ -902,24 +906,24 @@ export function DianCufeUnlockerModal({
                     <div className="rounded-xl border border-teal/40 bg-teal-soft/20 p-3 space-y-2 text-[11px]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="font-bold text-teal-deep">
-                          🧩 ¿Quieres que al abrir la DIAN se ponga el NIT sin DV solo automáticamente?
+                          🧩 Autollenado CUFE+NIT y Descarga Desbloqueada Automática (v{EXTENSION_VERSION})
                         </span>
                         <button
                           type="button"
                           onClick={() => {
                             downloadDianAutofillExtensionZip();
                             flash(
-                              "Extensión descargada (extension-dian-autofill.zip). También está lista en la carpeta extension-dian-autofill de tu proyecto.",
+                              `Extensión actualizada v${EXTENSION_VERSION} descargada (extension-dian-autofill-v${EXTENSION_VERSION}.zip). También está sincronizada en la carpeta extension-dian-autofill de tu proyecto.`,
                             );
                           }}
                           className="inline-flex items-center gap-1.5 rounded-lg bg-teal px-2.5 py-1 text-[11px] font-bold text-white hover:bg-teal-deep transition shadow-2xs cursor-pointer"
                         >
                           <Download className="size-3.5" />
-                          <span>Descargar Extensión Chrome / Edge (.ZIP)</span>
+                          <span>Descargar Extensión Chrome / Edge v{EXTENSION_VERSION} (.ZIP)</span>
                         </button>
                       </div>
                       <p className="text-ink-muted leading-snug">
-                        Instálala en 15 seg en <code className="font-mono">chrome://extensions</code> o <code className="font-mono">edge://extensions</code> → <strong>Cargar descomprimida</strong> → selecciona la carpeta <code className="font-mono font-semibold text-ink">extension-dian-autofill</code> de tu proyecto. Pondrá el <strong>CUFE y el NIT sin DV automáticamente</strong> al abrir la pestaña.
+                        Instálala o recárgala (🔄) en <code className="font-mono">chrome://extensions</code> o <code className="font-mono">edge://extensions</code> → <strong>Cargar descomprimida</strong> → carpeta <code className="font-mono font-semibold text-ink">extension-dian-autofill</code>. Rellena el <strong>CUFE + NIT sin DV</strong>, desbloquea el PDF automáticamente y lo guarda con el <strong>Prefijo y Número de Factura</strong> (ej. <code className="font-mono">{activeRow.numero || "FE-29159"}.pdf</code>).
                       </p>
                       <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-teal/20">
                         <button

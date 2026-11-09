@@ -1,10 +1,13 @@
 import { getDocumentProxy, extractText } from "unpdf";
 import { decryptPdfNativeBytes } from "./pdf-native-decrypt.ts";
 import {
+  EXTENSION_VERSION,
   EXTENSION_MANIFEST_JSON,
   EXTENSION_BACKGROUND_JS,
   EXTENSION_CONTENT_JS,
 } from "./dian-extension-source.ts";
+
+export { EXTENSION_VERSION };
 
 export const DIAN_SEARCH_DOCUMENT_URL =
   "https://catalogo-vpfe.dian.gov.co/User/SearchDocument";
@@ -12,32 +15,37 @@ export const DIAN_SEARCH_DOCUMENT_URL =
 /**
  * Construye el enlace directo al buscador de documentos de la DIAN con DocumentKey (PascalCase)
  * para que la página de la DIAN rellene automáticamente el campo CUFE sin redirección 302
- * y conserve los parámetros nit y emisor para la extensión de autollenado.
+ * y conserve los parámetros nit, emisor y doc (Prefijo+Número) para la extensión de autollenado.
  */
 export function buildDianQrDirectUrl(
   cufe: string,
   nitSinDv?: string,
   emisorNitSinDv?: string,
+  docNumero?: string,
 ): string {
-  return buildDianSearchDocumentUrl(cufe, nitSinDv, emisorNitSinDv);
+  return buildDianSearchDocumentUrl(cufe, nitSinDv, emisorNitSinDv, docNumero);
 }
 
 /**
- * Construye la URL de SearchDocument pasando DocumentKey (CUFE), nit (Receptor sin DV) y emisor (Emisor sin DV)
+ * Construye la URL de SearchDocument pasando DocumentKey (CUFE), nit (Receptor sin DV),
+ * emisor (Emisor sin DV) y doc (Prefijo y Número de Factura, ej. FE-29159)
  */
 export function buildDianSearchDocumentUrl(
   cufe?: string,
   nitSinDv?: string,
   emisorNitSinDv?: string,
+  docNumero?: string,
 ): string {
   const cleanCufe = (cufe || "").trim();
   const cleanNit = (nitSinDv || "").trim();
   const cleanEmisor = (emisorNitSinDv || "").trim();
+  const cleanDoc = (docNumero || "").trim();
   if (!cleanCufe && !cleanNit) return DIAN_SEARCH_DOCUMENT_URL;
   const params = new URLSearchParams();
   if (cleanCufe) params.set("DocumentKey", cleanCufe);
   if (cleanNit) params.set("nit", cleanNit);
   if (cleanEmisor) params.set("emisor", cleanEmisor);
+  if (cleanDoc) params.set("doc", cleanDoc);
   return `${DIAN_SEARCH_DOCUMENT_URL}?${params.toString()}`;
 }
 
@@ -523,15 +531,147 @@ export interface UnlockedDianPdfResult {
   extractedLines: string[];
 }
 
+export interface InvoiceNamingRowHint {
+  numero: string;
+  prefijo?: string;
+  folio?: string;
+  cufe?: string;
+  nitContraparte?: string;
+}
+
+/**
+ * Formatea limpiamente el Prefijo y Número de una factura (ej. Serie="FE", Folio="29159" -> "FE-29159")
+ */
+export function formatInvoicePrefixAndNumber(
+  rawSerie?: string,
+  rawFolio?: string,
+  fallbackDoc?: string,
+): string {
+  const cleanSerie = String(rawSerie || "")
+    .trim()
+    .replace(/[^A-Za-z0-9_-]/g, "");
+  const cleanFolio = String(rawFolio || "")
+    .trim()
+    .replace(/[^A-Za-z0-9_-]/g, "");
+  const serie = /^(folio|fecha|emisi|total|nit|cufe)$/i.test(cleanSerie) ? "" : cleanSerie;
+  const folio = /^(serie|fecha|emisi|total|nit|cufe)$/i.test(cleanFolio) ? "" : cleanFolio;
+
+  if (serie && folio) {
+    const upperS = serie.toUpperCase();
+    const upperF = folio.toUpperCase();
+    if (upperF === upperS || upperF.startsWith(upperS + "-")) {
+      return folio;
+    }
+    if (upperF.startsWith(upperS)) {
+      const rest = folio.slice(serie.length).replace(/^[-_]+/, "");
+      return rest ? `${serie}-${rest}` : folio;
+    }
+    return `${serie.replace(/-+$/, "")}-${folio.replace(/^-+/, "")}`;
+  }
+  if (folio) return folio;
+  if (serie) return serie;
+
+  const cleanFallback = String(fallbackDoc || "")
+    .trim()
+    .replace(/\.pdf$/i, "")
+    .replace(/_SIN_CLAVE$/i, "")
+    .replace(/[^A-Za-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return cleanFallback || "Factura_DIAN";
+}
+
+/**
+ * Infiere el nombre de archivo ideal con Prefijo y Número de Factura (ej. "FE-29159.pdf")
+ * cruzando el CUFE o NIT/Folio contra las filas de la conciliación, leyendo Serie/Folio del texto
+ * del PDF o usando la factura seleccionada.
+ */
+export function inferInvoiceDocFileName(options: {
+  originalFileName: string;
+  extractedText?: string;
+  matchedPassword?: string | null;
+  preferredDocNumero?: string;
+  allRows?: InvoiceNamingRowHint[];
+}): string {
+  const text = options.extractedText || "";
+  const origName = options.originalFileName || "";
+  const compactHaystack = `${text} ${origName}`.toLowerCase().replace(/\s+/g, "");
+
+  // 1. Cruzar por CUFE exacto (o primeros 32 caracteres del CUFE) en el texto del PDF o nombre original
+  if (options.allRows && options.allRows.length > 0 && compactHaystack.length > 20) {
+    for (const row of options.allRows) {
+      const cufe = (row.cufe || "").trim().toLowerCase();
+      if (cufe.length >= 24 && compactHaystack.includes(cufe.slice(0, 32))) {
+        return `${formatInvoicePrefixAndNumber(row.prefijo, row.folio, row.numero)}.pdf`;
+      }
+    }
+
+    // 2. Cruzar por NIT del emisor + Número/Folio en el texto extraído
+    const upperText = `${text} ${origName}`.toUpperCase();
+    for (const row of options.allRows) {
+      const rowNit = getNitSinDv(row.nitContraparte || "");
+      const nitMatches =
+        rowNit &&
+        (rowNit === options.matchedPassword ||
+          compactHaystack.includes(rowNit));
+      if (!nitMatches) continue;
+
+      const formattedNum = formatInvoicePrefixAndNumber(
+        row.prefijo,
+        row.folio,
+        row.numero,
+      ).toUpperCase();
+      const rawFolio = (row.folio || "").trim().toUpperCase();
+      if (
+        (formattedNum.length >= 3 && upperText.includes(formattedNum)) ||
+        (rawFolio.length >= 3 && upperText.includes(rawFolio))
+      ) {
+        return `${formatInvoicePrefixAndNumber(row.prefijo, row.folio, row.numero)}.pdf`;
+      }
+    }
+  }
+
+  // 3. Extraer Serie / Prefijo y Folio / Número directamente del texto del PDF de la DIAN
+  if (text) {
+    const serieMatch =
+      text.match(/(?:Serie|Prefijo)[ \t]*:[ \t]*([^\r\n]+)/i) ||
+      text.match(/Prefijo[ \t]+([A-Za-z0-9]{1,6})\b/i);
+    const folioMatch =
+      text.match(/(?:Folio|Consecutivo)[ \t]*:[ \t]*([^\r\n]+)/i) ||
+      text.match(/Factura\s+Electr[óo]nica(?:\s+de\s+Venta)?[\s\S]{0,60}?(?:No\.?|N[°º]|N[úu]mero)[ \t]*:?[ \t]*([A-Za-z0-9-]{2,20})/i);
+
+    const rawSerie = serieMatch ? serieMatch[1].trim().split(/\s+/)[0] : "";
+    const rawFolio = folioMatch ? folioMatch[1].trim().split(/\s+/)[0] : "";
+    if (rawSerie || rawFolio) {
+      const combined = formatInvoicePrefixAndNumber(rawSerie, rawFolio, "");
+      if (combined && combined !== "Factura_DIAN") {
+        return `${combined}.pdf`;
+      }
+    }
+  }
+
+  // 4. Usar el número de factura preferido (ej. la fila activa en el modal: "FE-29159")
+  if (options.preferredDocNumero && options.preferredDocNumero.trim()) {
+    return `${formatInvoicePrefixAndNumber("", "", options.preferredDocNumero)}.pdf`;
+  }
+
+  // 5. Respaldo al nombre original limpio
+  return `${formatInvoicePrefixAndNumber("", "", origName)}.pdf`;
+}
+
 /**
  * Desbloquea un archivo PDF de factura electrónica de la DIAN probando automáticamente
  * el NIT del Receptor sin DV, el NIT del Emisor sin DV y los NIT de la sesión.
- * Devuelve un nuevo archivo PDF 100% libre de contraseña Y CON CAPA DE TEXTO SELECCIONABLE (Ctrl+C).
+ * Devuelve un nuevo archivo PDF 100% libre de contraseña Y CON CAPA DE TEXTO SELECCIONABLE (Ctrl+C),
+ * nombrado con el Prefijo y Número de la factura (ej. FE-29159.pdf).
  */
 export async function unlockDianPdfBuffer(
   pdfBuffer: ArrayBuffer | Uint8Array,
   originalFileName: string,
   candidates: PasswordCandidate[],
+  namingOptions?: {
+    preferredDocNumero?: string;
+    allRows?: InvoiceNamingRowHint[];
+  },
 ): Promise<UnlockedDianPdfResult> {
   const rawBytes =
     pdfBuffer instanceof Uint8Array
@@ -702,10 +842,13 @@ export async function unlockDianPdfBuffer(
         jpegPages.length > 0 ? buildUnencryptedPdfFromJpegs(jpegPages) : rawBytes.slice();
     }
 
-    const baseName = originalFileName.replace(/\.pdf$/i, "");
-    const unlockedFileName = baseName.endsWith("_SIN_CLAVE")
-      ? `${baseName}.pdf`
-      : `${baseName}_SIN_CLAVE.pdf`;
+    const unlockedFileName = inferInvoiceDocFileName({
+      originalFileName,
+      extractedText,
+      matchedPassword,
+      preferredDocNumero: namingOptions?.preferredDocNumero,
+      allRows: namingOptions?.allRows,
+    });
 
     return {
       fileName: originalFileName,
@@ -799,18 +942,18 @@ function crc32(data: Uint8Array): number {
 }
 
 /**
- * Construye un archivo .ZIP con la extensión de Chrome / Edge (manifest.json + content.js + instrucciones)
- * para autollenar el CUFE y el NIT sin DV en la pestaña de la DIAN.
+ * Construye un archivo .ZIP con la versión más reciente de la extensión de Chrome / Edge
+ * (manifest.json + background.js + content.js + instrucciones)
  */
 export function buildDianExtensionZipBytes(): Uint8Array {
   const encoder = new TextEncoder();
 
-  const readmeTxt = `COMO INSTALAR O ACTUALIZAR LA EXTENSION DE AUTOLLENADO Y DESBLOQUEO DIAN v2.0.0 EN CHROME O EDGE:
+  const readmeTxt = `COMO INSTALAR O ACTUALIZAR LA EXTENSION DE AUTOLLENADO Y DESBLOQUEO DIAN v${EXTENSION_VERSION} EN CHROME O EDGE:
 1. Descomprime este archivo ZIP en una carpeta (o selecciona directamente la carpeta "extension-dian-autofill" dentro de C:\\Apps\\CONCILIACION DIAN\\extension-dian-autofill).
 2. En Google Chrome abre: chrome://extensions  (o en Microsoft Edge abre: edge://extensions).
 3. Activa el interruptor "Modo de desarrollador" (arriba a la derecha).
-4. Si ya tenías la versión 1.0.0 instalada desde otra carpeta, elimínala con el botón "Quitar" y haz clic en "Cargar descomprimida" (Load unpacked) seleccionando la nueva carpeta (debe decir versión 2.0.0).
-5. ¡Listo! En la pantalla 1 autollena CUFE y NIT sin DV, y en la pantalla 2 descarga automáticamente el PDF YA DESBLOQUEADO (_SIN_CLAVE.pdf) conservando el 100% de su texto seleccionable.\n`;
+4. Si ya tenías una versión anterior instalada, haz clic en el ícono de Recargar (🔄) o elimínala con "Quitar" y haz clic en "Cargar descomprimida" (Load unpacked) seleccionando la carpeta (debe decir versión ${EXTENSION_VERSION}).
+5. ¡Listo! En la pantalla 1 autollena CUFE y NIT sin DV, y en la pantalla 2 descarga automáticamente el PDF YA DESBLOQUEADO nombrado con el Prefijo y Número de Factura (ej. FE-29159.pdf) conservando el 100% de su texto seleccionable.\n`;
 
   const files = [
     { name: "manifest.json", data: encoder.encode(EXTENSION_MANIFEST_JSON) },
@@ -900,7 +1043,7 @@ export function buildDianExtensionZipBytes(): Uint8Array {
 }
 
 /**
- * Descarga en el navegador el archivo .ZIP con la extensión de Chrome / Edge
+ * Descarga en el navegador el archivo .ZIP siempre con la versión más actual de la extensión de Chrome / Edge
  */
 export function downloadDianAutofillExtensionZip(): void {
   if (typeof window === "undefined" || typeof document === "undefined") return;
@@ -911,7 +1054,7 @@ export function downloadDianAutofillExtensionZip(): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "extension-dian-autofill-v2.zip";
+  a.download = `extension-dian-autofill-v${EXTENSION_VERSION}.zip`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
