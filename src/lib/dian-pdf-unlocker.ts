@@ -592,17 +592,27 @@ export function inferInvoiceDocFileName(options: {
   matchedPassword?: string | null;
   preferredDocNumero?: string;
   allRows?: InvoiceNamingRowHint[];
+  includeSinClaveSuffix?: boolean;
 }): string {
   const text = options.extractedText || "";
   const origName = options.originalFileName || "";
   const compactHaystack = `${text} ${origName}`.toLowerCase().replace(/\s+/g, "");
+
+  const applySuffix = (base: string): string => {
+    const clean = base
+      .trim()
+      .replace(/\.pdf$/i, "")
+      .replace(/_SIN_CLAVE$/i, "");
+    const safe = clean || "Factura_DIAN";
+    return options.includeSinClaveSuffix ? `${safe}_SIN_CLAVE.pdf` : `${safe}.pdf`;
+  };
 
   // 1. Cruzar por CUFE exacto (o primeros 32 caracteres del CUFE) en el texto del PDF o nombre original
   if (options.allRows && options.allRows.length > 0 && compactHaystack.length > 20) {
     for (const row of options.allRows) {
       const cufe = (row.cufe || "").trim().toLowerCase();
       if (cufe.length >= 24 && compactHaystack.includes(cufe.slice(0, 32))) {
-        return `${formatInvoicePrefixAndNumber(row.prefijo, row.folio, row.numero)}.pdf`;
+        return applySuffix(formatInvoicePrefixAndNumber(row.prefijo, row.folio, row.numero));
       }
     }
 
@@ -626,7 +636,7 @@ export function inferInvoiceDocFileName(options: {
         (formattedNum.length >= 3 && upperText.includes(formattedNum)) ||
         (rawFolio.length >= 3 && upperText.includes(rawFolio))
       ) {
-        return `${formatInvoicePrefixAndNumber(row.prefijo, row.folio, row.numero)}.pdf`;
+        return applySuffix(formatInvoicePrefixAndNumber(row.prefijo, row.folio, row.numero));
       }
     }
   }
@@ -645,18 +655,18 @@ export function inferInvoiceDocFileName(options: {
     if (rawSerie || rawFolio) {
       const combined = formatInvoicePrefixAndNumber(rawSerie, rawFolio, "");
       if (combined && combined !== "Factura_DIAN") {
-        return `${combined}.pdf`;
+        return applySuffix(combined);
       }
     }
   }
 
   // 4. Usar el número de factura preferido (ej. la fila activa en el modal: "FE-29159")
   if (options.preferredDocNumero && options.preferredDocNumero.trim()) {
-    return `${formatInvoicePrefixAndNumber("", "", options.preferredDocNumero)}.pdf`;
+    return applySuffix(formatInvoicePrefixAndNumber("", "", options.preferredDocNumero));
   }
 
   // 5. Respaldo al nombre original limpio
-  return `${formatInvoicePrefixAndNumber("", "", origName)}.pdf`;
+  return applySuffix(formatInvoicePrefixAndNumber("", "", origName));
 }
 
 /**
@@ -672,6 +682,7 @@ export async function unlockDianPdfBuffer(
   namingOptions?: {
     preferredDocNumero?: string;
     allRows?: InvoiceNamingRowHint[];
+    includeSinClaveSuffix?: boolean;
   },
 ): Promise<UnlockedDianPdfResult> {
   const rawBytes =
@@ -849,6 +860,7 @@ export async function unlockDianPdfBuffer(
       matchedPassword,
       preferredDocNumero: namingOptions?.preferredDocNumero,
       allRows: namingOptions?.allRows,
+      includeSinClaveSuffix: namingOptions?.includeSinClaveSuffix,
     });
 
     return {

@@ -72,11 +72,17 @@ export function DianCufeUnlockerModal({
   const [watchDirHandle, setWatchDirHandle] = useState<any | null>(null);
   const [watchDirName, setWatchDirName] = useState<string>("");
   const [watchedCount, setWatchedCount] = useState<number>(0);
+  const [deleteOriginalLocked, setDeleteOriginalLocked] = useState<boolean>(true);
+  const deleteOriginalLockedRef = useRef(deleteOriginalLocked);
   const processedWatchFilesRef = useRef<Set<string>>(new Set());
   const processSingleWatchedFileRef = useRef<
     (file: File, dirHandle: any) => Promise<void>
   >(() => Promise.resolve());
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    deleteOriginalLockedRef.current = deleteOriginalLocked;
+  }, [deleteOriginalLocked]);
 
   useEffect(() => {
     if (initialRow?.id) {
@@ -164,6 +170,7 @@ export function DianCufeUnlockerModal({
             {
               preferredDocNumero: activeRow?.numero,
               allRows: result.rows,
+              includeSinClaveSuffix: true,
             },
           );
           itemsToSave.push(unlocked);
@@ -172,6 +179,7 @@ export function DianCufeUnlockerModal({
         const unlocked = await unlockDianPdfBuffer(buffer, file.name, candidatePasswords, {
           preferredDocNumero: activeRow?.numero,
           allRows: result.rows,
+          includeSinClaveSuffix: true,
         });
         itemsToSave.push(unlocked);
       }
@@ -186,6 +194,18 @@ export function DianCufeUnlockerModal({
           await writable.write(item.unlockedPdfBytes);
           await writable.close();
           setWatchedCount((c) => c + 1);
+
+          // Si deleteOriginalLocked está activo, eliminar el archivo original con clave de la carpeta
+          if (deleteOriginalLockedRef.current && typeof dirHandle.removeEntry === "function") {
+            const origName = file.name;
+            if (origName.toLowerCase() !== item.unlockedFileName.toLowerCase()) {
+              try {
+                await dirHandle.removeEntry(origName);
+              } catch (delErr) {
+                console.warn(`[WatchDir] No se pudo eliminar archivo original con clave ${origName}:`, delErr);
+              }
+            }
+          }
         } catch {
           if (autoDownload) {
             downloadUnlockedPdf(item);
@@ -196,8 +216,11 @@ export function DianCufeUnlockerModal({
       if (itemsToSave.length > 0) {
         setUnlockedItems((prev) => [...itemsToSave, ...prev]);
         setPreviewItemIndex(0);
+        const deletedMsg = deleteOriginalLockedRef.current
+          ? ` (archivo original con clave "${file.name}" eliminado)`
+          : "";
         flash(
-          `🔓 Auto-desbloqueado en "${watchDirName}": ${itemsToSave[0].unlockedFileName} (con texto 100% copiable)`,
+          `🔓 Guardado "${itemsToSave[0].unlockedFileName}" en "${watchDirName}" con texto seleccionable${deletedMsg}`,
         );
       }
     } catch {
@@ -229,9 +252,9 @@ export function DianCufeUnlockerModal({
           if (processedWatchFilesRef.current.has(fileKey)) continue;
           processedWatchFilesRef.current.add(fileKey);
 
-          // En el barrido automático en segundo plano procesamos archivos de los últimos 15 minutos
+          // En el barrido automático en segundo plano procesamos archivos de las últimas 2 horas
           const ageMs = Date.now() - file.lastModified;
-          if (ageMs > 15 * 60 * 1000) continue;
+          if (ageMs > 2 * 60 * 60 * 1000) continue;
 
           await processSingleWatchedFileRef.current(file, watchDirHandle);
         }
@@ -524,6 +547,7 @@ export function DianCufeUnlockerModal({
                         ? activeRow?.numero
                         : undefined,
                     allRows: result.rows,
+                    includeSinClaveSuffix: true,
                   },
                 );
                 newUnlocked.push(unlocked);
@@ -546,6 +570,7 @@ export function DianCufeUnlockerModal({
               {
                 preferredDocNumero: files.length === 1 ? activeRow?.numero : undefined,
                 allRows: result.rows,
+                includeSinClaveSuffix: true,
               },
             );
             newUnlocked.push(unlocked);
@@ -639,8 +664,19 @@ export function DianCufeUnlockerModal({
                   )}
                 </div>
                 <p className="text-ink-muted mt-0.5">
-                  Elige cualquier carpeta de tu equipo (ej. <code className="font-mono">Descargas</code> o una carpeta del mes): cada PDF o ZIP que caiga allí se desbloqueará solo y se guardará con texto 100% copiable.
+                  Elige la carpeta donde guardas tus descargas: al descargar desde la DIAN con contraseña, el asistente leerá el archivo, le quitará la clave, lo guardará como <strong className="text-ink">[Prefijo-Número]_SIN_CLAVE.pdf</strong> y eliminará el archivo con clave.
                 </p>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <label className="inline-flex items-center gap-1.5 text-[11px] font-bold text-teal-deep cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={deleteOriginalLocked}
+                      onChange={(e) => setDeleteOriginalLocked(e.target.checked)}
+                      className="size-3.5 rounded border-line text-teal accent-teal cursor-pointer"
+                    />
+                    <span>Eliminar archivo original con clave al guardar _SIN_CLAVE.pdf</span>
+                  </label>
+                </div>
               </div>
             </div>
             <div className="shrink-0 flex flex-wrap items-center gap-2">

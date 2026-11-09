@@ -112,6 +112,16 @@ describe("DIAN CUFE & PDF Unlocker Utilities", () => {
       }),
       "FE-29159.pdf",
     );
+
+    // 4. Con sufijo _SIN_CLAVE para el vigilante de descargas
+    assert.strictEqual(
+      inferInvoiceDocFileName({
+        originalFileName: "ShowDocumentToPublic.pdf",
+        preferredDocNumero: "FE-29159",
+        includeSinClaveSuffix: true,
+      }),
+      "FE-29159_SIN_CLAVE.pdf",
+    );
   });
 
   it("mantiene el paquete ZIP descargable sincronizado con la versión más reciente de extension-dian-autofill/", () => {

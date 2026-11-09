@@ -1139,48 +1139,9 @@ async function fetchAndUnlockUrl(url) {
   }
 }
 
-// 1. En onCreated: si es una descarga de DIAN o Azure Blob (el PDF con clave),
-// CANCELARLA INMEDIATAMENTE para que no se guarde con clave en el disco.
-if (chromeApi && chromeApi.downloads && chromeApi.downloads.onCreated) {
-  chromeApi.downloads.onCreated.addListener(function (downloadItem) {
-    const url = String(downloadItem.url || "");
-    const finalUrl = String(downloadItem.finalUrl || "");
-
-    const isOurUnlockedDownload =
-      url.startsWith("data:application/pdf") ||
-      url.startsWith("blob:chrome-extension:") ||
-      downloadItem.byExtensionId === chromeApi.runtime.id;
-
-    if (isOurUnlockedDownload) {
-      return;
-    }
-
-    const isDianLockedDownload =
-      url.includes("dian.gov.co") ||
-      url.includes("blob.core.windows.net") ||
-      finalUrl.includes("dian.gov.co") ||
-      finalUrl.includes("blob.core.windows.net");
-
-    if (isDianLockedDownload) {
-      // Cancelar el archivo con clave
-      try {
-        chromeApi.downloads.cancel(downloadItem.id, function () {
-          if (chromeApi.downloads.erase) {
-            chromeApi.downloads.erase({ id: downloadItem.id }, function () {});
-          }
-        });
-      } catch {}
-
-      // Desbloquearlo y entregarlo sin contraseña
-      const targetFetchUrl = finalUrl && finalUrl.startsWith("http") ? finalUrl : url;
-      fetchAndUnlockUrl(targetFetchUrl);
-    }
-  });
-}
-
-// 2. En onDeterminingFilename:
-// Si es nuestro PDF desbloqueado (data: o blob), asegurar el nombre Prefijo-Numero.pdf.
-// Si por alguna razón llegó el archivo bloqueado de la DIAN, cancelarlo.
+// En onDeterminingFilename:
+// Si es nuestro PDF desbloqueado (data: o blob), asegurar el nombre de la factura.
+// Si es la descarga de la DIAN, sugerir el nombre Prefijo-Numero.pdf sin bloquear ni cancelar la descarga.
 if (chromeApi && chromeApi.downloads && chromeApi.downloads.onDeterminingFilename) {
   chromeApi.downloads.onDeterminingFilename.addListener(function (downloadItem, suggest) {
     const url = String(downloadItem.url || "");
@@ -1193,26 +1154,27 @@ if (chromeApi && chromeApi.downloads && chromeApi.downloads.onDeterminingFilenam
 
     if (isOurUnlockedDownload) {
       suggest({
-        filename: currentInvoiceMetadata.filename || "Factura_DIAN.pdf",
+        filename: currentInvoiceMetadata.filename || "Factura_DIAN_SIN_CLAVE.pdf",
         conflictAction: "uniquify",
       });
       return false;
     }
 
-    const isDianLockedDownload =
-      url.includes("dian.gov.co") ||
+    const isDianDownload =
+      url.includes("catalogo-vpfe.dian.gov.co") ||
       url.includes("blob.core.windows.net") ||
+      (url.includes("dian.gov.co") && (url.includes(".pdf") || url.includes("descarga") || url.includes("document"))) ||
       finalUrl.includes("blob.core.windows.net");
 
-    if (isDianLockedDownload) {
-      try {
-        chromeApi.downloads.cancel(downloadItem.id, function () {});
-      } catch {}
-      // No retrasar el navegador
-      suggest();
+    if (isDianDownload && currentInvoiceMetadata.filename) {
+      suggest({
+        filename: currentInvoiceMetadata.filename,
+        conflictAction: "uniquify",
+      });
       return false;
     }
 
+    suggest();
     return false;
   });
 }

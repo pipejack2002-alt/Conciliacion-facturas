@@ -79,12 +79,11 @@
     } catch {}
   }
 
-  // 1. Interceptar window.open en la página de detalle del documento
+  // 1. Escuchar window.open en la página de detalle del documento sin bloquear la descarga
   const origWindowOpen = window.open;
   window.open = function (url) {
     if (isShowDocumentPage() && url && typeof url === "string" && !url.startsWith("blob:")) {
       notifyCapturedUrl(url);
-      return null;
     }
     return origWindowOpen.apply(this, arguments);
   };

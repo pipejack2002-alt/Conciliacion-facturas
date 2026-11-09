@@ -1198,8 +1198,6 @@
   let cachedUnlockedBytes = null;
   let cachedLockedBytes = null;
   let cachedUnlockedFileName = "Factura_DIAN.pdf";
-  let autoUnlockStarted = false;
-  let allowNativeClick = false;
   let nativeClickTriggered = false;
 
   function hasPdfOrZipSignature(u8) {
@@ -1650,13 +1648,9 @@
 
     if (linkEl && !nativeClickTriggered) {
       nativeClickTriggered = true;
-      allowNativeClick = true;
       try {
         linkEl.click();
       } catch {}
-      setTimeout(function () {
-        allowNativeClick = false;
-      }, 300);
     }
   }
 
@@ -1728,41 +1722,20 @@
     const linkEl = findDownloadPdfLink();
     if (!linkEl) return;
 
-    if (!linkEl.dataset.tributoappHooked) {
-      linkEl.dataset.tributoappHooked = "1";
-      linkEl.addEventListener(
-        "click",
-        function (e) {
-          if (allowNativeClick) {
-            return;
-          }
-          if (cachedUnlockedBytes) {
-            e.preventDefault();
-            e.stopPropagation();
-            const clickMeta = extractPageInvoiceMetadata();
-            triggerBrowserDownload(cachedUnlockedBytes, cachedUnlockedFileName, clickMeta.cufe, true);
-            return;
-          }
-          // Permitir que el clic nativo ocurra si aún no tenemos los bytes en memoria;
-          // background.js interceptará la descarga bloqueada, la cancelará y nos enviará los bytes para desbloquearla.
-          const meta = extractPageInvoiceMetadata();
-          cachedUnlockedFileName = meta.unlockedFileName;
-          updateBannerState(
-            "loading",
-            "⏳ Interceptando descarga de " +
-              cachedUnlockedFileName +
-              " para eliminar la contraseña automáticamente...",
-            {}
-          );
-        },
-        true
-      );
-    }
+    const meta = extractPageInvoiceMetadata();
+    cachedUnlockedFileName = meta.unlockedFileName;
+    syncBackgroundInvoiceFilename(meta.unlockedFileName, meta.passwords, meta.cufe);
 
-    if (!autoUnlockStarted) {
-      autoUnlockStarted = true;
-      processDownloadAndUnlock(null, [], true);
-    }
+    // No interceptar ni bloquear el clic nativo del enlace de la DIAN.
+    // El usuario puede descargarlo normalmente y elegir su carpeta.
+    // El vigilante del Conciliador o el botón del banner se encargarán de quitarle la contraseña y eliminar el archivo con clave.
+    updateBannerState(
+      "idle",
+      "💡 Descarga tu factura normalmente con el botón oficial de abajo. Si tienes conectada tu carpeta en el Conciliador, se guardará como " +
+        cachedUnlockedFileName.replace(/\.pdf$/i, "") +
+        "_SIN_CLAVE.pdf y se eliminará el archivo con clave.",
+      {}
+    );
   }
 
   // Escuchar bytes o URLs interceptadas desde background.js (Service Worker)
