@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { extractText } from "unpdf";
+import { getDocumentProxy, extractText } from "unpdf";
+import { decryptPdfNativeBytes, md5, rc4 } from "./pdf-native-decrypt.ts";
 import {
   getNitSinDv,
   extractNitPasswordVariants,
@@ -102,5 +103,129 @@ describe("DIAN CUFE & PDF Unlocker Utilities", () => {
     assert.strictEqual(lines.length, 2);
     assert.strictEqual(lines[0], "ENCABEZADO FACTURA");
     assert.ok(lines[1].includes("DISCO DE CORTE") && lines[1].includes("$48.000"));
+  });
+
+  it("desbloquea nativamente un PDF encriptado con NIT (ISO 32000-1) conservando el 100% del texto vectorial original sin convertir a imagen", async () => {
+    const PADDING = new Uint8Array([
+      0x28, 0xbf, 0x4e, 0x5e, 0x4e, 0x75, 0x8a, 0x41,
+      0x64, 0x00, 0x4e, 0x56, 0xff, 0xfa, 0x01, 0x08,
+      0x2e, 0x2e, 0x00, 0xb6, 0xd0, 0x68, 0x3e, 0x80,
+      0x2f, 0x0c, 0xa9, 0xfe, 0x64, 0x53, 0x69, 0x7a,
+    ]);
+    const pwd = new TextEncoder().encode("901260460");
+    const paddedPwd = new Uint8Array(32);
+    paddedPwd.set(pwd);
+    paddedPwd.set(PADDING.subarray(0, 32 - pwd.length), pwd.length);
+
+    let ownerHash = md5(paddedPwd);
+    for (let i = 0; i < 50; i++) ownerHash = md5(ownerHash);
+    let oValue: Uint8Array = new Uint8Array(paddedPwd);
+    for (let i = 0; i <= 19; i++) {
+      const tk = ownerHash.map((b) => b ^ i);
+      oValue = rc4(tk, oValue);
+    }
+
+    const id0 = new Uint8Array(16).fill(0x42);
+    const P = -4;
+    const pBytes = new Uint8Array([P & 0xff, (P >>> 8) & 0xff, (P >>> 16) & 0xff, (P >>> 24) & 0xff]);
+    const keyInput = new Uint8Array(32 + 32 + 4 + 16);
+    keyInput.set(paddedPwd, 0);
+    keyInput.set(oValue, 32);
+    keyInput.set(pBytes, 64);
+    keyInput.set(id0, 68);
+    let fileKey = md5(keyInput);
+    for (let i = 0; i < 50; i++) fileKey = md5(fileKey);
+
+    const uInput = new Uint8Array(48);
+    uInput.set(PADDING, 0);
+    uInput.set(id0, 32);
+    let uVal = rc4(fileKey, md5(uInput));
+    for (let i = 1; i <= 19; i++) {
+      const tk = fileKey.map((b) => b ^ i);
+      uVal = rc4(tk, uVal);
+    }
+    const uFull = new Uint8Array(32);
+    uFull.set(uVal, 0);
+
+    const plainStream = new TextEncoder().encode(
+      "BT /F1 12 Tf 72 700 Td (Factura FE-29159 ABRASIVOS DE LA COSTA LTDA NIT 802009158) Tj ET",
+    );
+    const objKeyIn = new Uint8Array(16 + 5);
+    objKeyIn.set(fileKey, 0);
+    objKeyIn.set([4, 0, 0, 0, 0], 16);
+    const obj4Key = md5(objKeyIn);
+    const encStream = rc4(obj4Key, plainStream);
+
+    const toHex = (u8: Uint8Array) =>
+      Array.from(u8)
+        .map((b) => b.toString(16).padStart(2, "0").toUpperCase())
+        .join("");
+    const idHex = toHex(id0);
+    const oHex = toHex(oValue);
+    const uHex = toHex(uFull);
+
+    const parts: Uint8Array[] = [];
+    let offset = 0;
+    const objs: Record<number, number> = {};
+    const add = (s: string) => {
+      const b = new TextEncoder().encode(s);
+      parts.push(b);
+      offset += b.length;
+    };
+    const addB = (b: Uint8Array) => {
+      parts.push(b);
+      offset += b.length;
+    };
+
+    add("%PDF-1.4\n");
+    objs[1] = offset;
+    add("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+    objs[2] = offset;
+    add("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+    objs[3] = offset;
+    add(
+      "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n",
+    );
+    objs[4] = offset;
+    add(`4 0 obj\n<< /Length ${encStream.length} >>\nstream\n`);
+    addB(encStream);
+    add("\nendstream\nendobj\n");
+    objs[5] = offset;
+    add("5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n");
+    objs[6] = offset;
+    add(
+      `6 0 obj\n<< /Filter /Standard /V 2 /R 3 /Length 128 /P -4 /O <${oHex}> /U <${uHex}> >>\nendobj\n`,
+    );
+
+    const xrefPos = offset;
+    add("xref\n0 7\n0000000000 65535 f \r\n");
+    for (let i = 1; i <= 6; i++) add(`${String(objs[i]).padStart(10, "0")} 00000 n \r\n`);
+    add(
+      `trailer\n<< /Size 7 /Root 1 0 R /Encrypt 6 0 R /ID [<${idHex}> <${idHex}>] >>\nstartxref\n${xrefPos}\n%%EOF\n`,
+    );
+
+    const encryptedPdf = new Uint8Array(offset);
+    let p = 0;
+    for (const chunk of parts) {
+      encryptedPdf.set(chunk, p);
+      p += chunk.length;
+    }
+
+    // 1. Verificar que el PDF original pide contraseña
+    await assert.rejects(async () => {
+      await getDocumentProxy(encryptedPdf.slice());
+    });
+
+    // 2. Desencriptar vectorialmente usando los NIT candidatos
+    const decrypted = await decryptPdfNativeBytes(encryptedPdf, ["802009158", "901260460"]);
+    assert.strictEqual(decrypted.unlocked, true);
+    assert.strictEqual(decrypted.wasEncrypted, true);
+    assert.strictEqual(decrypted.passwordUsed, "901260460");
+
+    // 3. Verificar que abre SIN contraseña y conserva el texto vectorial original
+    const doc = await getDocumentProxy(decrypted.pdfBytes.slice());
+    const extracted = await extractText(doc, { mergePages: true });
+    await doc.loadingTask?.destroy();
+    assert.ok(extracted.text.includes("Factura FE-29159 ABRASIVOS DE LA COSTA LTDA NIT 802009158"));
   });
 });

@@ -1,4 +1,5 @@
 import { getDocumentProxy, extractText } from "unpdf";
+import { decryptPdfNativeBytes } from "./pdf-native-decrypt.ts";
 
 export const DIAN_SEARCH_DOCUMENT_URL =
   "https://catalogo-vpfe.dian.gov.co/User/SearchDocument";
@@ -671,9 +672,30 @@ export async function unlockDianPdfBuffer(
       }
     }
 
-    // Construir el nuevo PDF sin contraseña y CON CAPA DE TEXTO SELECCIONABLE
-    const unlockedPdfBytes =
-      jpegPages.length > 0 ? buildUnencryptedPdfFromJpegs(jpegPages) : rawBytes.slice();
+    // 1. Intentar desencriptación vectorial nativa (ISO 32000-1) para conservar 100% fuentes, tablas y texto vectorial original sin convertir a imagen
+    let unlockedPdfBytes: Uint8Array | null = null;
+    if (!wasEncrypted) {
+      unlockedPdfBytes = rawBytes.slice();
+    } else {
+      try {
+        const pwdList = matchedPassword
+          ? [matchedPassword, ...candidates.map((c) => c.password)]
+          : candidates.map((c) => c.password);
+        const nativeRes = await decryptPdfNativeBytes(rawBytes, pwdList);
+        if (nativeRes.unlocked && nativeRes.pdfBytes.byteLength > 64) {
+          const checkDoc = await getDocumentProxy(nativeRes.pdfBytes.slice());
+          await checkDoc.loadingTask?.destroy();
+          unlockedPdfBytes = nativeRes.pdfBytes;
+        }
+      } catch {
+        // Respaldo: reconstrucción híbrida si algún PDF no estándar falla en modo nativo
+      }
+    }
+
+    if (!unlockedPdfBytes) {
+      unlockedPdfBytes =
+        jpegPages.length > 0 ? buildUnencryptedPdfFromJpegs(jpegPages) : rawBytes.slice();
+    }
 
     const baseName = originalFileName.replace(/\.pdf$/i, "");
     const unlockedFileName = baseName.endsWith("_SIN_CLAVE")
