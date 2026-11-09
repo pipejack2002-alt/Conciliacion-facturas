@@ -4,6 +4,7 @@ import {
   EXTENSION_VERSION,
   EXTENSION_MANIFEST_JSON,
   EXTENSION_BACKGROUND_JS,
+  EXTENSION_PAGE_HOOK_JS,
   EXTENSION_CONTENT_JS,
 } from "./dian-extension-source.ts";
 
@@ -958,6 +959,7 @@ export function buildDianExtensionZipBytes(): Uint8Array {
   const files = [
     { name: "manifest.json", data: encoder.encode(EXTENSION_MANIFEST_JSON) },
     { name: "background.js", data: encoder.encode(EXTENSION_BACKGROUND_JS) },
+    { name: "page-hook.js", data: encoder.encode(EXTENSION_PAGE_HOOK_JS) },
     { name: "content.js", data: encoder.encode(EXTENSION_CONTENT_JS) },
     { name: "INSTRUCCIONES_INSTALACION.txt", data: encoder.encode(readmeTxt) },
   ];

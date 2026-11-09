@@ -1,11 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Autollenado y Desbloqueador DIAN (Conciliador Fiscal)",
-  "version": "2.1.0",
-  "description": "Autollena CUFE y NIT sin DV en la DIAN y descarga el PDF de la factura YA DESBLOQUEADO guardado con el Prefijo y Número de Factura (ej. FE-29159.pdf).",
-  "permissions": [
-    "downloads"
-  ],
+  "name": "Asistente DIAN Autollenado + Desbloqueo PDF — Conciliador TributoApp",
+  "version": "2.2.0",
+  "description": "Rellena CUFE y NIT sin DV en la DIAN y descarga el PDF YA DESBLOQUEADO con Prefijo y Número de Factura (ej. FE-29159.pdf).",
+  "permissions": ["downloads", "storage"],
   "host_permissions": [
     "https://catalogo-vpfe.dian.gov.co/*",
     "https://*.dian.gov.co/*",
@@ -17,7 +15,17 @@
   "content_scripts": [
     {
       "matches": [
-        "https://catalogo-vpfe.dian.gov.co/*"
+        "https://catalogo-vpfe.dian.gov.co/*",
+        "https://*.dian.gov.co/*"
+      ],
+      "js": ["page-hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://catalogo-vpfe.dian.gov.co/*",
+        "https://*.dian.gov.co/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"

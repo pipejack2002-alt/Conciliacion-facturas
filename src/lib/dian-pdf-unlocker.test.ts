@@ -22,6 +22,7 @@ import {
 import {
   EXTENSION_MANIFEST_JSON,
   EXTENSION_BACKGROUND_JS,
+  EXTENSION_PAGE_HOOK_JS,
   EXTENSION_CONTENT_JS,
 } from "./dian-extension-source.ts";
 
@@ -117,17 +118,20 @@ describe("DIAN CUFE & PDF Unlocker Utilities", () => {
     const extDir = join(process.cwd(), "extension-dian-autofill");
     const diskManifest = readFileSync(join(extDir, "manifest.json"), "utf8");
     const diskBackground = readFileSync(join(extDir, "background.js"), "utf8");
+    const diskPageHook = readFileSync(join(extDir, "page-hook.js"), "utf8");
     const diskContent = readFileSync(join(extDir, "content.js"), "utf8");
     const parsedManifest = JSON.parse(diskManifest);
 
     assert.strictEqual(EXTENSION_VERSION, parsedManifest.version);
     assert.strictEqual(EXTENSION_MANIFEST_JSON, diskManifest);
     assert.strictEqual(EXTENSION_BACKGROUND_JS, diskBackground);
+    assert.strictEqual(EXTENSION_PAGE_HOOK_JS, diskPageHook);
     assert.strictEqual(EXTENSION_CONTENT_JS, diskContent);
 
     const zipStr = new TextDecoder().decode(buildDianExtensionZipBytes());
     assert.ok(zipStr.includes(`v${EXTENSION_VERSION}`));
     assert.ok(zipStr.includes("SET_CURRENT_INVOICE_FILENAME"));
+    assert.ok(zipStr.includes("page-hook.js"));
   });
 
   it("genera un PDF 1.4 sin contraseña y con capa de texto digital 100% seleccionable y copiable", async () => {

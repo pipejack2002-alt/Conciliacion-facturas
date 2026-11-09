@@ -974,35 +974,46 @@
     };
   }
 
+  function isInsideOurBanner(el) {
+    return Boolean(
+      el &&
+        typeof el.closest === "function" &&
+        el.closest("#tributoapp-dian-unlocker-banner, #tributoapp-dian-helper")
+    );
+  }
+
   function getVisibleTextInputs() {
     return Array.from(
       document.querySelectorAll(
         'input[type="text"], input[type="search"], input[type="number"], input:not([type])'
       )
     ).filter(function (el) {
+      if (isInsideOurBanner(el)) return false;
       const style = window.getComputedStyle(el);
       return style.display !== "none" && style.visibility !== "hidden" && el.offsetParent !== null;
     });
   }
 
   function findCufeInput() {
-    return (
-      document.querySelector(
+    const candidates = Array.from(
+      document.querySelectorAll(
         'input#DocumentKey, input[name="DocumentKey"], input[name*="DocumentKey" i], input[placeholder*="CUFE" i], input[placeholder*="UUID" i]'
-      ) ||
-      getVisibleTextInputs()[0] ||
-      null
-    );
+      )
+    ).filter(function (el) {
+      return !isInsideOurBanner(el);
+    });
+    return candidates[0] || getVisibleTextInputs()[0] || null;
   }
 
   function findNitInput() {
-    return (
-      document.querySelector(
+    const candidates = Array.from(
+      document.querySelectorAll(
         'input#SenderCode, input[name="SenderCode"], input#Nit, input[name*="Nit" i], input[placeholder*="NIT" i], input[placeholder*="emisor" i]'
-      ) ||
-      getVisibleTextInputs()[1] ||
-      null
-    );
+      )
+    ).filter(function (el) {
+      return !isInsideOurBanner(el);
+    });
+    return candidates[0] || getVisibleTextInputs()[1] || null;
   }
 
   function setInputValue(input, value) {
@@ -1020,7 +1031,9 @@
   }
 
   function injectHelperBar(nitInput, data) {
-    if (!nitInput || document.getElementById("tributoapp-dian-helper")) return;
+    if (!nitInput || isInsideOurBanner(nitInput) || document.getElementById("tributoapp-dian-helper")) {
+      return;
+    }
     const bar = document.createElement("div");
     bar.id = "tributoapp-dian-helper";
     bar.style.cssText =
@@ -1068,6 +1081,28 @@
   let cachedLockedBytes = null;
   let cachedUnlockedFileName = "Factura_DIAN.pdf";
   let autoUnlockStarted = false;
+  let allowNativeClick = false;
+  let nativeClickTriggered = false;
+
+  function hasPdfOrZipSignature(u8) {
+    if (!u8 || u8.byteLength < 8) return false;
+    if (u8[0] === 0x50 && u8[1] === 0x4b && u8[2] === 0x03 && u8[3] === 0x04) {
+      return true;
+    }
+    const limit = Math.min(u8.byteLength - 5, 1024);
+    for (let i = 0; i <= limit; i++) {
+      if (
+        u8[i] === 0x25 &&
+        u8[i + 1] === 0x50 &&
+        u8[i + 2] === 0x44 &&
+        u8[i + 3] === 0x46 &&
+        u8[i + 4] === 0x2d
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   function formatInvoicePrefixAndNumber(rawSerie, rawFolio, fallbackDoc) {
     const cleanSerie = String(rawSerie || "")
@@ -1117,7 +1152,7 @@
   /**
    * Extrae todos los NIT visibles en la página de detalle de la DIAN
    * (DATOS DEL EMISOR -> NIT: 802009158, DATOS DEL RECEPTOR -> NIT: 901260460),
-   * además de Serie y Folio para guardar el PDF con el Prefijo y Número de Factura (ej. FE-29159.pdf).
+   * el CUFE del documento y Serie/Folio para guardar el PDF como Prefijo-Número.pdf (ej. FE-29159.pdf).
    */
   function extractPageInvoiceMetadata() {
     const bodyText = document.body ? document.body.innerText || "" : "";
@@ -1143,6 +1178,10 @@
       addNitCandidate(m[1]);
     }
 
+    // Extraer CUFE visible en la página (ej. CUFE: 3df1a8d8c0baf1d8...)
+    const cufeMatch = bodyText.match(/CUFE\s*:\s*([0-9a-fA-F]{40,128})/i);
+    const pageCufe = (cufeMatch && cufeMatch[1] ? cufeMatch[1].trim() : "") || params.cufe || "";
+
     // Extraer Serie y Folio (ej. Serie: FE, Folio: 29159) sin saltar de línea si Serie viene vacía
     const serieMatch = bodyText.match(/Serie[ \t]*:[ \t]*([^\r\n]+)/i);
     const folioMatch = bodyText.match(/Folio[ \t]*:[ \t]*([^\r\n]+)/i);
@@ -1156,6 +1195,7 @@
     syncBackgroundInvoiceFilename(fileName);
 
     return {
+      cufe: pageCufe,
       passwords: Array.from(candidates),
       docLabel: docPrefix,
       unlockedFileName: fileName,
@@ -1163,16 +1203,19 @@
   }
 
   function findDownloadPdfLink() {
-    const links = Array.from(document.querySelectorAll("a, button"));
+    const links = Array.from(document.querySelectorAll("a, button, [role='button']"));
     for (let i = 0; i < links.length; i++) {
       const el = links[i];
+      if (isInsideOurBanner(el)) continue;
       const txt = (el.textContent || "").trim();
       const href = el.getAttribute("href") || "";
+      const onclick = el.getAttribute("onclick") || "";
       if (
         /descargar\s*pdf/i.test(txt) ||
         /DownloadPDF/i.test(href) ||
         /GetGraphicRepresentation/i.test(href) ||
-        /DownloadDocument/i.test(href)
+        /DownloadDocument/i.test(href) ||
+        /DownloadPDF/i.test(onclick)
       ) {
         return el;
       }
@@ -1180,22 +1223,80 @@
     return null;
   }
 
-  function resolveDownloadUrl(el) {
-    if (!el) return null;
-    const rawHref = el.getAttribute("href") || el.href || "";
-    if (rawHref && rawHref !== "#" && !rawHref.toLowerCase().startsWith("javascript:")) {
+  function resolveCandidateDownloadUrls(el, cufe) {
+    const urls = [];
+    const seen = new Set();
+
+    function addUrl(raw) {
+      if (!raw || typeof raw !== "string") return;
+      const trimmed = raw.trim();
+      if (!trimmed || trimmed === "#" || trimmed.toLowerCase().startsWith("javascript:")) return;
       try {
-        return new URL(rawHref, window.location.href).href;
+        const full = new URL(trimmed, window.location.href).href;
+        if (!seen.has(full)) {
+          seen.add(full);
+          urls.push(full);
+        }
       } catch {}
     }
-    const onclick = el.getAttribute("onclick") || "";
-    const urlMatch = onclick.match(/['"](\/[^'"]+|https?:\/\/[^'"]+)['"]/);
-    if (urlMatch) {
-      try {
-        return new URL(urlMatch[1], window.location.href).href;
-      } catch {}
+
+    // 1. Inspeccionar atributos del botón/enlace y de sus contenedores cercanos
+    if (el) {
+      const nodes = [
+        el,
+        el.closest && el.closest("a, button, form, [onclick], [data-url], [data-href]"),
+        el.querySelector && el.querySelector("a, [href], [data-url], [onclick]"),
+      ].filter(Boolean);
+
+      for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        const attrNames = ["href", "data-url", "data-href", "data-download", "data-link", "formaction", "action"];
+        for (let j = 0; j < attrNames.length; j++) {
+          const val = node.getAttribute && node.getAttribute(attrNames[j]);
+          if (val) {
+            addUrl(val);
+            if (val.toLowerCase().startsWith("javascript:")) {
+              const jsUrlMatch = val.match(/['"](\/?Document\/[^'"]+|https?:\/\/[^'"]+)['"]/i);
+              if (jsUrlMatch) addUrl(jsUrlMatch[1]);
+            }
+          }
+        }
+        const onclick = (node.getAttribute && node.getAttribute("onclick")) || "";
+        if (onclick) {
+          const m = onclick.match(/['"](\/?Document\/[^'"]+|\/[^'"]+|https?:\/\/[^'"]+)['"]/i);
+          if (m) addUrl(m[1]);
+        }
+      }
     }
-    return null;
+
+    // 2. Buscar en el HTML y bloques <script> de la página cualquier ruta de descarga de la DIAN
+    try {
+      const html = document.documentElement ? document.documentElement.innerHTML || "" : "";
+      const docUrlMatches = html.matchAll(
+        /(\/?Document\/(?:DownloadPDF|GetGraphicRepresentation|DownloadDocument|DownloadZipFiles|GetFile|Download)[^'"\s<>)]*)/gi
+      );
+      for (const m of docUrlMatches) {
+        addUrl(m[1].replace(/&amp;/g, "&"));
+      }
+      const blobMatches = html.matchAll(
+        /(https?:\/\/[^'"\s<>)]*blob\.core\.windows\.net\/[^'"\s<>)]+)/gi
+      );
+      for (const m of blobMatches) {
+        addUrl(m[1].replace(/&amp;/g, "&"));
+      }
+    } catch {}
+
+    // 3. Construir las rutas oficiales del controlador DocumentController de la DIAN usando el CUFE (trackId)
+    if (cufe && cufe.length >= 32) {
+      const encodedCufe = encodeURIComponent(cufe);
+      addUrl("/Document/DownloadPDF?trackId=" + encodedCufe);
+      addUrl("/Document/GetGraphicRepresentation?trackId=" + encodedCufe);
+      addUrl("/Document/DownloadZipFiles?trackId=" + encodedCufe);
+      addUrl("/Document/DownloadPDF?documentKey=" + encodedCufe);
+      addUrl("/Document/DownloadPDF?cufe=" + encodedCufe);
+    }
+
+    return urls;
   }
 
   function base64ToUint8Array(base64) {
@@ -1211,7 +1312,8 @@
       const res = await fetch(url, { method: "GET", credentials: "include" });
       if (res.ok) {
         const buf = await res.arrayBuffer();
-        if (buf.byteLength > 100) return new Uint8Array(buf);
+        const u8 = new Uint8Array(buf);
+        if (hasPdfOrZipSignature(u8)) return u8;
       }
     } catch {}
 
@@ -1220,10 +1322,13 @@
       return new Promise(function (resolve, reject) {
         chromeApi.runtime.sendMessage({ type: "FETCH_DIAN_PDF", url: url }, function (resp) {
           if (resp && resp.ok && resp.base64) {
-            resolve(base64ToUint8Array(resp.base64));
-          } else {
-            reject(new Error((resp && resp.error) || "No se pudo descargar el PDF"));
+            const u8 = base64ToUint8Array(resp.base64);
+            if (hasPdfOrZipSignature(u8)) {
+              resolve(u8);
+              return;
+            }
           }
+          reject(new Error((resp && resp.error) || "No se pudo descargar el PDF desde " + url));
         });
       });
     }
@@ -1300,12 +1405,12 @@
       actionsEl.appendChild(btnDownloadUnlocked);
     }
 
-    // Selector manual por si el usuario quiere desbloquear cualquier otro PDF o probar otra clave
+    // Selector manual por si el usuario quiere probar otra clave
     const manualInput = document.createElement("input");
     manualInput.type = "text";
-    manualInput.placeholder = "Otro NIT sin DV (opcional)";
+    manualInput.placeholder = "Otra clave (opcional)";
     manualInput.style.cssText =
-      "padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;width:155px;background:#fff;color:#0f172a;";
+      "padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;width:145px;background:#fff;color:#0f172a;";
     actionsEl.appendChild(manualInput);
 
     const btnRetry = document.createElement("button");
@@ -1335,64 +1440,132 @@
     }
   }
 
-  async function processDownloadAndUnlock(explicitUrl, extraPasswords, forceTriggerDownload) {
-    const linkEl = findDownloadPdfLink();
-    const downloadUrl = explicitUrl || resolveDownloadUrl(linkEl);
+  async function unlockAndFinishWithRawBytes(rawPdfOrZipBytes, extraPasswords, forceTriggerDownload) {
     const meta = extractPageInvoiceMetadata();
     cachedUnlockedFileName = meta.unlockedFileName;
-
     const allPasswords = (extraPasswords || []).concat(meta.passwords);
+    const linkEl = findDownloadPdfLink();
+
+    const rawBytes = await extractPdfIfZip(rawPdfOrZipBytes);
+    cachedLockedBytes = rawBytes;
+
+    const result = await decryptPdfNativeBytes(rawBytes, allPasswords);
+    if (result.unlocked) {
+      cachedUnlockedBytes = result.pdfBytes;
+      if (forceTriggerDownload !== false) {
+        triggerBrowserDownload(cachedUnlockedBytes, cachedUnlockedFileName);
+      }
+      const msg = result.wasEncrypted
+        ? "✅ ¡Listo! " +
+          cachedUnlockedFileName +
+          " descargada YA DESBLOQUEADA (Contraseña eliminada: " +
+          (result.passwordUsed || "NIT") +
+          " · Texto 100% original seleccionable)"
+        : "✅ ¡Listo! " + cachedUnlockedFileName + " descargada (El PDF ya venía libre de contraseña)";
+      updateBannerState("success", msg, {});
+
+      if (linkEl) {
+        linkEl.innerHTML = "🔓 Descargar " + cachedUnlockedFileName + " (SIN CLAVE)";
+        linkEl.style.cssText +=
+          ";background:#0d9488 !important;color:#ffffff !important;padding:6px 12px !important;border-radius:6px !important;text-decoration:none !important;font-weight:700 !important;";
+      }
+      return true;
+    } else {
+      updateBannerState(
+        "error",
+        "⚠️ El PDF tiene una clave distinta a los NIT en pantalla (" +
+          allPasswords.slice(0, 3).join(", ") +
+          "). Escribe la clave a la derecha y dale a Desbloquear.",
+        {}
+      );
+      return false;
+    }
+  }
+
+  function triggerNativeDianDownload(linkEl) {
+    try {
+      window.postMessage(
+        {
+          source: "tributoapp-content",
+          type: "INSPECT_OR_TRIGGER_DIAN_DOWNLOAD",
+          triggerClick: true,
+        },
+        "*"
+      );
+    } catch {}
+
+    if (linkEl && !nativeClickTriggered) {
+      nativeClickTriggered = true;
+      allowNativeClick = true;
+      try {
+        linkEl.click();
+      } catch {}
+      setTimeout(function () {
+        allowNativeClick = false;
+      }, 300);
+    }
+  }
+
+  async function processDownloadAndUnlock(explicitUrl, extraPasswords, forceTriggerDownload) {
+    const linkEl = findDownloadPdfLink();
+    const meta = extractPageInvoiceMetadata();
+    cachedUnlockedFileName = meta.unlockedFileName;
+    const allPasswords = (extraPasswords || []).concat(meta.passwords);
+
     updateBannerState(
       "loading",
-      "⏳ Descargando " + meta.docLabel + " y eliminando contraseña automáticamente (NITs: " + allPasswords.slice(0, 3).join(", ") + ")...",
-      { downloadUrl }
+      "⏳ Descargando " +
+        cachedUnlockedFileName +
+        " y eliminando contraseña automáticamente (NITs: " +
+        allPasswords.slice(0, 3).join(", ") +
+        ")...",
+      { downloadUrl: explicitUrl }
     );
 
     try {
-      let rawBytes = cachedLockedBytes;
-      if (!rawBytes) {
-        if (!downloadUrl) {
-          throw new Error("No se encontró el enlace directo del PDF en esta página.");
-        }
-        const fetched = await fetchPdfBytesFromDian(downloadUrl);
-        rawBytes = await extractPdfIfZip(fetched);
-        cachedLockedBytes = rawBytes;
+      if (cachedLockedBytes) {
+        await unlockAndFinishWithRawBytes(cachedLockedBytes, extraPasswords, forceTriggerDownload);
+        return;
       }
 
-      const result = await decryptPdfNativeBytes(rawBytes, allPasswords);
-      if (result.unlocked) {
-        cachedUnlockedBytes = result.pdfBytes;
-        if (forceTriggerDownload !== false) {
-          triggerBrowserDownload(cachedUnlockedBytes, cachedUnlockedFileName);
+      const candidateUrls = [];
+      if (explicitUrl) candidateUrls.push(explicitUrl);
+      const discovered = resolveCandidateDownloadUrls(linkEl, meta.cufe);
+      for (let i = 0; i < discovered.length; i++) {
+        if (!candidateUrls.includes(discovered[i])) {
+          candidateUrls.push(discovered[i]);
         }
-        const msg = result.wasEncrypted
-          ? "✅ ¡Listo! " +
-            meta.docLabel +
-            " descargada YA DESBLOQUEADA (Contraseña eliminada: " +
-            (result.passwordUsed || "NIT") +
-            " · Texto 100% original seleccionable)"
-          : "✅ ¡Listo! " + meta.docLabel + " descargada (El PDF ya venía libre de contraseña)";
-        updateBannerState("success", msg, { downloadUrl });
-
-        // Actualizar también el botón original de la DIAN para que indique que ya descarga sin clave
-        if (linkEl) {
-          linkEl.innerHTML = "🔓 Descargar PDF SIN CLAVE";
-          linkEl.style.cssText += ";background:#0d9488 !important;color:#ffffff !important;padding:6px 12px !important;border-radius:6px !important;text-decoration:none !important;font-weight:700 !important;";
-        }
-      } else {
-        updateBannerState(
-          "error",
-          "⚠️ El PDF tiene una clave distinta a los NIT en pantalla (" +
-            allPasswords.slice(0, 3).join(", ") +
-            "). Escribe el NIT sin DV a la derecha y dale a Desbloquear.",
-          { downloadUrl }
-        );
       }
+
+      for (let i = 0; i < candidateUrls.length; i++) {
+        try {
+          const fetched = await fetchPdfBytesFromDian(candidateUrls[i]);
+          if (fetched && hasPdfOrZipSignature(fetched)) {
+            await unlockAndFinishWithRawBytes(fetched, extraPasswords, forceTriggerDownload);
+            return;
+          }
+        } catch {
+          // Probar siguiente URL candidata
+        }
+      }
+
+      // Si las rutas directas no entregaron el PDF, disparamos el clic nativo del botón de la DIAN
+      // para que background.js (chrome.downloads) o page-hook.js capturen los bytes reales y los desbloqueen.
+      updateBannerState(
+        "loading",
+        "⏳ Obteniendo " +
+          cachedUnlockedFileName +
+          " desde el servidor de la DIAN para quitarle la contraseña (" +
+          allPasswords.slice(0, 2).join(", ") +
+          ")...",
+        {}
+      );
+      triggerNativeDianDownload(linkEl);
     } catch (err) {
       updateBannerState(
         "error",
         "⚠️ Error al auto-desbloquear: " + String((err && err.message) || err),
-        { downloadUrl }
+        { downloadUrl: explicitUrl }
       );
     }
   }
@@ -1401,35 +1574,52 @@
     const linkEl = findDownloadPdfLink();
     if (!linkEl) return;
 
-    // Interceptar el clic en "Descargar PDF" para que SIEMPRE entregue el PDF desbloqueado
     if (!linkEl.dataset.tributoappHooked) {
       linkEl.dataset.tributoappHooked = "1";
       linkEl.addEventListener(
         "click",
         function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          if (cachedUnlockedBytes) {
-            triggerBrowserDownload(cachedUnlockedBytes, cachedUnlockedFileName);
-          } else {
-            processDownloadAndUnlock(resolveDownloadUrl(linkEl), [], true);
+          if (allowNativeClick) {
+            return;
           }
+          if (cachedUnlockedBytes) {
+            e.preventDefault();
+            e.stopPropagation();
+            triggerBrowserDownload(cachedUnlockedBytes, cachedUnlockedFileName);
+            return;
+          }
+          // Permitir que el clic nativo ocurra si aún no tenemos los bytes en memoria;
+          // background.js interceptará la descarga bloqueada, la cancelará y nos enviará los bytes para desbloquearla.
+          const meta = extractPageInvoiceMetadata();
+          cachedUnlockedFileName = meta.unlockedFileName;
+          updateBannerState(
+            "loading",
+            "⏳ Interceptando descarga de " +
+              cachedUnlockedFileName +
+              " para eliminar la contraseña automáticamente...",
+            {}
+          );
         },
         true
       );
     }
 
-    // Ejecutar automáticamente apenas carga la página ShowDocumentToPublic
     if (!autoUnlockStarted) {
       autoUnlockStarted = true;
-      processDownloadAndUnlock(resolveDownloadUrl(linkEl), [], true);
+      processDownloadAndUnlock(null, [], true);
     }
   }
 
-  // Escuchar si background.js interceptó una descarga directa desde la DIAN
+  // Escuchar bytes o URLs interceptadas desde background.js (Service Worker)
   if (chromeApi && chromeApi.runtime && chromeApi.runtime.onMessage) {
     chromeApi.runtime.onMessage.addListener(function (msg) {
-      if (msg && msg.type === "INTERCEPTED_DIAN_DOWNLOAD_URL" && msg.url) {
+      if (!msg) return;
+      if (msg.type === "INTERCEPTED_DIAN_PDF_BYTES" && msg.base64) {
+        const u8 = base64ToUint8Array(msg.base64);
+        if (hasPdfOrZipSignature(u8)) {
+          unlockAndFinishWithRawBytes(u8, [], true);
+        }
+      } else if (msg.type === "INTERCEPTED_DIAN_DOWNLOAD_URL" && msg.url) {
         if (cachedUnlockedBytes) {
           triggerBrowserDownload(cachedUnlockedBytes, cachedUnlockedFileName);
         } else {
@@ -1439,7 +1629,32 @@
     });
   }
 
+  // Escuchar bytes o URLs capturadas desde page-hook.js (MAIN World)
+  window.addEventListener("message", function (event) {
+    if (event.source !== window || !event.data || event.data.source !== "tributoapp-main-hook") {
+      return;
+    }
+    if (event.data.type === "CAPTURED_PDF_BYTES" && event.data.base64) {
+      if (!cachedUnlockedBytes) {
+        const u8 = base64ToUint8Array(event.data.base64);
+        if (hasPdfOrZipSignature(u8)) {
+          unlockAndFinishWithRawBytes(u8, [], true);
+        }
+      }
+    } else if (event.data.type === "CAPTURED_PDF_URL" && event.data.url) {
+      if (!cachedUnlockedBytes && !cachedLockedBytes) {
+        processDownloadAndUnlock(event.data.url, [], true);
+      }
+    }
+  });
+
   function runAll() {
+    // Si estamos en la vista del documento (ShowDocumentToPublic) donde aparece "Descargar PDF"
+    if (findDownloadPdfLink()) {
+      setupDocumentPageAutoUnlocker();
+      return;
+    }
+
     const data = parseParams();
     const cufeInput = findCufeInput();
     const nitInput = findNitInput();
@@ -1453,9 +1668,6 @@
     if (nitInput && (data.nit || data.emisor)) {
       injectHelperBar(nitInput, data);
     }
-
-    // Si estamos en la vista del documento (ShowDocumentToPublic) donde aparece "Descargar PDF"
-    setupDocumentPageAutoUnlocker();
   }
 
   runAll();
