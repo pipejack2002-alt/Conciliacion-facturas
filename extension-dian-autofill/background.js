@@ -17,7 +17,7 @@ let currentInvoiceMetadata = {
   updatedAt: 0,
 };
 
-let recentDownloadedKeys = new Set();
+let alreadyDownloadedInvoices = new Set();
 let inFlightUnlockUrls = new Set();
 
 // ============================================================================
@@ -1079,6 +1079,15 @@ function broadcastToTabs(message) {
 async function unlockAndSaveDianFile(rawBytes, sourceUrl) {
   const targetName = currentInvoiceMetadata.filename || "Factura_DIAN.pdf";
   const passwords = currentInvoiceMetadata.passwords || [];
+  const cufe = currentInvoiceMetadata.cufe || "";
+
+  const invoiceKey = (cufe || targetName).toLowerCase();
+  if (invoiceKey && alreadyDownloadedInvoices.has(invoiceKey)) {
+    return;
+  }
+  if (invoiceKey) {
+    alreadyDownloadedInvoices.add(invoiceKey);
+  }
 
   const pdfBytes = await extractPdfIfZip(rawBytes);
   const result = await decryptPdfNativeBytes(pdfBytes, passwords);
@@ -1086,8 +1095,6 @@ async function unlockAndSaveDianFile(rawBytes, sourceUrl) {
   const finalBytes = result.pdfBytes;
   const base64 = uint8ToBase64(finalBytes);
   const dataUrl = "data:application/pdf;base64," + base64;
-
-  recentDownloadedKeys.add(targetName.toLowerCase());
 
   chromeApi.downloads.download({
     url: dataUrl,
@@ -1102,9 +1109,11 @@ async function unlockAndSaveDianFile(rawBytes, sourceUrl) {
   broadcastToTabs({
     type: "DIAN_PDF_UNLOCKED_BROADCAST",
     filename: targetName,
+    cufe: cufe,
     password: result.passwordUsed,
     wasEncrypted: result.wasEncrypted,
     url: sourceUrl,
+    alreadySavedToDisk: true,
   });
 }
 
@@ -1225,6 +1234,13 @@ if (chromeApi && chromeApi.runtime && chromeApi.runtime.onMessage) {
       }
       currentInvoiceMetadata.updatedAt = Date.now();
       sendResponse({ ok: true, metadata: currentInvoiceMetadata });
+      return false;
+    }
+
+    if (msg.type === "MARK_INVOICE_ALREADY_DOWNLOADED") {
+      const key = (msg.cufe || msg.filename || "").toLowerCase();
+      if (key) alreadyDownloadedInvoices.add(key);
+      sendResponse({ ok: true });
       return false;
     }
 

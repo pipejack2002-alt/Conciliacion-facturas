@@ -1470,8 +1470,26 @@
     throw new Error("No fue posible obtener los bytes del PDF desde la DIAN.");
   }
 
-  function triggerBrowserDownload(pdfBytes, fileName) {
+  const alreadyDownloadedInvoices = new Set();
+
+  function triggerBrowserDownload(pdfBytes, fileName, cufe, force) {
+    const key = (cufe || fileName || "").toLowerCase();
+    if (!force && key && alreadyDownloadedInvoices.has(key)) {
+      return;
+    }
+    if (key) alreadyDownloadedInvoices.add(key);
+
     syncBackgroundInvoiceFilename(fileName);
+    if (chromeApi && chromeApi.runtime && chromeApi.runtime.sendMessage) {
+      try {
+        chromeApi.runtime.sendMessage({
+          type: "MARK_INVOICE_ALREADY_DOWNLOADED",
+          filename: fileName,
+          cufe: cufe || "",
+        });
+      } catch {}
+    }
+
     const blob = new Blob([pdfBytes], { type: "application/pdf" });
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1534,7 +1552,7 @@
       btnDownloadUnlocked.style.cssText =
         "background:#0d9488;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:800;cursor:pointer;box-shadow:0 2px 4px rgba(13,148,136,0.25);";
       btnDownloadUnlocked.onclick = function () {
-        triggerBrowserDownload(cachedUnlockedBytes, cachedUnlockedFileName);
+        triggerBrowserDownload(cachedUnlockedBytes, cachedUnlockedFileName, extra && extra.cufe, true);
       };
       actionsEl.appendChild(btnDownloadUnlocked);
     }
@@ -1567,7 +1585,9 @@
       btnLocked.onclick = function () {
         triggerBrowserDownload(
           cachedLockedBytes,
-          cachedUnlockedFileName.replace(/(?:_SIN_CLAVE)?\.pdf$/i, "_ORIGINAL.pdf")
+          cachedUnlockedFileName.replace(/(?:_SIN_CLAVE)?\.pdf$/i, "_ORIGINAL.pdf"),
+          extra && extra.cufe,
+          true
         );
       };
       actionsEl.appendChild(btnLocked);
@@ -1587,7 +1607,7 @@
     if (result.unlocked) {
       cachedUnlockedBytes = result.pdfBytes;
       if (forceTriggerDownload !== false) {
-        triggerBrowserDownload(cachedUnlockedBytes, cachedUnlockedFileName);
+        triggerBrowserDownload(cachedUnlockedBytes, cachedUnlockedFileName, meta.cufe, false);
       }
       const msg = result.wasEncrypted
         ? "✅ ¡Listo! " +
@@ -1719,7 +1739,8 @@
           if (cachedUnlockedBytes) {
             e.preventDefault();
             e.stopPropagation();
-            triggerBrowserDownload(cachedUnlockedBytes, cachedUnlockedFileName);
+            const clickMeta = extractPageInvoiceMetadata();
+            triggerBrowserDownload(cachedUnlockedBytes, cachedUnlockedFileName, clickMeta.cufe, true);
             return;
           }
           // Permitir que el clic nativo ocurra si aún no tenemos los bytes en memoria;
@@ -1760,6 +1781,8 @@
           processDownloadAndUnlock(msg.url, [], true);
         }
       } else if (msg.type === "DIAN_PDF_UNLOCKED_BROADCAST") {
+        const key = (msg.cufe || msg.filename || "").toLowerCase();
+        if (key) alreadyDownloadedInvoices.add(key);
         cachedUnlockedFileName = msg.filename || cachedUnlockedFileName;
         const msgText = msg.wasEncrypted
           ? "✅ ¡Listo! " + cachedUnlockedFileName + " descargada YA DESBLOQUEADA (Contraseña eliminada: " + (msg.password || "NIT") + " · Texto 100% original seleccionable)"
