@@ -61,6 +61,7 @@ export function DianCufeUnlockerModal({
   const [watchDirName, setWatchDirName] = useState<string>("");
   const [watchedCount, setWatchedCount] = useState<number>(0);
   const processedWatchFilesRef = useRef<Set<string>>(new Set());
+  const processSingleWatchedFileRef = useRef<(file: File, dirHandle: any) => Promise<void>>(() => Promise.resolve());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -125,45 +126,6 @@ export function DianCufeUnlockerModal({
     ],
   );
 
-  // Vigilante automático de la carpeta Descargas (File System Access API)
-  useEffect(() => {
-    if (!watchDirHandle || !open) return;
-    let cancelled = false;
-
-    const scanDirectory = async () => {
-      if (cancelled || !watchDirHandle) return;
-      try {
-        for await (const [entryName, entryHandle] of (watchDirHandle as any).entries()) {
-          if (cancelled) break;
-          if (entryHandle.kind !== "file") continue;
-          const lower = String(entryName).toLowerCase();
-          if (lower.endsWith("_sin_clave.pdf")) continue;
-          if (!lower.endsWith(".pdf") && !lower.endsWith(".zip")) continue;
-
-          const file: File = await entryHandle.getFile();
-          const fileKey = `${file.name}__${file.size}__${file.lastModified}`;
-          if (processedWatchFilesRef.current.has(fileKey)) continue;
-          processedWatchFilesRef.current.add(fileKey);
-
-          // Procesar automáticamente archivos descargados en los últimos 10 minutos
-          const ageMs = Date.now() - file.lastModified;
-          if (ageMs > 10 * 60 * 1000) continue;
-
-          await processSingleWatchedFile(file, watchDirHandle);
-        }
-      } catch {
-        // continuar vigilancia
-      }
-    };
-
-    const interval = setInterval(scanDirectory, 2000);
-    void scanDirectory();
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [watchDirHandle, open, candidatePasswords, activeRow]);
-
   const processSingleWatchedFile = async (file: File, dirHandle: any) => {
     try {
       setIsProcessing(true);
@@ -216,6 +178,47 @@ export function DianCufeUnlockerModal({
       setIsProcessing(false);
     }
   };
+
+  processSingleWatchedFileRef.current = processSingleWatchedFile;
+
+  // Vigilante automático de la carpeta Descargas (File System Access API)
+  useEffect(() => {
+    if (!watchDirHandle || !open) return;
+    let cancelled = false;
+
+    const scanDirectory = async () => {
+      if (cancelled || !watchDirHandle) return;
+      try {
+        for await (const [entryName, entryHandle] of (watchDirHandle as any).entries()) {
+          if (cancelled) break;
+          if (entryHandle.kind !== "file") continue;
+          const lower = String(entryName).toLowerCase();
+          if (lower.endsWith("_sin_clave.pdf")) continue;
+          if (!lower.endsWith(".pdf") && !lower.endsWith(".zip")) continue;
+
+          const file: File = await entryHandle.getFile();
+          const fileKey = `${file.name}__${file.size}__${file.lastModified}`;
+          if (processedWatchFilesRef.current.has(fileKey)) continue;
+          processedWatchFilesRef.current.add(fileKey);
+
+          // Procesar automáticamente archivos descargados en los últimos 10 minutos
+          const ageMs = Date.now() - file.lastModified;
+          if (ageMs > 10 * 60 * 1000) continue;
+
+          await processSingleWatchedFileRef.current(file, watchDirHandle);
+        }
+      } catch {
+        // continuar vigilancia
+      }
+    };
+
+    const interval = setInterval(scanDirectory, 2000);
+    void scanDirectory();
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [watchDirHandle, open]);
 
   const handleConnectDownloadsFolder = async () => {
     const win = window as any;
