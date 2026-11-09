@@ -29,3 +29,4 @@ writeFileSync(outPath, output, "utf8");
 console.log(
   `[sync-extension-source] Sincronizado src/lib/dian-extension-source.ts con extension-dian-autofill v${version}`,
 );
+
