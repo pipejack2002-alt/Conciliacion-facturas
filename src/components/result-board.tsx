@@ -19,6 +19,7 @@ import {
   Filter,
   RotateCcw,
   Trash2,
+  Unlock,
 } from "lucide-react";
 import { DeltaBanner, ReplaceBar } from "./audit-chrome";
 import { reviewOf, useConciliacion, type TabId } from "@/lib/store";
@@ -33,6 +34,7 @@ import { TaxSummaryModal } from "./tax-summary-modal";
 import { ExecutiveReportModal } from "./executive-report-modal";
 import { NominaAuditModal } from "./nomina-audit-modal";
 import { ActaConciliacionModal } from "./acta-conciliacion-modal";
+import { DianCufeUnlockerModal } from "./dian-cufe-unlocker-modal";
 import { getTaxInsight } from "@/lib/tax-insights";
 import type { ConciliacionRow, EstadoConciliacion } from "@/lib/types";
 import { cn } from "@/lib/cn";
@@ -108,6 +110,8 @@ export function ResultBoard() {
   const [showNominaModal, setShowNominaModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showActaModal, setShowActaModal] = useState(false);
+  const [showDianUnlockerModal, setShowDianUnlockerModal] = useState(false);
+  const [dianUnlockerRow, setDianUnlockerRow] = useState<ConciliacionRow | null>(null);
   const [materialidad, setMaterialidad] = useState<MaterialidadFilter>("todos");
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -382,6 +386,20 @@ export function ResultBoard() {
           <span>{movName}</span>
         </div>
         <div className="no-print flex flex-wrap items-center gap-2">
+          {/* Botón Asistente DIAN CUFE y Quitar Contraseña PDF */}
+          <button
+            type="button"
+            onClick={() => {
+              setDianUnlockerRow(selected ?? filtered.find((r) => Boolean(r.cufe)) ?? null);
+              setShowDianUnlockerModal(true);
+            }}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-teal px-3 text-xs font-bold text-white hover:bg-teal-deep transition shadow-sm cursor-pointer"
+            title="Consultar facturas en DIAN por CUFE con NIT sin DV y quitar contraseña a los PDF descargados"
+          >
+            <Unlock className="size-3.5" />
+            <span>DIAN CUFE / Quitar Clave PDF</span>
+          </button>
+
           {/* Botón Acta Formal */}
           <button
             type="button"
@@ -961,6 +979,10 @@ export function ResultBoard() {
                   selectedId={selectedId}
                   reviews={reviews}
                   onSelect={select}
+                  onOpenDianUnlocker={(r) => {
+                    setDianUnlockerRow(r);
+                    setShowDianUnlockerModal(true);
+                  }}
                   compact
                 />
               </details>
@@ -977,6 +999,10 @@ export function ResultBoard() {
               selectedId={selectedId}
               reviews={reviews}
               onSelect={select}
+              onOpenDianUnlocker={(r) => {
+                setDianUnlockerRow(r);
+                setShowDianUnlockerModal(true);
+              }}
               footer={formatMoneyExact(sumaDian)}
             />
           )}
@@ -989,8 +1015,19 @@ export function ResultBoard() {
           onClose={() => select(null)}
           onPrev={selectedIndex > 0 ? () => select(filtered[selectedIndex - 1].id) : undefined}
           onNext={selectedIndex < filtered.length - 1 ? () => select(filtered[selectedIndex + 1].id) : undefined}
+          onOpenDianUnlocker={(r) => {
+            setDianUnlockerRow(r);
+            setShowDianUnlockerModal(true);
+          }}
         />
       ) : null}
+
+      <DianCufeUnlockerModal
+        open={showDianUnlockerModal}
+        onClose={() => setShowDianUnlockerModal(false)}
+        result={result}
+        initialRow={dianUnlockerRow ?? selected}
+      />
 
       <HistoryModal
         open={showHistoryModal}

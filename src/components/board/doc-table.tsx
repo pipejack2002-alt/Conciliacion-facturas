@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { ArrowUp, ArrowDown, AlertTriangle, Sparkles, Copy, ShieldCheck } from "lucide-react";
+import { ArrowUp, ArrowDown, AlertTriangle, Sparkles, Copy, ShieldCheck, Unlock } from "lucide-react";
 import { BadgeEstado } from "../badge-estado";
 import { reviewOf, useConciliacion, type Review } from "@/lib/store";
 import { daysAgo, formatDate, formatMoneyExact } from "@/lib/format";
@@ -18,6 +18,7 @@ export function DocTable({
   selectedId,
   reviews,
   onSelect,
+  onOpenDianUnlocker,
   footer,
   compact,
 }: {
@@ -25,6 +26,7 @@ export function DocTable({
   selectedId: string | null;
   reviews: Record<string, Review>;
   onSelect: (id: string) => void;
+  onOpenDianUnlocker?: (row: ConciliacionRow) => void;
   footer?: string;
   compact?: boolean;
 }) {
@@ -913,17 +915,34 @@ export function DocTable({
                   </div>
                 </div>
               </td>
-              <td className="px-2 py-2 min-w-[85px]">
+              <td className="px-2 py-2 min-w-[105px]">
                 {r.cufe ? (
-                  <CopyButton
-                    text={r.cufe}
-                    label="Copiar CUFE"
-                    successMessage="CUFE copiado al portapapeles"
-                    className="group inline-flex items-center gap-1 max-w-[5.5rem] truncate rounded px-1 py-0.5 font-mono text-[10px] text-ink-muted hover:bg-teal-soft hover:text-teal transition cursor-pointer"
-                  >
-                    <Copy className="size-2.5 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity" />
-                    <span className="truncate">{r.cufe}</span>
-                  </CopyButton>
+                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <CopyButton
+                      text={r.cufe}
+                      label="Copiar CUFE"
+                      successMessage="CUFE copiado al portapapeles"
+                      className="group inline-flex items-center gap-1 max-w-[5.2rem] truncate rounded px-1 py-0.5 font-mono text-[10px] text-ink-muted hover:bg-teal-soft hover:text-teal transition cursor-pointer"
+                    >
+                      <Copy className="size-2.5 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity" />
+                      <span className="truncate">{r.cufe}</span>
+                    </CopyButton>
+                    {onOpenDianUnlocker && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard?.writeText(r.cufe).catch(() => {});
+                          onOpenDianUnlocker(r);
+                        }}
+                        title="Consultar factura en DIAN por CUFE y quitar contraseña al PDF descargado"
+                        className="inline-flex items-center gap-0.5 rounded border border-teal/40 bg-teal-soft/50 px-1.5 py-0.5 text-[10px] font-bold text-teal hover:bg-teal hover:text-white transition cursor-pointer shrink-0"
+                      >
+                        <Unlock className="size-2.5 shrink-0" />
+                        <span>DIAN</span>
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <span className="text-ink-subtle text-xs">—</span>
                 )}
