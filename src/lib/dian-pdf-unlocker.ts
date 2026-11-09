@@ -4,7 +4,8 @@ export const DIAN_SEARCH_DOCUMENT_URL =
   "https://catalogo-vpfe.dian.gov.co/User/SearchDocument";
 
 /**
- * Construye el enlace de consulta directa por QR/CUFE en el catálogo VPFE de la DIAN
+ * Construye el enlace de consulta directa por QR/CUFE en el catálogo VPFE de la DIAN.
+ * Este enlace lleva el CUFE embebido en el parámetro documentkey para no tener que digitarlo.
  */
 export function buildDianQrDirectUrl(cufe: string): string {
   const clean = (cufe || "").trim();
@@ -143,17 +144,60 @@ export function buildCandidatePasswordsForDianPdf(options: {
   return list;
 }
 
+export interface PdfSelectableTextItem {
+  str: string;
+  x: number;
+  y: number;
+  width: number;
+  fontSize: number;
+}
+
 export interface PdfJpegPageInput {
   jpegBytes: Uint8Array;
   pixelWidth: number;
   pixelHeight: number;
   ptWidth: number;
   ptHeight: number;
+  textItems?: PdfSelectableTextItem[];
 }
 
 /**
- * Construye un archivo binario PDF 1.4 estándar, multipágina y 100% SIN CONTRASEÑA
- * a partir de las páginas renderizadas en JPEG (/Filter /DCTDecode).
+ * Codifica una cadena Unicode al formato literal de PDF en WinAnsiEncoding (CP1252 / Latin-1)
+ * para que todo el texto (incluyendo tildes, eñes, símbolos de moneda, etc.) sea 100% seleccionable y copiable.
+ */
+export function encodeWinAnsiPdfString(input: string): string {
+  let out = "";
+  for (let i = 0; i < input.length; i++) {
+    let code = input.charCodeAt(i);
+    // Reemplazos comunes de tipografía Unicode a CP1252 / ASCII
+    if (code === 0x2013 || code === 0x2014 || code === 0x2212) code = 0x2d; // guiones
+    else if (code === 0x2018 || code === 0x2019) code = 0x27; // comillas simples
+    else if (code === 0x201c || code === 0x201d) code = 0x22; // comillas dobles
+    else if (code === 0x2022) code = 0xb7; // viñeta
+    else if (code === 0x20ac) code = 0x80; // euro
+
+    if (code === 0x28) {
+      out += "\\(";
+    } else if (code === 0x29) {
+      out += "\\)";
+    } else if (code === 0x5c) {
+      out += "\\\\";
+    } else if (code >= 0x20 && code <= 0x7e) {
+      out += String.fromCharCode(code);
+    } else if (code >= 0xa0 && code <= 0xff) {
+      out += "\\" + code.toString(8).padStart(3, "0");
+    } else if (code === 0x09 || code === 0x0a || code === 0x0d) {
+      out += " ";
+    } else if (code > 0xff) {
+      out += "?";
+    }
+  }
+  return out;
+}
+
+/**
+ * Construye un archivo binario PDF 1.4 estándar, multipágina, 100% SIN CONTRASEÑA
+ * y CON CAPA DE TEXTO DIGITAL SELECCIONABLE Y COPIABLE (Ctrl+C) sobre la representación visual exacta.
  */
 export function buildUnencryptedPdfFromJpegs(pages: PdfJpegPageInput[]): Uint8Array {
   if (pages.length === 0) {
@@ -178,11 +222,12 @@ export function buildUnencryptedPdfFromJpegs(pages: PdfJpegPageInput[]): Uint8Ar
   // Objetos del PDF:
   // 1: Catalog
   // 2: Pages
+  // 3: Font (Helvetica WinAnsiEncoding para capa de texto seleccionable)
   // Por cada página i (0..N-1):
-  //   pageObjId = 3 + i * 3
-  //   contentObjId = 4 + i * 3
-  //   imgObjId = 5 + i * 3
-  const totalObjects = 2 + pages.length * 3;
+  //   pageObjId = 4 + i * 3
+  //   contentObjId = 5 + i * 3
+  //   imgObjId = 6 + i * 3
+  const totalObjects = 3 + pages.length * 3;
   const offsets: number[] = new Array(totalObjects + 1).fill(0);
 
   // Cabecera PDF 1.4 con comentario binario estándar
@@ -193,34 +238,66 @@ export function buildUnencryptedPdfFromJpegs(pages: PdfJpegPageInput[]): Uint8Ar
   writeStr("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
 
   // Objeto 2: Pages
-  const kidsRef = pages.map((_, i) => `${3 + i * 3} 0 R`).join(" ");
+  const kidsRef = pages.map((_, i) => `${4 + i * 3} 0 R`).join(" ");
   offsets[2] = offset;
   writeStr(`2 0 obj\n<< /Type /Pages /Kids [ ${kidsRef} ] /Count ${pages.length} >>\nendobj\n`);
+
+  // Objeto 3: Fuente estándar Type1 Helvetica con WinAnsiEncoding (permite seleccionar y copiar todo el texto)
+  offsets[3] = offset;
+  writeStr(
+    "3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n",
+  );
 
   // Objetos por cada página
   for (let i = 0; i < pages.length; i++) {
     const p = pages[i];
-    const pageObjId = 3 + i * 3;
-    const contentObjId = 4 + i * 3;
-    const imgObjId = 5 + i * 3;
+    const pageObjId = 4 + i * 3;
+    const contentObjId = 5 + i * 3;
+    const imgObjId = 6 + i * 3;
 
     const ptW = Number(Math.max(72, p.ptWidth || 612).toFixed(2));
     const ptH = Number(Math.max(72, p.ptHeight || 792).toFixed(2));
     const pxW = Math.max(1, Math.round(p.pixelWidth));
     const pxH = Math.max(1, Math.round(p.pixelHeight));
 
-    // Page Object
+    // Page Object (incluye tanto el XObject de imagen como la fuente /F1 para selección de texto)
     offsets[pageObjId] = offset;
     writeStr(
       `${pageObjId} 0 obj\n` +
         `<< /Type /Page /Parent 2 0 R /MediaBox [ 0 0 ${ptW} ${ptH} ] ` +
-        `/Resources << /XObject << /Im0 ${imgObjId} 0 R >> >> ` +
+        `/Resources << /Font << /F1 3 0 R >> /XObject << /Im0 ${imgObjId} 0 R >> >> ` +
         `/Contents ${contentObjId} 0 R >>\n` +
         `endobj\n`,
     );
 
-    // Content Stream Object
-    const contentStream = `q\n${ptW} 0 0 ${ptH} 0 0 cm\n/Im0 Do\nQ\n`;
+    // Content Stream Object:
+    // 1) Dibuja la factura de alta resolución (/Im0 Do)
+    // 2) Superpone la capa de texto digital original en modo 3 Tr (invisible pero 100% seleccionable y copiable con el mouse)
+    let contentStream = `q\n${ptW} 0 0 ${ptH} 0 0 cm\n/Im0 Do\nQ\n`;
+    if (p.textItems && p.textItems.length > 0) {
+      contentStream += "BT\n3 Tr\n";
+      for (const item of p.textItems) {
+        const cleanStr = (item.str || "").trim();
+        if (!cleanStr) continue;
+        const encoded = encodeWinAnsiPdfString(item.str);
+        if (!encoded) continue;
+
+        const fontSize = Math.max(4, Math.min(72, Number((item.fontSize || 9).toFixed(2))));
+        const x = Number(Math.max(0, Math.min(ptW, item.x || 0)).toFixed(2));
+        const y = Number(Math.max(0, Math.min(ptH, item.y || 0)).toFixed(2));
+
+        // Ajustar escala horizontal (Tz) para que el ancho de selección con el cursor coincida con el texto visual
+        const estimatedWidth = Math.max(1, item.str.length * fontSize * 0.52);
+        const tz =
+          item.width && item.width > 1
+            ? Math.max(40, Math.min(240, Math.round((item.width / estimatedWidth) * 100)))
+            : 100;
+
+        contentStream += `${tz} Tz\n/F1 ${fontSize} Tf\n1 0 0 1 ${x} ${y} Tm\n(${encoded}) Tj\n`;
+      }
+      contentStream += "ET\n";
+    }
+
     const contentBytes = encoder.encode(contentStream);
     offsets[contentObjId] = offset;
     writeStr(`${contentObjId} 0 obj\n<< /Length ${contentBytes.byteLength} >>\nstream\n`);
@@ -261,6 +338,42 @@ export function buildUnencryptedPdfFromJpegs(pages: PdfJpegPageInput[]): Uint8Ar
     pos += chunk.byteLength;
   }
   return result;
+}
+
+/**
+ * Agrupa los fragmentos de texto de una página PDF en líneas legibles de arriba hacia abajo
+ * y de izquierda a derecha, para que el usuario pueda copiar descripciones, ítems y valores con 1 clic.
+ */
+export function groupTextItemsIntoLines(items: PdfSelectableTextItem[]): string[] {
+  if (!items || items.length === 0) return [];
+  const valid = items.filter((it) => it.str && it.str.trim().length > 0);
+  if (valid.length === 0) return [];
+
+  // En coordenadas PDF, Y crece de abajo hacia arriba; ordenamos de mayor Y (arriba) a menor Y (abajo)
+  const sorted = [...valid].sort((a, b) => {
+    if (Math.abs(b.y - a.y) > 3.5) return b.y - a.y;
+    return a.x - b.x;
+  });
+
+  const lines: Array<{ y: number; parts: Array<{ x: number; str: string }> }> = [];
+  for (const item of sorted) {
+    const last = lines[lines.length - 1];
+    if (last && Math.abs(last.y - item.y) <= 3.5) {
+      last.parts.push({ x: item.x, str: item.str.trim() });
+    } else {
+      lines.push({ y: item.y, parts: [{ x: item.x, str: item.str.trim() }] });
+    }
+  }
+
+  return lines
+    .map((line) =>
+      line.parts
+        .sort((a, b) => a.x - b.x)
+        .map((p) => p.str)
+        .join("   ")
+        .trim(),
+    )
+    .filter((l) => l.length > 0);
 }
 
 /**
@@ -367,12 +480,13 @@ export interface UnlockedDianPdfResult {
   pageCount: number;
   previewDataUrls: string[];
   extractedText: string;
+  extractedLines: string[];
 }
 
 /**
  * Desbloquea un archivo PDF de factura electrónica de la DIAN probando automáticamente
  * el NIT del Receptor sin DV, el NIT del Emisor sin DV y los NIT de la sesión.
- * Devuelve un nuevo archivo PDF 100% libre de contraseña listo para descargar o visualizar.
+ * Devuelve un nuevo archivo PDF 100% libre de contraseña Y CON CAPA DE TEXTO SELECCIONABLE (Ctrl+C).
  */
 export async function unlockDianPdfBuffer(
   pdfBuffer: ArrayBuffer | Uint8Array,
@@ -442,22 +556,43 @@ export async function unlockDianPdfBuffer(
 
   try {
     const pageCount = doc.numPages;
-    let extractedText = "";
-    try {
-      const textRes = await extractText(doc, { mergePages: true });
-      extractedText = typeof textRes.text === "string" ? textRes.text : "";
-    } catch {
-      extractedText = "";
-    }
-
+    const allExtractedLines: string[] = [];
     const previewDataUrls: string[] = [];
     const jpegPages: PdfJpegPageInput[] = [];
     const isBrowser = typeof window !== "undefined" && typeof document !== "undefined";
 
-    if (isBrowser) {
-      for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-        const page = await doc.getPage(pageNum);
-        const viewport1x = page.getViewport({ scale: 1.0 });
+    for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+      const page = await doc.getPage(pageNum);
+      const viewport1x = page.getViewport({ scale: 1.0 });
+
+      // Extraer todos los fragmentos de texto digital con sus coordenadas exactas para incrustarlos
+      // como capa de texto seleccionable (Ctrl+C) en el PDF desbloqueado y en el panel de copia rápida.
+      const pageTextItems: PdfSelectableTextItem[] = [];
+      try {
+        const textContent = await page.getTextContent();
+        for (const rawItem of textContent.items as any[]) {
+          if (!rawItem || typeof rawItem.str !== "string" || !rawItem.str.trim()) continue;
+          const tr = Array.isArray(rawItem.transform) ? rawItem.transform : [1, 0, 0, 10, 0, 0];
+          const fontSize = Math.max(
+            4,
+            Math.hypot(Number(tr[2]) || 0, Number(tr[3]) || 0) || Number(rawItem.height) || 9,
+          );
+          pageTextItems.push({
+            str: rawItem.str,
+            x: Number(tr[4]) || 0,
+            y: Number(tr[5]) || 0,
+            width: Number(rawItem.width) || 0,
+            fontSize,
+          });
+        }
+      } catch {
+        // continuar si alguna página no tiene capa de texto
+      }
+
+      const pageLines = groupTextItemsIntoLines(pageTextItems);
+      allExtractedLines.push(...pageLines);
+
+      if (isBrowser) {
         // Escala 2.0 (~144 DPI) para nitidez fiscal de facturas electrónicas y códigos QR
         const scale = 2.0;
         const viewport = page.getViewport({ scale });
@@ -470,7 +605,6 @@ export async function unlockDianPdfBuffer(
           throw new Error("No se pudo crear el contexto gráfico para reconstruir el PDF.");
         }
 
-        // Fondo blanco limpio antes de renderizar la factura
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -488,11 +622,22 @@ export async function unlockDianPdfBuffer(
           pixelHeight: canvas.height,
           ptWidth: viewport1x.width,
           ptHeight: viewport1x.height,
+          textItems: pageTextItems,
         });
       }
     }
 
-    // Construir el nuevo PDF sin contraseña
+    let extractedText = allExtractedLines.join("\n");
+    if (!extractedText.trim()) {
+      try {
+        const textRes = await extractText(doc, { mergePages: true });
+        extractedText = typeof textRes.text === "string" ? textRes.text : "";
+      } catch {
+        extractedText = "";
+      }
+    }
+
+    // Construir el nuevo PDF sin contraseña y CON CAPA DE TEXTO SELECCIONABLE
     const unlockedPdfBytes =
       jpegPages.length > 0 ? buildUnencryptedPdfFromJpegs(jpegPages) : rawBytes.slice();
 
@@ -511,6 +656,7 @@ export async function unlockDianPdfBuffer(
       pageCount,
       previewDataUrls,
       extractedText,
+      extractedLines: allExtractedLines,
     };
   } finally {
     try {
@@ -538,4 +684,3 @@ export function downloadUnlockedPdf(item: UnlockedDianPdfResult, customName?: st
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
-
