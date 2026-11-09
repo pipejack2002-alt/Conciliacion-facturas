@@ -1,5 +1,10 @@
 import { getDocumentProxy, extractText } from "unpdf";
 import { decryptPdfNativeBytes } from "./pdf-native-decrypt.ts";
+import {
+  EXTENSION_MANIFEST_JSON,
+  EXTENSION_BACKGROUND_JS,
+  EXTENSION_CONTENT_JS,
+} from "./dian-extension-source.ts";
 
 export const DIAN_SEARCH_DOCUMENT_URL =
   "https://catalogo-vpfe.dian.gov.co/User/SearchDocument";
@@ -800,134 +805,17 @@ function crc32(data: Uint8Array): number {
 export function buildDianExtensionZipBytes(): Uint8Array {
   const encoder = new TextEncoder();
 
-  const manifestJson = JSON.stringify(
-    {
-      manifest_version: 3,
-      name: "Autollenado DIAN CUFE + NIT (Conciliador Fiscal)",
-      version: "1.0.0",
-      description:
-        "Rellena automáticamente el CUFE y el NIT sin DV en catalogo-vpfe.dian.gov.co/User/SearchDocument cuando abres una factura desde tu Conciliador DIAN.",
-      content_scripts: [
-        {
-          matches: ["https://catalogo-vpfe.dian.gov.co/*"],
-          js: ["content.js"],
-          run_at: "document_idle",
-        },
-      ],
-    },
-    null,
-    2,
-  );
-
-  const contentJs = `(function () {
-  var STORAGE_KEY_NIT = "tributoapp_dian_last_nit_sin_dv";
-  var STORAGE_KEY_EMISOR = "tributoapp_dian_last_emisor_sin_dv";
-
-  function parseParams() {
-    var search = new URLSearchParams(window.location.search);
-    var hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    var cufe = search.get("DocumentKey") || search.get("documentkey") || search.get("cufe") || hash.get("DocumentKey") || "";
-    var nit = search.get("nit") || search.get("Nit") || search.get("SenderCode") || hash.get("nit") || "";
-    var emisor = search.get("emisor") || search.get("nitEmisor") || hash.get("emisor") || "";
-
-    if (nit) { try { localStorage.setItem(STORAGE_KEY_NIT, nit.replace(/\\D+/g, "")); } catch (e) {} }
-    if (emisor) { try { localStorage.setItem(STORAGE_KEY_EMISOR, emisor.replace(/\\D+/g, "")); } catch (e) {} }
-
-    var savedNit = "";
-    var savedEmisor = "";
-    try {
-      savedNit = localStorage.getItem(STORAGE_KEY_NIT) || "";
-      savedEmisor = localStorage.getItem(STORAGE_KEY_EMISOR) || "";
-    } catch (e) {}
-
-    return {
-      cufe: cufe.trim(),
-      nit: (nit || savedNit).replace(/\\D+/g, ""),
-      emisor: (emisor || savedEmisor).replace(/\\D+/g, "")
-    };
-  }
-
-  function getVisibleTextInputs() {
-    return Array.from(document.querySelectorAll('input[type="text"], input[type="search"], input[type="number"], input:not([type])')).filter(function (el) {
-      var style = window.getComputedStyle(el);
-      return style.display !== "none" && style.visibility !== "hidden" && el.offsetParent !== null;
-    });
-  }
-
-  function findCufeInput() {
-    return document.querySelector('input#DocumentKey, input[name="DocumentKey"], input[name*="DocumentKey" i], input[placeholder*="CUFE" i]') || getVisibleTextInputs()[0] || null;
-  }
-
-  function findNitInput() {
-    return document.querySelector('input#SenderCode, input[name="SenderCode"], input#Nit, input[name*="Nit" i], input[placeholder*="NIT" i], input[placeholder*="emisor" i]') || getVisibleTextInputs()[1] || null;
-  }
-
-  function setInputValue(input, value) {
-    if (!input || !value) return;
-    var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-    if (setter) setter.call(input, value);
-    else input.value = value;
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-    input.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
-  }
-
-  function injectHelperBar(nitInput, data) {
-    if (!nitInput || document.getElementById("tributoapp-dian-helper")) return;
-    var bar = document.createElement("div");
-    bar.id = "tributoapp-dian-helper";
-    bar.style.cssText = "margin-top:8px;padding:8px 10px;border-radius:8px;background:#f0fdfa;border:1px solid #14b8a6;font-family:system-ui,sans-serif;font-size:12px;color:#0f172a;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;";
-    var status = document.createElement("span");
-    status.style.cssText = "font-weight:700;color:#0f766e;";
-    status.textContent = data.nit ? ("⚡ Autollenado listo (NIT: " + data.nit + ") — Solo dale clic a Buscar") : "⚡ Asistente Conciliador DIAN activo";
-    bar.appendChild(status);
-
-    var btnGroup = document.createElement("div");
-    btnGroup.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;";
-    if (data.nit) {
-      var btnReceptor = document.createElement("button");
-      btnReceptor.type = "button";
-      btnReceptor.textContent = "NIT Receptor: " + data.nit;
-      btnReceptor.style.cssText = "background:#0d9488;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;";
-      btnReceptor.onclick = function () { setInputValue(nitInput, data.nit); };
-      btnGroup.appendChild(btnReceptor);
-    }
-    if (data.emisor && data.emisor !== data.nit) {
-      var btnEmisor = document.createElement("button");
-      btnEmisor.type = "button";
-      btnEmisor.textContent = "NIT Emisor: " + data.emisor;
-      btnEmisor.style.cssText = "background:#e2e8f0;color:#0f172a;border:1px solid #cbd5e1;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;";
-      btnEmisor.onclick = function () { setInputValue(nitInput, data.emisor); };
-      btnGroup.appendChild(btnEmisor);
-    }
-    bar.appendChild(btnGroup);
-    if (nitInput.parentElement) nitInput.parentElement.appendChild(bar);
-  }
-
-  function runAutofill() {
-    var data = parseParams();
-    var cufeInput = findCufeInput();
-    var nitInput = findNitInput();
-    if (cufeInput && data.cufe && !cufeInput.value) setInputValue(cufeInput, data.cufe);
-    if (nitInput && data.nit && !nitInput.value) setInputValue(nitInput, data.nit);
-    if (nitInput && (data.nit || data.emisor)) injectHelperBar(nitInput, data);
-  }
-
-  runAutofill();
-  setTimeout(runAutofill, 300);
-  setTimeout(runAutofill, 900);
-})();\n`;
-
-  const readmeTxt = `COMO INSTALAR LA EXTENSION DE AUTOLLENADO DIAN EN CHROME O EDGE (EN 15 SEGUNDOS):
-1. Descomprime este archivo ZIP en una carpeta (o usa la carpeta "extension-dian-autofill" que ya está creada dentro de tu proyecto C:\\Apps\\CONCILIACION DIAN\\extension-dian-autofill).
+  const readmeTxt = `COMO INSTALAR O ACTUALIZAR LA EXTENSION DE AUTOLLENADO Y DESBLOQUEO DIAN v2.0.0 EN CHROME O EDGE:
+1. Descomprime este archivo ZIP en una carpeta (o selecciona directamente la carpeta "extension-dian-autofill" dentro de C:\\Apps\\CONCILIACION DIAN\\extension-dian-autofill).
 2. En Google Chrome abre: chrome://extensions  (o en Microsoft Edge abre: edge://extensions).
-3. Activa el interruptor "Modo de desarrollador" (arriba a la derecha en Chrome o a la izquierda en Edge).
-4. Haz clic en el botón "Cargar descomprimida" (Load unpacked) y selecciona la carpeta "extension-dian-autofill".
-5. ¡Listo! Ahora cada vez que hagas clic en el botón "DIAN" de tu aplicación, la pestaña de la DIAN se abrirá con el CUFE y el NIT sin DV ya escritos automáticamente en sus dos casillas, para que solo tengas que darle clic en "Buscar".\n`;
+3. Activa el interruptor "Modo de desarrollador" (arriba a la derecha).
+4. Si ya tenías la versión 1.0.0 instalada desde otra carpeta, elimínala con el botón "Quitar" y haz clic en "Cargar descomprimida" (Load unpacked) seleccionando la nueva carpeta (debe decir versión 2.0.0).
+5. ¡Listo! En la pantalla 1 autollena CUFE y NIT sin DV, y en la pantalla 2 descarga automáticamente el PDF YA DESBLOQUEADO (_SIN_CLAVE.pdf) conservando el 100% de su texto seleccionable.\n`;
 
   const files = [
-    { name: "manifest.json", data: encoder.encode(manifestJson) },
-    { name: "content.js", data: encoder.encode(contentJs) },
+    { name: "manifest.json", data: encoder.encode(EXTENSION_MANIFEST_JSON) },
+    { name: "background.js", data: encoder.encode(EXTENSION_BACKGROUND_JS) },
+    { name: "content.js", data: encoder.encode(EXTENSION_CONTENT_JS) },
     { name: "INSTRUCCIONES_INSTALACION.txt", data: encoder.encode(readmeTxt) },
   ];
 
@@ -1023,7 +911,7 @@ export function downloadDianAutofillExtensionZip(): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "extension-dian-autofill.zip";
+  a.download = "extension-dian-autofill-v2.zip";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
