@@ -1357,6 +1357,94 @@ describe("Motor de Conciliación Bancaria Automática (Extracto Bancario vs Cuen
     assert.strictEqual(res.summary.notasDebitoComisiones, 54900);
     assert.strictEqual(res.summary.notasDebitoGmf, 35120);
   });
+
+  it("debe conciliar un lote ACH numeroso (>5 comprobantes) en la misma fecha donde también hay pagos individuales PSE sin referencia", () => {
+    const extracto: BankExtractItem[] = [
+      {
+        id: "ach-lote-10",
+        fecha: "2026-10-06",
+        descripcion: "DEBITO AUTORIZADO POR ACH DEBITO POR LOTE 0000497860",
+        referencia: "00497860",
+        debito: 20955006.28,
+        credito: 0,
+      },
+      {
+        id: "pse-1",
+        fecha: "2026-10-06",
+        descripcion: "DEBITO POR PAGOS PSE Pago de Seguridad Social",
+        referencia: "8252205",
+        debito: 21270600,
+        credito: 0,
+      },
+      {
+        id: "pse-2",
+        fecha: "2026-10-06",
+        descripcion: "DEBITO POR PAGOS PSE Pago de Seguridad Social",
+        referencia: "8264056",
+        debito: 10781400,
+        credito: 0,
+      },
+    ];
+
+    const batchAmounts = [
+      1362074.54, 683876.34, 2029924, 1683500, 1190000,
+      273326.4, 5840101.12, 1400000, 3448288, 3043915.88,
+    ];
+
+    const libros: MovLine[] = [
+      ...batchAmounts.map((amt, i) => ({
+        cuenta: "11100512",
+        cuentaNombre: "BANCO CAJA SOCIAL",
+        comprobante: `G 002 0000000279${i}`,
+        fecha: "2026-10-06",
+        nit: "",
+        nombre: "",
+        descripcion: `PROVEEDOR LOTE ${i + 1}`,
+        cruce: "0000000000010",
+        referencia: "",
+        debito: 0,
+        credito: amt,
+        observacion: "",
+      })),
+      {
+        cuenta: "11100512",
+        cuentaNombre: "BANCO CAJA SOCIAL",
+        comprobante: "G 002 00000002807",
+        fecha: "2026-10-06",
+        nit: "",
+        nombre: "",
+        descripcion: "SEGURIDAD SOCIAL",
+        cruce: "0000000000010",
+        referencia: "",
+        debito: 0,
+        credito: 10781400,
+        observacion: "",
+      },
+      {
+        cuenta: "11100512",
+        cuentaNombre: "BANCO CAJA SOCIAL",
+        comprobante: "G 002 00000002808",
+        fecha: "2026-10-06",
+        nit: "",
+        nombre: "",
+        descripcion: "SEGURIDAD SOCIAL",
+        cruce: "0000000000010",
+        referencia: "",
+        debito: 0,
+        credito: 21270600,
+        observacion: "",
+      },
+    ];
+
+    const res = conciliarBancos(extracto, libros, 60000000, 60000000);
+    assert.strictEqual(res.summary.cuadrado, true);
+    assert.strictEqual(res.summary.diferenciaCuadre, 0);
+    assert.strictEqual(res.summary.totalConciliados, 3);
+    assert.strictEqual(res.summary.chequesEnTransito, 0);
+    assert.strictEqual(res.summary.notasDebitoNoRegistradas, 0);
+    const loteRow = res.rows.find((r) => r.itemsLibrosLote && r.itemsLibrosLote.length === 10);
+    assert.ok(loteRow, "Debe conciliar el lote ACH de 10 comprobantes tras cruzar los 2 PSE individuales");
+  });
 });
 
 

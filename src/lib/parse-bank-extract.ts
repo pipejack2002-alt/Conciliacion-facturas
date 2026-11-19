@@ -94,8 +94,15 @@ function cleanMoneyNumber(raw: unknown): number {
   } else if (hasDot && !hasComma) {
     const parts = s.split(".");
     if (parts.length > 2) {
-      // 1.500.000 -> 1500000 (múltiples separadores de miles)
-      s = s.replace(/\./g, "");
+      const last = parts[parts.length - 1];
+      const midAreThousands = parts.slice(1, -1).every((p) => p.length === 3);
+      if (last.length === 2 && midAreThousands && parts[0].length <= 3) {
+        // Artefacto OCR/PDF: punto usado tanto para miles como para decimales (ej. 21.484.863.46 -> 21484863.46)
+        s = `${parts.slice(0, -1).join("")}.${last}`;
+      } else {
+        // 1.500.000 -> 1500000 (múltiples separadores de miles)
+        s = s.replace(/\./g, "");
+      }
     } else if (parts[1] && parts[1].length === 3) {
       // 500.000 o 18.000 -> 500000 o 18000 (separador de miles único)
       s = s.replace(/\./g, "");
@@ -104,7 +111,14 @@ function cleanMoneyNumber(raw: unknown): number {
   } else if (hasComma && !hasDot) {
     const parts = s.split(",");
     if (parts.length > 2) {
-      s = s.replace(/,/g, "");
+      const last = parts[parts.length - 1];
+      const midAreThousands = parts.slice(1, -1).every((p) => p.length === 3);
+      if (last.length === 2 && midAreThousands && parts[0].length <= 3) {
+        // Artefacto OCR/PDF BCSC: coma usada tanto para miles como para decimales (ej. 21,484,863,46 -> 21484863.46)
+        s = `${parts.slice(0, -1).join("")}.${last}`;
+      } else {
+        s = s.replace(/,/g, "");
+      }
     } else if (parts[1] && parts[1].length === 3 && parts[0].length <= 3) {
       s = s.replace(",", "");
     } else if (parts[1] && parts[1].length <= 2) {

@@ -1271,6 +1271,108 @@ export function conciliarBancos(
     }
   }
 
+  // FASE 4.5: Segundo paso de Lotes ACH / Pagos Agrupados sobre partidas remanentes.
+  // Cuando en una misma fecha coexisten pagos individuales 1-a-1 (ej. PSE sin referencia en ERP)
+  // y un lote ACH numeroso (>5 comprobantes), en FASE 2 los pagos individuales aún estaban libres
+  // e impedían que la suma del día cuadrara. Tras FASE 4 ya fueron cruzados, dejando limpios los
+  // comprobantes exactos del lote ACH para conciliar en O(N) sin importar cuántos sean.
+  for (const bItem of extracto) {
+    if (matchedExtractoIds.has(bItem.id)) continue;
+    const { esGmf: isGmfRem, esComision: isComRem, esRendimiento: isRendRem, esRetencion: isRetRem } =
+      classifyMovementConcept(bItem.descripcion);
+    if (isGmfRem || isRendRem || isRetRem) continue;
+
+    const isRetiro = bItem.debito > 0;
+    const montoBanco = isRetiro ? bItem.debito : bItem.credito;
+    if (montoBanco <= 0) continue;
+    const bTime = new Date(bItem.fecha).getTime();
+
+    const remSameDate = cleanLibros
+      .map((l, idx) => ({ ...l, originalIdx: idx }))
+      .filter((l) => {
+        if (matchedLibroIndices.has(l.originalIdx)) return false;
+        const lDescAll = `${l.descripcion || ""} ${l.nombre || ""}`;
+        const lConcept = classifyMovementConcept(lDescAll);
+        if (lConcept.esGmf || lConcept.esRetencion) return false;
+        if (l.cuenta && (l.cuenta.startsWith("135515") || l.cuenta.startsWith("1355"))) return false;
+        const val = isRetiro ? l.credito : l.debito;
+        if (val <= 0) return false;
+        return l.fecha === bItem.fecha;
+      });
+
+    if (remSameDate.length >= 2) {
+      const sumRemSameDate = remSameDate.reduce((s, c) => s + (isRetiro ? c.credito : c.debito), 0);
+      if (Math.abs(sumRemSameDate - montoBanco) <= 0.05) {
+        matchedExtractoIds.add(bItem.id);
+        remSameDate.forEach((c) => matchedLibroIndices.add(c.originalIdx));
+        const vouchersStr = remSameDate.map((c) => c.comprobante).filter(Boolean).slice(0, 4).join(", ");
+        rows.push({
+          id: `match_lote_rem_date_${bItem.id}`,
+          estado: "conciliado",
+          fecha: bItem.fecha,
+          descripcion: `${bItem.descripcion} ↔ Lote ACH ${remSameDate.length} comprobantes (${vouchersStr}${remSameDate.length > 4 ? "..." : ""})`,
+          referencia: bItem.referencia || "Lote ACH",
+          tipo: isRetiro ? "retiro" : "consignacion",
+          montoBanco,
+          montoLibros: sumRemSameDate,
+          diferencia: 0,
+          esGmf: isGmfRem,
+          esComision: isComRem,
+          esRendimiento: isRendRem,
+          esRendimientoPeriodoActual: false,
+          esRendimientoPeriodoAnterior: false,
+          itemBanco: bItem,
+          itemsLibrosLote: remSameDate,
+          nota: `Conciliado en Lote ACH de la misma fecha tras depurar operaciones individuales del día (1 movimiento en extracto = ${remSameDate.length} registros en libros).`,
+        });
+        continue;
+      }
+    }
+
+    const remWindow = cleanLibros
+      .map((l, idx) => ({ ...l, originalIdx: idx }))
+      .filter((l) => {
+        if (matchedLibroIndices.has(l.originalIdx)) return false;
+        const lDescAll = `${l.descripcion || ""} ${l.nombre || ""}`;
+        const lConcept = classifyMovementConcept(lDescAll);
+        if (lConcept.esGmf || lConcept.esRetencion) return false;
+        if (l.cuenta && (l.cuenta.startsWith("135515") || l.cuenta.startsWith("1355"))) return false;
+        const val = isRetiro ? l.credito : l.debito;
+        if (val <= 0) return false;
+        const lTime = new Date(l.fecha).getTime();
+        const diffDays = Math.abs(bTime - lTime) / (1000 * 60 * 60 * 24);
+        return isNaN(diffDays) || diffDays <= 4;
+      });
+
+    if (remWindow.length >= 2) {
+      const sumRemWindow = remWindow.reduce((s, c) => s + (isRetiro ? c.credito : c.debito), 0);
+      if (Math.abs(sumRemWindow - montoBanco) <= 0.05) {
+        matchedExtractoIds.add(bItem.id);
+        remWindow.forEach((c) => matchedLibroIndices.add(c.originalIdx));
+        const vouchersStr = remWindow.map((c) => c.comprobante).filter(Boolean).slice(0, 4).join(", ");
+        rows.push({
+          id: `match_lote_rem_win_${bItem.id}`,
+          estado: "conciliado",
+          fecha: bItem.fecha,
+          descripcion: `${bItem.descripcion} ↔ Lote de ${remWindow.length} comprobantes (${vouchersStr}${remWindow.length > 4 ? "..." : ""})`,
+          referencia: bItem.referencia || "Lote ACH",
+          tipo: isRetiro ? "retiro" : "consignacion",
+          montoBanco,
+          montoLibros: sumRemWindow,
+          diferencia: 0,
+          esGmf: isGmfRem,
+          esComision: isComRem,
+          esRendimiento: isRendRem,
+          esRendimientoPeriodoActual: false,
+          esRendimientoPeriodoAnterior: false,
+          itemBanco: bItem,
+          itemsLibrosLote: remWindow,
+          nota: `Conciliado en Lote ACH (±4 días) tras depurar operaciones individuales (1 movimiento en extracto = ${remWindow.length} registros en libros).`,
+        });
+      }
+    }
+  }
+
   // FASE 5: Partidas que están en el Extracto del Banco pero NO en Libros
   for (const bItem of extracto) {
     if (matchedExtractoIds.has(bItem.id)) continue;

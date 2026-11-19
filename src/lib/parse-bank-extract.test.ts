@@ -162,5 +162,33 @@ Pag. 2 de 2
     assert.strictEqual(concRes.summary.notasDebitoComisiones, 9787, "Comisiones deben ser 8.224 + 1.563 = 9.787");
     assert.strictEqual(concRes.summary.saldoExtracto, 10742431.73, "Saldo final de extracto debe ser 10.742.431,73");
   });
+
+  it("debe corregir artefactos OCR de doble coma o doble punto decimal (ej. 21,484,863,46 -> 21484863.46)", async () => {
+    const { parseBancoCajaSocial } = await import("./parse-bank-extract.ts");
+    const { cleanMoneyNumber } = await import("./conciliar-bancos-universal.ts");
+
+    assert.strictEqual(cleanMoneyNumber("21,484,863,46"), 21484863.46);
+    assert.strictEqual(cleanMoneyNumber("-39,658,666,00"), -39658666);
+    assert.strictEqual(cleanMoneyNumber("21.484.863.46"), 21484863.46);
+    assert.strictEqual(cleanMoneyNumber("1,500,000"), 1500000);
+    assert.strictEqual(cleanMoneyNumber("1.500.000"), 1500000);
+
+    const page = `
+Banco Caja Social
+Periodo del Informe
+1 de Octubre a 31 de Octubre de 2026
+Cuenta Corriente *******8842
+Saldo Disponible Anterior 21,484,863,46
+Nuevo Saldo 3,352,197,46
+OCT 02 CREDITO TRANSFERENCIA 20730538 INTERNET 21,526,000,00 43,010,863,46 43,010,863,46
+OCT 02 DEBITO AUTORIZADO POR ACH 00335250 ACH -39,658,666,00 3,352,197,46 3,352,197,46
+`;
+    const res = parseBancoCajaSocial([page]);
+    assert.strictEqual(res.items.length, 2);
+    assert.strictEqual(res.saldoInicial, 21484863.46);
+    assert.strictEqual(res.saldoFinal, 3352197.46);
+    assert.strictEqual(res.items[0].credito, 21526000);
+    assert.strictEqual(res.items[1].debito, 39658666);
+  });
 });
 
