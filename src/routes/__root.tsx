@@ -16,9 +16,20 @@ export const Route = createRootRoute({
         content:
           "Cruce inteligente y auditoría automática entre facturación electrónica DIAN, libros auxiliares ERP y bancos.",
       },
+      { property: "og:title", content: APP_NAME },
+      {
+        property: "og:description",
+        content:
+          "Cruce inteligente y auditoría automática entre facturación electrónica DIAN, libros auxiliares ERP y bancos.",
+      },
+      { property: "og:url", content: "https://conciliacion.tributoapp.me/" },
+      { property: "og:image", content: "https://conciliacion.tributoapp.me/og.jpg" },
+      { property: "og:type", content: "website" },
+      { property: "og:locale", content: "es_CO" },
       { name: "theme-color", content: "#0f766e" },
     ],
     links: [
+      { rel: "canonical", href: "https://conciliacion.tributoapp.me/" },
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },

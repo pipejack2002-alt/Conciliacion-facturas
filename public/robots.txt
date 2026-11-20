@@ -2,3 +2,5 @@ User-agent: *
 Allow: /
 Disallow: /__grok/
 Disallow: /api/
+
+Sitemap: https://conciliacion.tributoapp.me/sitemap.xml
